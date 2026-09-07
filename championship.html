@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="theme-color" content="#061c2e">
+    <meta name="description" content="Revivez un championnat JWETPRO : participants, tableau, résultats et replays publiés.">
+    <meta name="robots" content="noindex,follow">
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="./src/championship-page.css?v=20260903-attendance-rules">
+    <title>Championnat — JWETPRO</title>
+  </head>
+  <body class="championship-recap-page">
+    <main class="championship-recap-main">
+      <a class="recap-back" href="./activity.html"><span aria-hidden="true">←</span> Retour aux résultats</a>
+
+      <section id="recap-loading" class="recap-loading" role="status" aria-live="polite">
+        <span class="recap-spinner"></span><strong>Chargement du championnat…</strong>
+      </section>
+
+      <div id="recap-content" hidden>
+        <header class="recap-hero">
+          <div class="recap-hero-copy">
+            <p class="recap-kicker">CHAMPIONNAT TERMINÉ</p>
+            <h1 id="recap-title">Championnat JWETPRO</h1>
+            <p id="recap-date" class="recap-date">Date non publiée</p>
+          </div>
+          <div id="recap-champion" class="recap-champion"></div>
+          <dl class="recap-facts">
+            <div><dt>Participants</dt><dd id="recap-participant-count">—</dd></div>
+            <div><dt>Matchs publiés</dt><dd id="recap-match-count">—</dd></div>
+            <div><dt>Récompense</dt><dd id="recap-prize">—</dd></div>
+          </dl>
+        </header>
+
+        <section class="recap-section" aria-labelledby="participants-title">
+          <div class="recap-section-head"><div><p>JOUEURS</p><h2 id="participants-title">Participants</h2></div><span id="participants-count-badge">0 / 16</span></div>
+          <div id="recap-participants" class="recap-participants"></div>
+        </section>
+
+        <section class="recap-section" aria-labelledby="bracket-title">
+          <div class="recap-section-head"><div><p>PARCOURS COMPLET</p><h2 id="bracket-title">Tableau du championnat</h2></div><span>ÉLIMINATION DIRECTE</span></div>
+          <p class="recap-section-note">16èmes de finale, 8èmes de finale, quarts de finale, demi-finales et finale — uniquement à partir des résultats publiés.</p>
+          <div id="recap-bracket" class="recap-bracket" aria-live="polite"></div>
+        </section>
+
+        <section class="recap-section" aria-labelledby="matches-title">
+          <div class="recap-section-head"><div><p>RÉSULTATS</p><h2 id="matches-title">Matchs et replays</h2></div><span id="replay-count">0 REPLAY</span></div>
+          <div id="recap-matches" class="recap-match-list"></div>
+        </section>
+      </div>
+
+      <section id="recap-error" class="recap-error" hidden role="alert">
+        <span aria-hidden="true">!</span><h1>Championnat indisponible</h1><p id="recap-error-message">Impossible de retrouver ce championnat.</p><a href="./activity.html">Voir les résultats publiés</a>
+      </section>
+    </main>
+
+    <dialog id="replay-dialog" class="replay-dialog" aria-labelledby="replay-title">
+      <div class="replay-dialog-head"><div><p>REPLAY DU MATCH</p><h2 id="replay-title">Revoir la rencontre</h2></div><button id="replay-close" type="button" aria-label="Fermer le replay">×</button></div>
+      <div id="replay-stage" class="replay-stage"></div>
+      <div class="replay-controls">
+        <button id="replay-start" type="button">Début</button><button id="replay-prev" type="button" aria-label="Coup précédent">←</button><span id="replay-position">0 / 0</span><button id="replay-next" type="button" aria-label="Coup suivant">→</button><button id="replay-play" type="button">Lecture</button>
+      </div>
+    </dialog>
+
+    <script src="./shared-shell.js?v=20260904-official-championship-rules"></script>
+    <script src="./src/championship-page.js?v=20260903-attendance-rules"></script>
+  </body>
+</html>

@@ -1,0 +1,16 @@
+# JWETPRO
+
+> Plateforme haïtienne de championnats de jeux de table en ligne : Mopyon, Domino, matchs, résultats, classements et champions.
+
+## Pages de référence
+- [Accueil](https://jwetpro.com/)
+- [Guide de fonctionnement](https://jwetpro.com/guide.html)
+- [Règlement officiel](https://jwetpro.com/#rules)
+- [Calendrier](https://jwetpro.com/calendar.html)
+- [Classement](https://jwetpro.com/ranking.html)
+- [Champions](https://jwetpro.com/champions.html)
+- [FAQ](https://jwetpro.com/faq.html)
+- [Confidentialité](https://jwetpro.com/privacy.html)
+
+## Cadre
+JWETPRO est une plateforme de compétition, pas un casino ni un service de paris. Le compte joueur est créé ou activé après confirmation du paiement d'une participation.

@@ -1,0 +1,15 @@
+# JWETPRO
+
+Site officiel : https://jwetpro.com/
+Langue principale : français (Haïti)
+
+JWETPRO est une plateforme haïtienne de championnats de jeux de table en ligne, notamment Mopyon et Domino. Le site publie les championnats, matchs, résultats, classements et champions.
+
+Les agents automatisés peuvent consulter les contenus publics et doivent respecter robots.txt. Les données personnelles, les espaces authentifiés et les opérations de paiement ne doivent pas être collectés ni reproduits.
+
+Ressources principales :
+- Guide : https://jwetpro.com/guide.html
+- Règlement : https://jwetpro.com/#rules
+- Calendrier : https://jwetpro.com/calendar.html
+- FAQ : https://jwetpro.com/faq.html
+- Politique de confidentialité : https://jwetpro.com/privacy.html

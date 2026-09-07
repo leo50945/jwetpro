@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="theme-color" content="#061c2e">
+    <meta name="description" content="Entraînez-vous au Mopyon ou au Domino contre un bot et rejoignez vos matchs officiels JWETPRO.">
+    <meta name="robots" content="index, follow, max-image-preview:large">
+    <link rel="canonical" href="https://jwetpro.com/play.html">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="JWETPRO">
+    <meta property="og:title" content="Jouer au Mopyon et au Domino — JWETPRO">
+    <meta property="og:description" content="Entraînez-vous au Mopyon ou au Domino et retrouvez vos matchs officiels JWETPRO.">
+    <meta property="og:url" content="https://jwetpro.com/play.html">
+    <meta property="og:image" content="https://jwetpro.com/og-jwetpro.png">
+    <meta name="twitter:card" content="summary_large_image">
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="./src/play.css?v=20260906-domino-embed">
+    <link rel="stylesheet" href="./src/play-empty-action.css?v=20260817">
+    <link rel="stylesheet" href="./src/play-replay.css?v=20260903-series-selector">
+    <title>Jouer au Mopyon et au Domino — JWETPRO</title>
+  </head>
+  <body class="play-page">
+    <main class="play-main" id="play-main">
+      <h1 class="visually-hidden">Jouer au Mopyon et au Domino sur JWETPRO</h1>
+
+      <nav class="play-tabs" role="tablist" aria-label="Modes de jeu">
+        <button id="training-tab" class="play-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="training-panel">
+          <i data-lucide="bot" aria-hidden="true"></i><span>Entrainement</span>
+        </button>
+        <button id="matches-tab" class="play-tab" type="button" role="tab" aria-selected="false" aria-controls="matches-panel">
+          <i data-lucide="calendar-clock" aria-hidden="true"></i><span>Mes matchs</span><b id="match-count" hidden>0</b>
+        </button>
+        <button id="live-tab" class="play-tab" type="button" role="tab" aria-selected="false" aria-controls="live-panel">
+          <i data-lucide="radio" aria-hidden="true"></i><span>Matchs en direct</span><b id="live-match-count" hidden>0</b>
+        </button>
+      </nav>
+
+      <section id="training-panel" class="play-panel" role="tabpanel" aria-labelledby="training-tab">
+        <header class="training-game-selector" aria-labelledby="training-game-title">
+          <div class="training-game-heading">
+            <h2 id="training-game-title">Jeu d’entraînement</h2>
+            <p>Choisissez votre jeu</p>
+          </div>
+          <div class="training-game-options" role="group" aria-label="Jeu d’entraînement">
+            <button id="mopyon-training-choice" class="training-game-choice is-active" type="button" data-training-game="mopyon" aria-pressed="true">
+              <span class="training-game-icon"><i data-lucide="grid-3x3" aria-hidden="true"></i></span>
+              <strong>Mopyon</strong>
+            </button>
+            <button id="domino-training-choice" class="training-game-choice" type="button" data-training-game="domino" aria-pressed="false">
+              <span class="training-game-icon"><i data-lucide="dices" aria-hidden="true"></i></span>
+              <strong>Domino</strong>
+            </button>
+          </div>
+        </header>
+
+        <div id="mopyon-training" class="training-layout training-game-panel" role="region" aria-labelledby="mopyon-training-choice">
+          <aside class="training-controls" aria-label="Reglages de l'entrainement">
+            <div class="training-status" id="turnCard" hidden>
+              <div class="training-status-top">
+                <span class="training-status-label">Tour actuel</span>
+                <span id="turnSymbol" class="turn-symbol">X</span>
+              </div>
+              <p id="statusText" aria-live="polite">Placez un symbole sur une case libre.</p>
+              <div id="leadCard" class="lead-card is-neutral">
+                <span>Initiative</span><strong id="leadOwner">Neutre</strong><small id="leadReason">Aucune initiative claire</small>
+              </div>
+            </div>
+
+            <fieldset class="play-setting">
+              <legend>Niveau du bot</legend>
+              <div class="setting-options setting-options-three">
+                <button class="difficulty-choice" data-difficulty="easy" type="button" aria-pressed="false">Débutant</button>
+                <button class="difficulty-choice" data-difficulty="medium" type="button" aria-pressed="false">Intermédiaire</button>
+                <button class="difficulty-choice is-active" data-difficulty="hard" type="button" aria-pressed="true">Expert</button>
+              </div>
+              <select id="difficultySelect" class="visually-hidden" aria-label="Niveau du bot">
+                <option value="easy">Débutant</option><option value="medium">Intermédiaire</option><option value="hard" selected>Expert</option>
+              </select>
+            </fieldset>
+
+            <fieldset class="play-setting">
+              <legend>Votre symbole</legend>
+              <div class="setting-options">
+                <button id="humanMarkX" class="symbol-choice is-active" type="button" aria-pressed="true"><span>X</span> Jouer avec X</button>
+                <button id="humanMarkO" class="symbol-choice" type="button" aria-pressed="false"><span>O</span> Jouer avec O</button>
+              </div>
+            </fieldset>
+
+            <fieldset class="play-setting">
+              <legend>Premier joueur</legend>
+              <div class="setting-options">
+                <button id="humanStarts" class="start-choice is-active" type="button" aria-pressed="true"><i data-lucide="user-round" aria-hidden="true"></i>Vous</button>
+                <button id="robotStarts" class="start-choice" type="button" aria-pressed="false"><i data-lucide="bot" aria-hidden="true"></i>Bot</button>
+              </div>
+            </fieldset>
+
+            <div class="training-actions">
+              <button id="resetRound" class="play-button play-button-primary" type="button"><i data-lucide="plus" aria-hidden="true"></i>Nouvelle partie</button>
+              <button id="undoMove" class="play-button play-button-secondary" type="button" disabled><i data-lucide="undo-2" aria-hidden="true"></i>Annuler</button>
+              <button id="resetScores" class="play-button play-button-quiet" type="button"><i data-lucide="rotate-ccw" aria-hidden="true"></i>Recommencer</button>
+            </div>
+          </aside>
+
+          <section class="training-board-panel" aria-label="Plateau d'entrainement">
+            <div class="training-score" aria-label="Score de l'entrainement">
+              <div><span id="scoreHumanLabel">Vous</span><strong id="scoreX">0</strong></div>
+              <div><span>Bot</span><strong id="scoreO">0</strong></div>
+              <div><span>Nuls</span><strong id="scoreDraw">0</strong></div>
+            </div>
+            <header class="board-toolbar">
+              <div><i data-lucide="grid-3x3" aria-hidden="true"></i><span>Plateau 20 × 20</span></div>
+              <span id="moveCounter">0 / 400</span>
+            </header>
+            <div class="mopyon-board-frame">
+              <div id="board" class="board" role="grid" aria-label="Grille Mopyon 20 par 20"></div>
+            </div>
+            <p class="board-help"><i data-lucide="info" aria-hidden="true"></i>Alignez cinq symboles horizontalement, verticalement ou en diagonale.</p>
+          </section>
+        </div>
+
+        <section id="domino-training" class="domino-training training-game-panel" role="region" aria-labelledby="domino-training-choice" hidden>
+          <div class="domino-frame-shell">
+            <div id="domino-frame-status" class="domino-frame-status" role="status"><span class="state-spinner"></span><strong>Préparation de la table Domino…</strong></div>
+            <iframe id="domino-training-frame" title="Entraînement Domino contre le bot débutant" data-src="./dominocash/index.html?embed=1&amp;bot=weak&amp;v=20260903-beginner" allow="autoplay; fullscreen" allowfullscreen></iframe>
+          </div>
+        </section>
+      </section>
+
+      <section id="matches-panel" class="play-panel" role="tabpanel" aria-labelledby="matches-tab" hidden>
+        <div class="matches-heading">
+          <div><span>PROGRAMME OFFICIEL</span><h2>Vos prochains matchs</h2><p>Les informations ci-dessous proviennent directement de JWETPRO.</p></div>
+          <i data-lucide="shield-check" aria-hidden="true"></i>
+        </div>
+        <div id="player-matches" class="player-matches" aria-live="polite">
+          <div class="play-state is-loading"><span class="state-spinner"></span><strong>Chargement de vos matchs...</strong></div>
+        </div>
+      </section>
+
+      <section id="live-panel" class="play-panel" role="tabpanel" aria-labelledby="live-tab" hidden>
+        <div class="matches-heading">
+          <div><span>EN DIRECT</span><h2>Matchs en direct</h2><p>Suivez les rencontres officielles JWETPRO pendant qu’elles se jouent.</p></div>
+          <i data-lucide="radio" aria-hidden="true"></i>
+        </div>
+        <div id="live-matches" class="player-matches" aria-live="polite">
+          <div class="play-state is-loading"><span class="state-spinner"></span><strong>Recherche de matchs en direct...</strong></div>
+        </div>
+      </section>
+
+      <section id="official-match" class="official-match" hidden aria-labelledby="official-match-title">
+        <header class="official-header">
+          <button id="official-back" class="icon-button" type="button" aria-label="Retour a mes matchs"><i data-lucide="arrow-left" aria-hidden="true"></i></button>
+          <div><span id="official-match-kicker">MATCH OFFICIEL</span><h2 id="official-match-title">Mopyon</h2></div>
+          <strong id="official-match-status">Connexion...</strong>
+        </header>
+        <div class="official-layout">
+          <aside class="official-players">
+            <div id="official-player-one" class="official-player"></div>
+            <div class="official-versus">VS</div>
+            <div id="official-player-two" class="official-player"></div>
+            <p id="official-turn" aria-live="polite">Synchronisation du match...</p>
+          </aside>
+          <div class="official-board-wrap"><div id="official-board" class="official-board" role="grid" aria-label="Plateau du match officiel"></div></div>
+        </div>
+      </section>
+
+      <div id="match-end-modal" class="match-end-modal" hidden role="dialog" aria-modal="true" aria-labelledby="match-end-title">
+        <div class="match-end-card">
+          <div class="match-end-icon"><i data-lucide="trophy" aria-hidden="true"></i></div>
+          <span class="match-end-kicker">MATCH TERMINÉ</span>
+          <h3 id="match-end-title">Chargement du résultat...</h3>
+          <p id="match-end-subtitle"></p>
+          <div class="match-end-actions">
+            <button id="match-end-next" class="play-button play-button-primary" type="button" hidden><i data-lucide="arrow-right" aria-hidden="true"></i>Passer à la manche suivante</button>
+            <a id="match-end-replay" class="play-button play-button-primary" href="#"><i data-lucide="play-circle" aria-hidden="true"></i>Voir le replay</a>
+            <button id="match-end-share" class="play-button play-button-primary" type="button" hidden><i data-lucide="share-2" aria-hidden="true"></i>Partager ma progression</button>
+            <button id="match-end-close" class="play-button play-button-quiet" type="button">Fermer</button>
+          </div>
+        </div>
+      </div>
+
+      <section id="match-replay-view" class="match-replay-view" hidden aria-labelledby="match-replay-title">
+        <header class="replay-view-header">
+          <a class="replay-back" href="./activity.html" aria-label="Retour aux activites"><i data-lucide="arrow-left" aria-hidden="true"></i></a>
+          <div><span>REPLAY DU MATCH</span><h2 id="match-replay-title">Chargement du replay...</h2></div>
+          <strong id="match-replay-source">REPLAY OFFICIEL</strong>
+        </header>
+        <nav id="replay-manche-selector" class="replay-manche-selector" aria-label="Choisir une manche" hidden></nav>
+        <div class="replay-view-layout">
+          <aside class="replay-sidebar">
+            <div id="match-replay-player-one" class="replay-player"></div>
+            <span class="replay-versus">VS</span>
+            <div id="match-replay-player-two" class="replay-player"></div>
+            <p id="match-replay-status" role="status" aria-live="polite">Preparation du plateau...</p>
+            <div class="replay-progress" aria-hidden="true"><span id="match-replay-progress-bar"></span></div>
+            <strong id="match-replay-progress">Coup 0 / 0</strong>
+          </aside>
+          <div class="replay-board-wrap"><div id="match-replay-board" class="official-board replay-board" role="grid" aria-label="Replay Mopyon sur un plateau 20 par 20"></div><div id="match-replay-domino-board" class="domino-replay-board" role="group" aria-label="Replay Domino" hidden></div></div>
+        </div>
+        <nav class="replay-controls" aria-label="Commandes du replay">
+          <button id="match-replay-start" type="button" aria-label="Revenir au debut"><i data-lucide="skip-back" aria-hidden="true"></i></button>
+          <button id="match-replay-back" type="button" aria-label="Coup precedent"><i data-lucide="step-back" aria-hidden="true"></i></button>
+          <button id="match-replay-play" class="replay-play" type="button" aria-label="Lire le replay"><i data-lucide="play" aria-hidden="true"></i><span>Lire</span></button>
+          <button id="match-replay-forward" type="button" aria-label="Coup suivant"><i data-lucide="step-forward" aria-hidden="true"></i></button>
+          <button id="match-replay-end" type="button" aria-label="Aller a la fin"><i data-lucide="skip-forward" aria-hidden="true"></i></button>
+          <button id="match-replay-speed" class="replay-speed" type="button" aria-label="Vitesse de lecture">1×</button>
+        </nav>
+      </section>
+
+      <div class="engine-compat" hidden aria-hidden="true">
+        <button id="toggleThreats" type="button" aria-pressed="false"><span></span></button>
+        <span id="aiDebugPriority"></span><span id="aiDebugReason"></span><span id="aiDebugMove"></span><span id="aiDebugTags"></span>
+        <span id="opponentDebugPriority"></span><span id="opponentDebugReason"></span><span id="opponentDebugMove"></span><span id="opponentDebugTags"></span>
+        <span id="threatSummaryCount"></span><span id="threatSummaryList"></span><span id="historyCount"></span><span id="moveHistoryList"></span>
+        <button id="copyHistory" type="button"><span></span></button><span id="savedPositionCount"></span><input id="positionName"><button id="savePosition" type="button"></button><span id="savedPositionList"></span>
+        <span id="replayProgress"></span><button id="replayStart" type="button"></button><button id="replayBack" type="button"></button><button id="replayPlayPause" type="button"></button><button id="replayForward" type="button"></button><button id="replayEnd" type="button"></button><button id="replaySpeed" type="button"></button><button id="replayBranch" type="button"></button>
+      </div>
+    </main>
+
+    <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/gsap.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
+    <script src="./shared-shell.js?v=20260904-official-championship-rules"></script>
+    <script src="./mopyonpam/script.js?v=20260816"></script>
+    <script src="./src/play.js?v=20260906-domino-embed"></script>
+    <script src="./src/share.js?v=20260905-sharing"></script>
+  </body>
+</html>

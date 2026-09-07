@@ -1,0 +1,31 @@
+.community-page-body{min-width:320px;background:#04101c;color:#dce6ed}
+.community-page-header{position:sticky;top:0;z-index:10;border-bottom:1px solid #1b3345;background:#04101cf2;backdrop-filter:blur(10px)}
+.community-page-header-inner{width:min(1180px,calc(100% - 48px));min-height:72px;margin:auto;display:flex;align-items:center;justify-content:space-between;gap:20px}
+.community-page-back,.community-page-brand{display:inline-flex;align-items:center;gap:9px;text-decoration:none}
+.community-page-back{min-height:38px;padding:0 12px;border:1px solid #294357;border-radius:6px;color:#c3d1db;font-size:11px;font-weight:800;letter-spacing:.05em}
+.community-page-back:hover,.community-page-back:focus-visible{border-color:#dca331;background:#dca33122;color:#e9b23f;outline:3px solid #dca33144;outline-offset:2px}
+.community-page-back svg{width:17px}
+.community-page-brand{color:#f4f0e9;font-size:17px;font-weight:800;letter-spacing:.07em}
+.community-page-brand b{font-family:Georgia,serif;color:#dca331;font-size:26px;font-weight:500}
+.community-page-brand span span{color:#dca331}
+.community-page-main{width:min(1180px,calc(100% - 48px));margin:auto;padding:36px 0 60px;display:flex;justify-content:center}
+.community-page-main .community-dialog{width:min(1180px,100%);height:min(740px,calc(100vh - 220px));min-height:520px}
+.community-page-footer{display:flex;justify-content:space-between;gap:18px;width:min(1180px,calc(100% - 48px));margin:auto;padding:20px 0 34px;border-top:1px solid #1b3345;color:#8294a3;font-size:11px}
+.community-page-footer a{display:inline-flex;align-items:center;gap:6px;color:#c3d1db;font-weight:800;text-decoration:underline;text-underline-offset:3px}
+.community-page-footer a:hover,.community-page-footer a:focus-visible{color:#e9b23f;outline:none}
+.community-page-footer svg{width:14px}
+@media(max-width:800px){
+  .community-page-header-inner,.community-page-main,.community-page-footer{width:calc(100% - 32px)}
+  .community-page-header-inner{min-height:64px}
+  .community-page-back{min-height:40px;padding:0 11px;gap:7px;border-color:#dca331;background:#dca33122;color:#e9b23f;font-size:10px;letter-spacing:.04em}
+  .community-page-back span{display:inline}
+  .community-page-back svg{width:16px;height:16px}
+  .community-page-brand{font-size:14px}
+  .community-page-brand b{font-size:23px}
+}
+@media(max-width:767px){
+  .community-page-main{padding:0;width:100%}
+  .community-page-main .community-dialog{width:100%;height:auto;min-height:calc(100vh - 65px)}
+  .community-page-footer{display:none}
+}
+.community-message.is-simulated p{border-style:dashed}

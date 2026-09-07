@@ -1,0 +1,9 @@
+.play-state-action {
+  width: min(100%,310px);
+  margin-top: 6px;
+  text-decoration: none;
+}
+
+.play-state-action svg {
+  flex: 0 0 auto;
+}

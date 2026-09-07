@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#061c2e" />
+    <meta name="description" content="Rejoignez la communauté JWETPRO : discutez avec les autres joueurs et contactez le coordonnateur." />
+    <meta name="robots" content="noindex, follow" />
+    <link rel="canonical" href="https://jwetpro.com/community.html" />
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./src/styles.css" />
+    <link rel="stylesheet" href="./src/community-page.css?v=20260906-no-simulation-label" />
+    <title>JWETPRO — Communauté</title>
+  </head>
+  <body class="community-page-body">
+    <header class="community-page-header">
+      <div class="community-page-header-inner">
+        <a class="community-page-back" href="./index.html#top" aria-label="Retour à l’accueil"><i data-lucide="ArrowLeft"></i><span>RETOUR À L’ACCUEIL</span></a>
+        <a class="community-page-brand" href="./index.html#top" aria-label="JWETPRO accueil"><b>JP</b><span>JWET<span>PRO</span></span></a>
+      </div>
+    </header>
+    <main class="community-page-main">
+      <div class="community-dialog" role="region" aria-labelledby="community-title">
+        <aside class="community-sidebar">
+          <div class="community-brand"><span class="community-brand-icon"><span class="community-jp-mark">JP</span></span><div><strong>COMMUNAUTÉ JWETPRO</strong><small>Espace d’échange des joueurs</small></div></div>
+          <div class="community-label">SALONS</div>
+          <nav class="community-rooms"><button class="community-room is-active" type="button"><span>#</span><div><strong>Communauté JWETPRO</strong><small>Discussion générale entre tous les joueurs</small></div></button></nav>
+        </aside>
+        <section class="community-main">
+          <header class="community-header">
+            <div class="community-mobile-brand"><span class="community-brand-icon"><span class="community-jp-mark">JP</span></span><div><strong id="community-title">Communauté JwetPro</strong><small>Espace d’échange des joueurs</small></div></div>
+            <div class="community-online"><i data-lucide="UsersRound"></i><span>—</span><i></i></div>
+          </header>
+          <div class="community-mobile-rooms"><button class="is-active" type="button"># &nbsp; Communauté JWETPRO</button></div>
+          <div class="community-welcome" hidden></div>
+          <div class="community-messages" role="log" aria-live="polite"><p class="community-data-state">Chargement des messages…</p></div>
+          <form class="community-composer">
+            <input type="text" maxlength="2000" placeholder="Écrire un message…" aria-label="Écrire un message" />
+            <button type="submit" aria-label="Envoyer le message"><i data-lucide="Send"></i></button>
+          </form>
+          <div class="community-mobile-note"><i data-lucide="Lock"></i> Discussion désactivée pendant un match officiel <a href="./index.html#rules">Voir toutes les règles <i data-lucide="ArrowRight"></i></a></div>
+        </section>
+      </div>
+    </main>
+    <footer class="community-page-footer"><span>JWETPRO · Communauté</span><a href="./index.html#top">Accueil <i data-lucide="ArrowUpRight"></i></a></footer>
+    <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
+    <script src="./src/icons.js"></script>
+    <script src="./src/community-page.js?v=20260906-no-simulation-label"></script>
+  </body>
+</html>

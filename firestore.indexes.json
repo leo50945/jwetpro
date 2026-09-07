@@ -1,0 +1,53 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "communityMessages",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "roomId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "communityPresence",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "viewingGroup", "order": "ASCENDING" },
+        { "fieldPath": "lastSeen", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "championshipTicketRegistrations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "championshipId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "championshipTicketReservations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "championshipId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "jwetproCredits",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "playerUid", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "matches",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "championshipId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

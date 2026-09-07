@@ -1,0 +1,17 @@
+@import url('./public-data-page.css');
+@import url('./championship-page.css');
+
+.championship-recap-main .recap-hero{margin-top:0}
+.progress-register-cta{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;margin-top:16px;padding:0 18px;border-radius:8px;border:1px solid #dca331;background:#dca331;color:#071728;font-size:11px;font-weight:800;letter-spacing:.04em;text-decoration:none;box-shadow:0 4px 0 #a36e1e;transition:transform .2s ease}
+.progress-register-cta[hidden]{display:none!important}
+.progress-register-cta:hover,.progress-register-cta:focus-visible{transform:translateY(-2px);outline:3px solid #dca33144;outline-offset:2px}
+.progress-register-cta svg{width:14px}
+
+.bracket-match.is-live{border-color:#d94d58;background:#fff7f7}
+.bracket-live-tag{display:inline-flex;align-items:center;gap:5px;margin:8px 10px 0;padding:3px 7px;border-radius:999px;background:#d94d58;color:#fff;font-size:7px;font-weight:900;letter-spacing:.06em;width:max-content}
+.bracket-live-tag i{width:5px;height:5px;border-radius:50%;background:#fff}
+.bracket-watch-link{display:flex;align-items:center;justify-content:center;gap:5px;margin:0 10px 10px;padding:7px;border:1px solid #d94d58;border-radius:6px;color:#d94d58;font-size:8px;font-weight:800;text-decoration:none}
+.bracket-watch-link:hover,.bracket-watch-link:focus-visible{background:#d94d58;color:#fff;outline:none}
+.bracket-watch-link svg{width:12px}
+
+@media(max-width:767px){.progress-register-cta{width:100%}}

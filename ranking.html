@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#061c2e">
+  <meta name="description" content="Consultez le classement public des joueurs et leurs performances dans les championnats JWETPRO.">
+  <meta name="robots" content="index, follow, max-image-preview:large">
+  <link rel="canonical" href="https://jwetpro.com/ranking.html">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="JWETPRO">
+  <meta property="og:title" content="Classement des joueurs — JWETPRO">
+  <meta property="og:description" content="Points et performances des joueurs dans les compétitions JWETPRO.">
+  <meta property="og:url" content="https://jwetpro.com/ranking.html">
+  <meta property="og:image" content="https://jwetpro.com/og-jwetpro.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" href="./favicon.svg">
+  <link rel="stylesheet" href="./src/public-data-page.css">
+  <title>Classement des joueurs — JWETPRO</title>
+</head>
+<body class="public-page" data-page="ranking">
+  <header class="public-head">
+    <div class="public-head-inner">
+      <a class="public-back" href="./index.html#ranking"><i data-lucide="ArrowLeft"></i><span>RETOUR À L’ACCUEIL</span></a>
+      <a class="public-brand" href="./index.html#top"><b>JP</b><span>JWET<span>PRO</span></span></a>
+    </div>
+  </header>
+  <main class="public-main">
+    <section class="public-section"><div data-list></div></section>
+  </main>
+  <footer class="public-foot"><span>JWETPRO · Classement public</span><a href="./index.html#top">Accueil</a></footer>
+  <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script src="./public-data-page.js?v=20260903-series-matches"></script>
+</body>
+</html>

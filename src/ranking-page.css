@@ -1,0 +1,370 @@
+.ranking-intro {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 18px;
+  padding: 16px 18px;
+  border: 1px solid #d9e3e9;
+  border-left: 4px solid #dca331;
+  border-radius: 8px;
+  background: #fffaf0;
+}
+
+.ranking-intro span {
+  color: #956210;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .1em;
+  white-space: nowrap;
+}
+
+.ranking-intro p {
+  margin: 0;
+  color: #617786;
+  font-size: 11px;
+  line-height: 1.55;
+  text-align: right;
+}
+
+.ranking-table-card {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid #d7e1e7;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 9px 24px #10283d0b;
+}
+
+.ranking-stat-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 19px 22px;
+  border-bottom: 1px solid #e3eaee;
+  background: linear-gradient(135deg,#071d2f,#12344c);
+  color: #fff;
+}
+
+.ranking-stat-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  border: 1px solid #e5ad4066;
+  border-radius: 50%;
+  background: #dca33118;
+  color: #e8b64e;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.ranking-stat-head p {
+  margin: 0 0 5px;
+  color: #e2a83a;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: .12em;
+}
+
+.ranking-stat-head h2 {
+  margin: 0;
+  color: #fff;
+  font-size: 18px;
+}
+
+.ranking-stat-head div>span {
+  display: block;
+  margin-top: 6px;
+  color: #bfcfd9;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.ranking-guide-menu {
+  border-bottom: 1px solid #e3eaee;
+  background: #f8fafb;
+}
+
+.ranking-guide-menu summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 52px;
+  padding: 0 22px;
+  color: #36566b;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 800;
+  list-style: none;
+  user-select: none;
+}
+
+.ranking-guide-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.ranking-guide-menu summary > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.ranking-guide-menu summary svg {
+  width: 16px;
+  height: 16px;
+  color: #b67715;
+}
+
+.ranking-guide-menu summary:hover {
+  color: #17384f;
+  background: #f3f6f8;
+}
+
+.ranking-guide-menu summary:focus-visible {
+  outline: 3px solid #dca33166;
+  outline-offset: -3px;
+}
+
+.ranking-guide-menu .ranking-guide-chevron {
+  transition: transform .2s ease;
+}
+
+.ranking-guide-menu[open] .ranking-guide-chevron {
+  transform: rotate(180deg);
+}
+
+.ranking-score-guide {
+  display: grid;
+  gap: 12px;
+  padding: 18px 22px;
+  border-top: 1px solid #e3eaee;
+  background: #f8fafb;
+}
+
+.ranking-guide-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 8px;
+}
+
+.ranking-guide-label {
+  flex: 0 0 auto;
+  min-width: 68px;
+  color: #8b6828;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .12em;
+}
+
+.ranking-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.score-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 25px;
+  padding: 0 10px;
+  border: 1px solid #dde6ec;
+  border-radius: 999px;
+  background: #fff;
+  color: #516b7d;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.score-chip b {
+  color: #b67715;
+  font-weight: 900;
+}
+
+.score-chip.level-chip b {
+  color: #24455d;
+}
+
+.ranking-guide-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 0 0;
+  padding-top: 12px;
+  border-top: 1px dashed #dde6ec;
+  color: #6f8493;
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
+.ranking-guide-hint svg,
+.ranking-guide-hint i {
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  color: #dca331;
+}
+
+.performance-table {
+  border: 0;
+  border-radius: 0;
+}
+
+.performance-table-scroll {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.performance-table th,
+.performance-table td {
+  padding-right: 16px;
+  padding-left: 16px;
+  white-space: nowrap;
+}
+
+.performance-table th:nth-child(2),
+.performance-table td:nth-child(2) {
+  min-width: 260px;
+  white-space: normal;
+}
+
+.performance-table td:nth-child(3) strong,
+.performance-table td:nth-child(4),
+.performance-table td:nth-child(5) {
+  color: #b67715;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.performance-table td:nth-child(6) {
+  color: #516b7d;
+  font-weight: 800;
+}
+
+.performance-table th.ranking-sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.performance-table th.ranking-sortable:hover,
+.performance-table th.ranking-sortable:focus-visible {
+  color: #b67715;
+}
+
+.performance-table th.ranking-sortable.active {
+  color: #b67715;
+}
+
+.ranking-sort-arrow {
+  margin-left: 4px;
+  font-size: 8px;
+  font-style: normal;
+}
+
+.ranking-rank {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #f1f5f8;
+  color: #24455d;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.performance-table tbody tr:first-child .ranking-rank {
+  background: #dca331;
+  color: #071728;
+}
+
+.performance-table tbody tr:hover {
+  background: #fbfcfd;
+}
+
+.level-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 10px;
+  border: 1px solid #d9e3e9;
+  border-radius: 999px;
+  background: #f8fafb;
+  color: #24455d;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .02em;
+}
+
+
+.ranking-stat-empty {
+  display: grid;
+  place-items: center;
+  gap: 7px;
+  min-height: 170px;
+  padding: 24px;
+  color: #718695;
+  text-align: center;
+}
+
+.ranking-stat-empty strong {
+  color: #27465b;
+}
+
+.ranking-stat-empty span {
+  max-width: 430px;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+@media (max-width: 720px) {
+  .ranking-intro {
+    display: block;
+  }
+
+  .ranking-intro p {
+    margin-top: 8px;
+    text-align: left;
+  }
+
+  .ranking-stat-head {
+    padding: 17px 15px;
+  }
+
+  .ranking-score-guide {
+    padding: 12px 15px;
+  }
+
+  .ranking-guide-menu summary {
+    min-height: 50px;
+    padding: 0 15px;
+  }
+
+  .ranking-guide-label {
+    min-width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ranking-guide-menu .ranking-guide-chevron {
+    transition: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .ranking-table-card {
+    overflow: hidden;
+  }
+
+  .performance-table {
+    min-width: 620px;
+  }
+}

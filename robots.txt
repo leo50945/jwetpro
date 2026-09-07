@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /mopyonpam/
+
+Sitemap: https://jwetpro.com/sitemap.xml

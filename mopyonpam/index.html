@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gomoku - Five in a Row</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ["Inter", "system-ui", "sans-serif"],
+            },
+          },
+        },
+      };
+    </script>
+    <script defer src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+    <link rel="stylesheet" href="./style.css?v=141" />
+    <script defer src="./script.js?v=141"></script>
+  </head>
+  <body class="min-h-screen bg-stone-950 font-sans text-stone-100">
+    <main class="min-h-screen overflow-hidden">
+      <section class="relative mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-4 px-3 py-4 sm:px-5 lg:px-8">
+        <div class="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_20%_10%,rgba(14,165,233,0.22),transparent_26%),radial-gradient(circle_at_80%_0%,rgba(244,63,94,0.16),transparent_24%),linear-gradient(135deg,#0c0a09,#1c1917_48%,#111827)]"></div>
+
+        <header class="panel-reveal rounded-lg border border-white/10 bg-white/[0.06] p-4 shadow-2xl shadow-black/30 backdrop-blur md:p-5">
+          <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div class="max-w-2xl">
+              <div class="mb-3 inline-flex items-center gap-2 rounded-full border border-cyan-300/30 bg-cyan-300/10 px-3 py-1 text-xs font-bold uppercase text-cyan-100">
+                <i data-lucide="sparkles" class="h-3.5 w-3.5" aria-hidden="true"></i>
+                Gomoku 20x20
+              </div>
+              <h1 class="text-3xl font-black leading-none tracking-normal text-white sm:text-5xl">
+                Five in a Row
+              </h1>
+              <p class="mt-3 max-w-xl text-sm font-medium leading-6 text-stone-300 sm:text-base">
+                Tu joues X. Le robot joue O et cherche toujours le meilleur coup pour te bloquer ou gagner.
+              </p>
+            </div>
+
+            <div class="grid grid-cols-3 gap-2 sm:min-w-[360px]">
+              <article class="score-pill score-x">
+                <span>X</span>
+                <strong id="scoreX">0</strong>
+              </article>
+              <article class="score-pill score-o">
+                <span>O</span>
+                <strong id="scoreO">0</strong>
+              </article>
+              <article class="score-pill score-draw">
+                <i data-lucide="minus" aria-hidden="true"></i>
+                <strong id="scoreDraw">0</strong>
+              </article>
+            </div>
+          </div>
+        </header>
+
+        <section class="grid flex-1 gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
+          <aside class="panel-reveal flex flex-col gap-3 rounded-lg border border-white/10 bg-white/[0.06] p-3 shadow-2xl shadow-black/20 backdrop-blur lg:sticky lg:top-4 lg:self-start">
+            <div id="turnCard" class="rounded-lg bg-white p-4 text-stone-950 shadow-xl shadow-black/20">
+              <span class="text-xs font-black uppercase text-stone-500">Tour actuel</span>
+              <div class="mt-3 flex items-center gap-3">
+                <span id="turnSymbol" class="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-cyan-500 text-2xl font-black text-white shadow-lg shadow-cyan-950/20">X</span>
+                <p id="statusText" class="text-sm font-bold leading-5 text-stone-700">
+                  Place un symbole sur une case vide.
+                </p>
+              </div>
+              <div id="leadCard" class="lead-card is-neutral mt-3" aria-live="polite">
+                <span>Lead</span>
+                <strong id="leadOwner">Neutre</strong>
+                <small id="leadReason">Aucune initiative claire</small>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-1">
+              <button id="resetRound" class="action-btn bg-cyan-400 text-stone-950 shadow-cyan-950/30 hover:bg-cyan-300" type="button">
+                <i data-lucide="rotate-ccw" aria-hidden="true"></i>
+                Nouvelle manche
+              </button>
+              <button id="undoMove" class="action-btn bg-amber-300 text-stone-950 shadow-amber-950/20 hover:bg-amber-200" type="button" disabled>
+                <i data-lucide="undo-2" aria-hidden="true"></i>
+                Annuler un coup
+              </button>
+              <button id="resetScores" class="action-btn bg-white/10 text-white ring-1 ring-white/10 hover:bg-white/15" type="button">
+                <i data-lucide="eraser" aria-hidden="true"></i>
+                Scores a zero
+              </button>
+              <button id="toggleThreats" class="action-btn bg-white/10 text-white ring-1 ring-white/10 hover:bg-white/15" type="button" aria-pressed="true">
+                <i data-lucide="eye" aria-hidden="true"></i>
+                <span>Masquer les reperes</span>
+              </button>
+            </div>
+
+            <div class="rounded-lg border border-white/10 bg-stone-950/55 p-2">
+              <div class="grid grid-cols-2 gap-2" role="group" aria-label="Choisir qui commence">
+                <button id="humanStarts" class="start-choice is-active" type="button" aria-pressed="true">
+                  <i data-lucide="user-round" aria-hidden="true"></i>
+                  Je commence
+                </button>
+                <button id="robotStarts" class="start-choice" type="button" aria-pressed="false">
+                  <i data-lucide="bot" aria-hidden="true"></i>
+                  Bot commence
+                </button>
+              </div>
+            </div>
+
+            <div class="ai-debug-panel rounded-lg border border-cyan-300/20 bg-stone-950/75 p-4">
+              <div class="flex items-center justify-between gap-3">
+                <div class="flex items-center gap-2 text-sm font-black text-white">
+                  <i data-lucide="brain-circuit" class="h-4 w-4 text-cyan-300" aria-hidden="true"></i>
+                  Debug AI
+                </div>
+                <span id="aiDebugPriority" class="debug-priority">Pret</span>
+              </div>
+              <p id="aiDebugReason" class="mt-3 text-sm font-semibold leading-5 text-stone-200">
+                Le prochain coup du robot sera explique ici.
+              </p>
+              <div class="mt-3 flex items-center justify-between gap-3 text-xs font-bold text-stone-400">
+                <span>Coup</span>
+                <strong id="aiDebugMove" class="text-cyan-200">-</strong>
+              </div>
+              <div id="aiDebugTags" class="mt-3 flex flex-wrap gap-1.5" aria-label="Tags de decision IA"></div>
+              <div class="mt-4 border-t border-white/10 pt-3">
+                <div class="flex items-center justify-between gap-3 text-xs font-black uppercase tracking-wide text-stone-400">
+                  <span>Menaces detectees</span>
+                  <strong id="threatSummaryCount" class="text-rose-200">0</strong>
+                </div>
+                <div id="threatSummaryList" class="mt-2 grid gap-1.5" aria-label="Menaces detectees sur le plateau"></div>
+              </div>
+            </div>
+
+            <div class="opponent-debug-panel ai-debug-panel rounded-lg border border-rose-300/20 bg-stone-950/75 p-4">
+              <div class="flex items-center justify-between gap-3">
+                <div class="flex items-center gap-2 text-sm font-black text-white">
+                  <i data-lucide="user-round-search" class="h-4 w-4 text-rose-300" aria-hidden="true"></i>
+                  Debug adversaire
+                </div>
+                <span id="opponentDebugPriority" class="debug-priority">Pret</span>
+              </div>
+              <p id="opponentDebugReason" class="mt-3 text-sm font-semibold leading-5 text-stone-200">
+                Le prochain coup de X sera explique ici.
+              </p>
+              <div class="mt-3 flex items-center justify-between gap-3 text-xs font-bold text-stone-400">
+                <span>Coup</span>
+                <strong id="opponentDebugMove" class="text-rose-200">-</strong>
+              </div>
+              <div id="opponentDebugTags" class="mt-3 flex flex-wrap gap-1.5" aria-label="Tags de decision adversaire"></div>
+            </div>
+
+            <div class="rounded-lg border border-white/10 bg-stone-950/75 p-4">
+              <div class="flex items-center justify-between gap-3">
+                <div class="flex items-center gap-2 text-sm font-black text-white">
+                  <i data-lucide="history" class="h-4 w-4 text-amber-300" aria-hidden="true"></i>
+                  Historique
+                </div>
+                <strong id="historyCount" class="text-xs text-stone-400">0 coup</strong>
+              </div>
+              <div id="moveHistoryList" class="history-list mt-3" aria-label="Historique des coups"></div>
+              <button id="copyHistory" class="action-btn mt-3 w-full bg-white/10 text-white ring-1 ring-white/10 hover:bg-white/15" type="button">
+                <i data-lucide="copy" aria-hidden="true"></i>
+                <span>Copier les coordonnees</span>
+              </button>
+            </div>
+
+            <div class="saved-positions-panel rounded-lg border border-white/10 bg-stone-950/75 p-4">
+              <div class="flex items-center justify-between gap-3">
+                <div class="flex items-center gap-2 text-sm font-black text-white">
+                  <i data-lucide="save" class="h-4 w-4 text-emerald-300" aria-hidden="true"></i>
+                  Positions sauvegardees
+                </div>
+                <strong id="savedPositionCount" class="text-xs text-stone-400">0</strong>
+              </div>
+              <div class="mt-3 grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+                <label class="sr-only" for="positionName">Nom de la position</label>
+                <input id="positionName" class="position-name-input" type="text" maxlength="48" placeholder="Nom de la position" autocomplete="off" />
+                <button id="savePosition" class="icon-action-btn" type="button" title="Sauvegarder la position" aria-label="Sauvegarder la position">
+                  <i data-lucide="save" aria-hidden="true"></i>
+                </button>
+              </div>
+              <div id="replayControls" class="replay-controls mt-3" aria-label="Commandes du replay">
+                <div class="replay-progress">
+                  <span>Replay</span>
+                  <strong id="replayProgress">0 / 0</strong>
+                </div>
+                <div class="replay-toolbar">
+                  <button id="replayStart" class="replay-action" type="button" title="Retourner au debut (Debut)" aria-label="Retourner au debut" disabled>
+                    <i data-lucide="skip-back" aria-hidden="true"></i>
+                  </button>
+                  <button id="replayBack" class="replay-action" type="button" title="Reculer d'un coup (fleche gauche)" aria-label="Reculer d'un coup" disabled>
+                    <i data-lucide="step-back" aria-hidden="true"></i>
+                  </button>
+                  <button id="replayPlayPause" class="replay-action is-primary" type="button" title="Lire ou mettre en pause (Espace)" aria-label="Lire le replay" disabled>
+                    <i data-lucide="play" aria-hidden="true"></i>
+                  </button>
+                  <button id="replayForward" class="replay-action" type="button" title="Avancer d'un coup (fleche droite)" aria-label="Avancer d'un coup" disabled>
+                    <i data-lucide="step-forward" aria-hidden="true"></i>
+                  </button>
+                  <button id="replayEnd" class="replay-action" type="button" title="Aller directement a la fin (Fin)" aria-label="Aller directement a la fin" disabled>
+                    <i data-lucide="fast-forward" aria-hidden="true"></i>
+                  </button>
+                  <button id="replaySpeed" class="replay-speed" type="button" title="Changer la vitesse (touches 1, 2, 4)" aria-label="Vitesse du replay" disabled>1x</button>
+                  <button id="replayBranch" class="replay-action is-branch" type="button" title="Continuer la partie depuis cette position (B)" aria-label="Continuer la partie depuis cette position" disabled>
+                    <i data-lucide="git-branch" aria-hidden="true"></i>
+                  </button>
+                </div>
+              </div>
+              <div id="savedPositionList" class="saved-position-list mt-3" aria-label="Positions sauvegardees"></div>
+            </div>
+
+            <div class="rounded-lg border border-white/10 bg-stone-900/80 p-4">
+              <div class="flex items-center gap-2 text-sm font-black text-white">
+                <i data-lucide="book-open" class="h-4 w-4 text-rose-300" aria-hidden="true"></i>
+                Regles
+              </div>
+              <ul class="mt-3 grid gap-2 text-sm font-medium leading-5 text-stone-300">
+                <li>Grille de 20 par 20.</li>
+                <li>X et O jouent chacun leur tour.</li>
+                <li>5 symboles alignes donnent la victoire.</li>
+                <li>Ligne, colonne ou diagonale comptent.</li>
+              </ul>
+            </div>
+          </aside>
+
+          <section class="panel-reveal min-w-0 rounded-lg border border-white/10 bg-white/[0.06] p-3 shadow-2xl shadow-black/20 backdrop-blur" aria-label="Plateau de jeu">
+            <div class="mb-3 flex items-center justify-between gap-3 rounded-lg bg-stone-950/70 px-3 py-2 text-xs font-black uppercase text-stone-300">
+              <span id="moveCounter">0 / 400</span>
+              <span id="gameMode" class="inline-flex items-center gap-2">
+                <i data-lucide="bot" class="h-4 w-4 text-cyan-300" aria-hidden="true"></i>
+                Bot figures 0/1/2
+              </span>
+            </div>
+
+            <div class="board-frame">
+              <div id="board" class="board" role="grid" aria-label="Grille Gomoku 20 par 20"></div>
+            </div>
+          </section>
+        </section>
+      </section>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,304 @@
+rules_version = '2';
+
+// This is the single source of truth for Firestore security rules on project "mopyonlakay".
+// It is shared by two separate codebases: D:\jwetpro (public site + Cloud Functions) and
+// D:\jwetprodashboard (admin dashboard). Deploy rule changes ONLY from this file/folder
+// (firebase deploy --only firestore:rules --project mopyonlakay). Never re-add a
+// "firestore.rules" deploy target to jwetprodashboard's firebase.json.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return signedIn() && request.auth.token.admin == true;
+    }
+
+    function isCoordinatorRoomForUser(roomId) {
+      return signedIn() && roomId == 'coordinator_' + request.auth.uid;
+    }
+
+    function validChampionship(data) {
+      return data.game in ['mopyon', 'domino']
+        && data.entryFee is number && data.entryFee > 0
+        && data.prize is number && data.prize > 0
+        && data.maxPlayers is number && data.maxPlayers > 0
+        && (!('registeredCount' in data) || (data.registeredCount is number && data.registeredCount >= 0 && data.registeredCount <= data.maxPlayers))
+        && (!('participants' in data) || (data.participants is list && data.participants.size() <= data.maxPlayers))
+        && (!('simulation' in data) || data.simulation != true || (
+          data.registeredCount is number
+          && data.participants is list
+          && data.registeredCount == data.participants.size()
+        ))
+        && data.rounds is number && data.rounds >= 1 && data.rounds <= 20
+        && data.startAt is timestamp
+        && data.status in ['registration-open', 'registration-closed', 'ongoing', 'upcoming', 'scheduled', 'completed', 'cancelled'];
+    }
+
+    function validLeaderboard(data) {
+      return data.keys().hasOnly(['displayName', 'level', 'points', 'imageName', 'photoURL'])
+        && data.displayName is string
+        && data.displayName.size() > 0
+        && data.displayName.size() <= 120
+        && data.level is string
+        && data.level.size() <= 60
+        && data.points is number
+        && data.points >= 0
+        && data.imageName is string
+        && (data.imageName == '' || data.imageName.matches('^[A-Za-z0-9._-]+$'))
+        && data.photoURL is string
+        && data.photoURL.size() <= 500
+        && (data.photoURL == '' || data.photoURL.matches('^https://firebasestorage\\.googleapis\\.com/.*'));
+    }
+
+    function validPlayerSelfServiceUpdate(data) {
+      return data.diff(resource.data).affectedKeys().hasOnly([
+          'firstName', 'lastName', 'phone', 'profilePublic', 'photoURL',
+          'notificationPreferences', 'favoriteGames', 'updatedAt'
+        ])
+        && (!('firstName' in data) || (data.firstName is string && data.firstName.size() <= 60))
+        && (!('lastName' in data) || (data.lastName is string && data.lastName.size() <= 60))
+        && (!('phone' in data) || (data.phone is string && data.phone.size() <= 30))
+        && (!('profilePublic' in data) || data.profilePublic is bool)
+        && (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 500 && (data.photoURL == '' || data.photoURL.matches('^https://firebasestorage\\.googleapis\\.com/.*'))))
+        && (!('favoriteGames' in data) || (data.favoriteGames is list && data.favoriteGames.size() <= 30))
+        && (!('notificationPreferences' in data) || (
+          data.notificationPreferences is map
+          && data.notificationPreferences.keys().hasOnly(['matchReminders', 'results', 'championships'])
+          && (!('matchReminders' in data.notificationPreferences) || data.notificationPreferences.matchReminders is bool)
+          && (!('results' in data.notificationPreferences) || data.notificationPreferences.results is bool)
+          && (!('championships' in data.notificationPreferences) || data.notificationPreferences.championships is bool)
+        ))
+        && data.updatedAt == request.time;
+    }
+
+    function validPlayerPublicCreate(userId, data) {
+      return signedIn()
+        && request.auth.uid == userId
+        && data.keys().hasOnly([
+          'firstName', 'lastName', 'username', 'email', 'role', 'status',
+          'authUid', 'profilePublic', 'notificationPreferences', 'createdAt', 'updatedAt'
+        ])
+        && data.authUid == request.auth.uid
+        && data.email == request.auth.token.email
+        && data.role == 'user'
+        && data.status == 'active'
+        && data.firstName is string
+        && data.firstName.size() >= 3
+        && data.firstName.size() <= 60
+        && data.lastName == ''
+        && data.username is string
+        && data.username.matches('^[A-Za-z0-9._-]{3,24}$')
+        && data.profilePublic is bool
+        && data.notificationPreferences is map
+        && data.notificationPreferences.keys().hasOnly(['matchReminders', 'results', 'championships'])
+        && data.notificationPreferences.matchReminders is bool
+        && data.notificationPreferences.results is bool
+        && data.notificationPreferences.championships is bool
+        && data.createdAt == request.time
+        && data.updatedAt == request.time;
+    }
+
+    // A player can read their own profile and update only non-authoritative preferences.
+    match /users/{userId} {
+      allow get: if signedIn() && (request.auth.uid == userId || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isAdmin() || validPlayerPublicCreate(userId, request.resource.data);
+      allow delete: if isAdmin();
+      allow update: if isAdmin() || (signedIn() && request.auth.uid == userId && validPlayerSelfServiceUpdate(request.resource.data));
+    }
+
+    // Public ranking projection: only non-sensitive leaderboard fields are exposed.
+    match /leaderboard/{userId} {
+      allow read: if true;
+      allow create, update: if signedIn()
+        && (request.auth.uid == userId || isAdmin())
+        && validLeaderboard(request.resource.data);
+      allow delete: if false;
+    }
+
+    // Public profile projection maintained exclusively by trusted Cloud Functions.
+    match /publicProfiles/{userId} {
+      allow read: if true;
+      allow create, update, delete: if false;
+    }
+
+    // Share snapshots and referral attribution are created and rendered server-side.
+    // Clients never read owner UIDs or write their own achievements directly.
+    match /shareEvents/{shareId} {
+      allow read, write: if false;
+    }
+
+    match /shareReferrals/{userId} {
+      allow read, write: if false;
+    }
+
+    // A player reports only their own presence in the group chat; Cloud Functions (admin SDK) read it to decide simulation state.
+    match /communityPresence/{userId} {
+      allow read: if false;
+      allow create, update: if signedIn() && request.auth.uid == userId
+        && request.resource.data.keys().hasOnly(['viewingGroup', 'lastSeen', 'since'])
+        && request.resource.data.viewingGroup is bool
+        && request.resource.data.lastSeen == request.time;
+      allow delete: if signedIn() && request.auth.uid == userId;
+    }
+
+    // These two rooms are public to authenticated players, but their structure is admin-owned.
+    match /communityRooms/{roomId} {
+      allow read: if signedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Every authenticated player may read and send messages. A player cannot impersonate another author.
+    match /communityMessages/{messageId} {
+      allow read: if signedIn() && (isAdmin() || resource.data.roomId in ['general', 'mopyon', 'domino'] || isCoordinatorRoomForUser(resource.data.roomId));
+      allow create: if isAdmin() || (signedIn()
+        && request.resource.data.authorId == request.auth.uid
+        && (request.resource.data.roomId in ['general', 'mopyon', 'domino'] || isCoordinatorRoomForUser(request.resource.data.roomId))
+        && request.resource.data.body is string
+        && request.resource.data.body.size() > 0
+        && request.resource.data.body.size() <= 2000
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.authorName is string
+        && request.resource.data.authorImageName is string
+        && request.resource.data.authorRole == 'user'
+        && request.resource.data.language in ['fr', 'ht']);
+      allow update: if isAdmin();
+      allow delete: if isAdmin() || (signedIn() && resource.data.authorId == request.auth.uid);
+    }
+
+    // Only the four official guide entries are public. All knowledge writes stay admin-only.
+    match /assistantKnowledge/{knowledgeId} {
+      allow read: if isAdmin() || knowledgeId in [
+        'championship-format',
+        'championship-rewards',
+        'championship-lifecycle',
+        'match-series-and-replay'
+      ];
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Players can evaluate an assistant message from their own private room, or from the public group room.
+    match /assistantFeedback/{feedbackId} {
+      allow read: if isAdmin() || (signedIn() && resource.data.userId == request.auth.uid);
+      allow create, update: if signedIn()
+        && request.resource.data.keys().hasOnly(['userId', 'assistantMessageId', 'rating', 'createdAt', 'updatedAt'])
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.assistantMessageId is string
+        && request.resource.data.rating in ['helpful', 'not-helpful']
+        && request.resource.data.updatedAt == request.time
+        && exists(/databases/$(database)/documents/communityMessages/$(request.resource.data.assistantMessageId))
+        && get(/databases/$(database)/documents/communityMessages/$(request.resource.data.assistantMessageId)).data.roomId in ['general', 'coordinator_' + request.auth.uid]
+        && get(/databases/$(database)/documents/communityMessages/$(request.resource.data.assistantMessageId)).data.authorRole == 'assistant';
+      allow delete: if isAdmin();
+    }
+
+    // A player may open their own escalation. Only administrators can resolve it.
+    match /assistantEscalations/{userId} {
+      allow read: if isAdmin() || (signedIn() && request.auth.uid == userId);
+      allow create, update: if signedIn()
+        && request.auth.uid == userId
+        && request.resource.data.keys().hasOnly(['userId', 'assistantMessageId', 'status', 'createdAt', 'updatedAt'])
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.assistantMessageId is string
+        && request.resource.data.status == 'open'
+        && request.resource.data.updatedAt == request.time;
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Internal assistant execution records are server-only.
+    match /assistantRateLimits/{userId} {
+      allow read, write: if false;
+    }
+
+    // Public homepage data is readable, but only administrators can publish or change it.
+    match /championships/{championshipId} {
+      allow read: if true;
+      allow create: if isAdmin() && validChampionship(request.resource.data);
+      allow update: if isAdmin() && validChampionship(request.resource.data);
+      allow delete: if isAdmin();
+
+      // Simulation lab (admin dashboard): individual player registrations for a championship, admin-only.
+      match /registrations/{registrationId} {
+        allow read, delete: if isAdmin();
+        allow create: if isAdmin()
+          && getAfter(/databases/$(database)/documents/championships/$(championshipId)).data.simulation == true
+          && getAfter(/databases/$(database)/documents/championships/$(championshipId)).data.registeredCount
+            == get(/databases/$(database)/documents/championships/$(championshipId)).data.registeredCount + 1
+          && getAfter(/databases/$(database)/documents/championships/$(championshipId)).data.participants.size()
+            == getAfter(/databases/$(database)/documents/championships/$(championshipId)).data.registeredCount
+          && getAfter(/databases/$(database)/documents/championships/$(championshipId)).data.registeredCount
+            <= getAfter(/databases/$(database)/documents/championships/$(championshipId)).data.maxPlayers
+          && getAfter(/databases/$(database)/documents/championships/$(championshipId)).data.participants.size()
+            <= getAfter(/databases/$(database)/documents/championships/$(championshipId)).data.maxPlayers;
+        allow update: if isAdmin();
+      }
+    }
+
+    // Collection-group form of the rule above: the admin dashboard's orphan-data cleanup scans every
+    // registrations subcollection across all championships (including ones whose parent championship
+    // doc was already deleted) in a single collectionGroup('registrations') query.
+    match /{path=**}/registrations/{registrationId} {
+      allow read: if isAdmin();
+    }
+
+    // Scheduled matches are private to their players. Public live/replay/upcoming-bracket cards remain readable.
+    // Official moves are accepted only by callable server functions using the Admin SDK.
+    match /matches/{matchId} {
+      // The participant check is inlined (no helper function, no extra "is list" type guard) so
+      // Cloud Firestore's query-vs-rule prover can statically validate it against a plain
+      // where('participantIds','array-contains',uid) query on the personal "my matches" page —
+      // wrapping it in a function or ANDing an extra type check defeated that proof and made the
+      // whole query come back "Missing or insufficient permissions" even for legitimate participants.
+      allow read: if isAdmin()
+        || (signedIn() && request.auth.uid in resource.data.participantIds)
+        || resource.data.visibility == 'public'
+        || resource.data.status in ['preview', 'scheduled', 'ongoing', 'live', 'completed', 'finished'];
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Domino hands and draw piles are authoritative server state. They are never readable from
+    // Firestore clients; participants receive only their own hand through getDominoMatchState.
+    match /dominoMatchStates/{matchId} {
+      allow read, write: if false;
+    }
+
+    // Results are dashboard-managed. They remain private until a public results schema is reviewed.
+    match /results/{resultId} {
+      allow read, create, update, delete: if isAdmin();
+    }
+
+    // Ticket records are written only by trusted Cloud Functions. Players may
+    // inspect their own result, but cannot reserve, pay or credit themselves.
+    match /championshipTicketReservations/{intentId} {
+      allow get: if signedIn() && resource.data.playerUid == request.auth.uid;
+      allow list, create, update, delete: if false;
+    }
+
+    match /championshipTicketRegistrations/{intentId} {
+      allow get: if signedIn() && resource.data.playerUid == request.auth.uid;
+      allow list, create, update, delete: if false;
+    }
+
+    match /jwetproCredits/{creditId} {
+      allow read: if signedIn() && resource.data.playerUid == request.auth.uid;
+      allow create, update, delete: if false;
+    }
+
+    match /jwetproTicketEvents/{eventId} {
+      allow read, write: if false;
+    }
+
+    match /integrations/{integrationId} {
+      allow read, write: if isAdmin();
+    }
+
+    // Other collections stay closed until they receive an explicit, reviewed policy.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

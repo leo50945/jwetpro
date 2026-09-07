@@ -1,0 +1,3339 @@
+<!DOCTYPE html>
+<html lang="ht">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Domino Cash — Table privée</title>
+  <meta name="description" content="Une table de domino privée, élégante et immersive." />
+  <meta property="og:title" content="Domino Cash" />
+  <meta property="og:description" content="Une table de domino privée, élégante et immersive." />
+  <meta property="og:type" content="website" />
+  <meta property="og:image" content="/og.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:image" content="/og.png" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+  <style>
+    :root {
+      --felt: #00a886;
+      --felt-deep: #056052;
+      --header: rgba(5, 18, 17, 0.86);
+      --tile: #fff8e9;
+      --tile-edge: #e7d8b7;
+      --ink: #131814;
+      --gold: #ffd166;
+      --you: #53a8ff;
+      --bot: #ff5e73;
+      --hand-tile-w: 48px;
+      --hand-tile-h: calc(var(--hand-tile-w) * 2);
+      --board-tile-w: 96px;
+      --board-tile-h: calc(var(--board-tile-w) / 2);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100dvh;
+      overflow: hidden;
+      display: grid;
+      place-items: center;
+      font-family: "Inter", system-ui, sans-serif;
+      color: white;
+      background:
+        radial-gradient(circle at 30% 18%, rgba(255,255,255,0.20), transparent 26%),
+        radial-gradient(circle at 76% 68%, rgba(5,68,58,0.38), transparent 34%),
+        linear-gradient(160deg, #00b99a 0%, #06806c 45%, #043c36 100%);
+    }
+
+    .game-screen {
+      position: relative;
+      height: 100dvh;
+      width: 100vw;
+      max-width: none;
+      margin: 0 auto;
+      padding: 0;
+      display: grid;
+      place-items: center;
+    }
+
+    .opponent-area,
+    .player-area {
+      position: absolute;
+      left: 50%;
+      width: min(1120px, 96vw);
+      min-height: 0;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      z-index: 8;
+      transform: translateX(-50%);
+      pointer-events: none;
+    }
+
+    .opponent-area {
+      top: max(8px, env(safe-area-inset-top));
+      justify-content: center;
+    }
+
+    .opponent-area > div:not(.avatar) {
+      flex: 1 1 auto;
+      min-width: 0;
+      width: auto;
+    }
+
+    .player-area {
+      bottom: max(10px, env(safe-area-inset-bottom));
+      padding-top: 0;
+      justify-content: center;
+    }
+
+    .avatar {
+      display: grid;
+      flex: 0 0 42px;
+      width: 42px;
+      min-width: 42px;
+      max-width: 42px;
+      height: 42px;
+      min-height: 42px;
+      max-height: 42px;
+      border-radius: 999px;
+      place-items: center;
+      border: 3px solid rgba(255,255,255,0.88);
+      background: linear-gradient(145deg, #10231f, #214b40);
+      box-shadow: 0 12px 24px rgba(0,0,0,0.26);
+      font-size: 0.72rem;
+      font-weight: 900;
+    }
+
+    .avatar i,
+    .avatar svg {
+      width: 20px;
+      height: 20px;
+    }
+
+    .avatar.bot { border-color: rgba(255,94,115,0.9); }
+    .avatar.you { border-color: rgba(83,168,255,0.96); }
+
+    .opponent-area.active .avatar,
+    .player-area.active .avatar {
+      box-shadow: 0 0 0 4px rgba(255,209,102,0.20), 0 12px 24px rgba(0,0,0,0.26);
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      min-height: 26px;
+      padding: 0 9px;
+      border-radius: 999px;
+      background: rgba(1,42,36,0.82);
+      border: 1px solid rgba(255,255,255,0.13);
+      color: white;
+      font-size: 0.72rem;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .hand {
+      min-width: 0;
+      display: flex;
+      gap: var(--hand-gap, 6px);
+      overflow-x: auto;
+      overflow-y: visible;
+      padding: 10px 8px 12px;
+      scroll-behavior: smooth;
+      -webkit-overflow-scrolling: touch;
+      pointer-events: auto;
+      scrollbar-width: none;
+      overscroll-behavior-x: contain;
+    }
+
+    .hand::-webkit-scrollbar { display: none; }
+
+    .hand .domino + .domino {
+      margin-left: 0;
+    }
+
+    .opponent-area .hand {
+      justify-content: flex-start;
+      padding-right: 76px;
+      width: 100%;
+      max-width: 100%;
+    }
+
+    .opponent-area.revealed .hand {
+      overflow-x: auto;
+      padding-bottom: 16px;
+      touch-action: pan-x;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(82,164,255,0.48) transparent;
+    }
+
+    .opponent-area.revealed .hand::-webkit-scrollbar {
+      display: block;
+      height: 4px;
+    }
+
+    .opponent-area.revealed .hand::-webkit-scrollbar-thumb {
+      border-radius: 999px;
+      background: rgba(82,164,255,0.48);
+    }
+
+    .player-area .hand {
+      width: 100%;
+      max-width: 100%;
+      order: 2;
+      justify-content: flex-start;
+    }
+
+    .board-wrap {
+      position: relative;
+      width: min(1200px, 96vw);
+      height: 90vh;
+      min-height: 0;
+      flex: none;
+      border-radius: 24px;
+      border: 1px solid rgba(255,255,255,0.24);
+      background:
+        radial-gradient(circle at 50% 46%, rgba(255,255,255,0.16), transparent 34%),
+        radial-gradient(circle at 30% 80%, rgba(255,209,102,0.10), transparent 32%),
+        linear-gradient(145deg, rgba(11,130,107,0.96), rgba(2,82,72,0.96));
+      box-shadow: inset 0 0 70px rgba(0,0,0,0.17), 0 22px 45px rgba(0,0,0,0.20);
+      overflow: hidden;
+    }
+
+    .message-bar {
+      position: absolute;
+      left: 50%;
+      right: auto;
+      top: 112px;
+      width: max-content;
+      max-width: calc(100% - 96px);
+      min-height: 38px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 7px 14px;
+      border-radius: 999px;
+      background: rgba(2,35,31,0.62);
+      border: 1px solid rgba(255,255,255,0.13);
+      backdrop-filter: blur(12px);
+      font-size: 0.74rem;
+      font-weight: 900;
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      transform: translate(-50%, -10px) scale(0.97);
+      transition:
+        opacity 220ms ease,
+        transform 280ms cubic-bezier(0.22, 1, 0.36, 1),
+        visibility 0s linear 280ms;
+      z-index: 12;
+    }
+
+    .message-bar.is-visible {
+      opacity: 1;
+      visibility: visible;
+      transform: translate(-50%, 0) scale(1);
+      transition-delay: 0s;
+    }
+
+    .message-bar #message {
+      min-width: 0;
+      overflow-wrap: anywhere;
+      text-align: center;
+    }
+
+    .ends-info {
+      display: none !important;
+    }
+
+    .turn-timer {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      z-index: 18;
+      width: 72px;
+      height: 38px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 999px;
+      background: rgba(2,35,31,0.76);
+      color: white;
+      font-size: 0.82rem;
+      font-weight: 900;
+      font-variant-numeric: tabular-nums;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+      backdrop-filter: blur(10px);
+      transition: color 180ms ease, border-color 180ms ease, background 180ms ease;
+    }
+
+    .turn-timer[hidden] { display: none; }
+
+    .turn-timer.danger {
+      color: #fff1f1;
+      border-color: rgba(255,92,92,0.72);
+      background: rgba(133,22,22,0.84);
+    }
+
+    .turn-timer svg {
+      width: 16px;
+      height: 16px;
+    }
+
+    .board-scroll {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      position: relative;
+      padding: clamp(92px, 18vh, 110px) clamp(10px, 3vw, 20px) clamp(84px, 15vh, 132px);
+      scroll-behavior: smooth;
+    }
+
+    .board {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      min-width: 0;
+      overflow: hidden;
+      touch-action: manipulation;
+    }
+
+    .intro-layer {
+      position: absolute;
+      inset: 0;
+      z-index: 25;
+      display: grid;
+      place-items: center;
+      pointer-events: none;
+    }
+
+    .intro-layer[hidden] {
+      display: none;
+    }
+
+    .intro-stack {
+      position: relative;
+      width: 180px;
+      height: 128px;
+    }
+
+    .intro-stack .domino {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      --hand-tile-w: 42px;
+      transform: translate(-50%, -50%);
+    }
+
+    .board-empty {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      max-width: 250px;
+      margin: auto;
+      color: rgba(255,255,255,0.76);
+      font-size: 0.9rem;
+      font-weight: 800;
+    }
+
+    .action-btn {
+      min-height: 42px;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 0 14px;
+      font-weight: 900;
+      font-size: 0.8rem;
+      border: 1px solid rgba(255,255,255,0.14);
+      box-shadow: 0 12px 24px rgba(0,0,0,0.18);
+      pointer-events: auto;
+      touch-action: manipulation;
+    }
+
+    .action-btn:disabled {
+      opacity: 0.42;
+      filter: grayscale(0.6);
+    }
+
+    .draw-pile {
+      position: absolute;
+      right: 0;
+      top: -72px;
+      width: 62px;
+      height: 58px;
+      border: 0;
+      background: transparent;
+      color: white;
+      display: grid;
+      place-items: center;
+      touch-action: manipulation;
+      z-index: 5;
+      pointer-events: auto;
+      opacity: 0.48;
+      transition: opacity 0.2s ease, filter 0.2s ease;
+    }
+
+    .draw-pile:not(:disabled),
+    .draw-pile.must-draw,
+    .draw-pile:hover,
+    .draw-pile:focus-visible {
+      opacity: 1;
+    }
+
+    .pile-card {
+      position: absolute;
+      width: 36px;
+      height: 50px;
+      border-radius: 9px;
+      border: 2px solid rgba(255,255,255,0.36);
+      background: linear-gradient(145deg, #173b35, #061b18);
+      box-shadow: 0 10px 22px rgba(0,0,0,0.28);
+    }
+
+    .pile-card:nth-child(1) { transform: translate(-8px, 2px) rotate(-13deg); }
+    .pile-card:nth-child(2) { transform: translate(0, -2px) rotate(-4deg); }
+    .pile-card:nth-child(3) { transform: translate(8px, 2px) rotate(9deg); }
+
+    .draw-pile .badge {
+      position: absolute;
+      right: -2px;
+      bottom: -3px;
+      min-height: 23px;
+      padding: 0 7px;
+      background: #063d36;
+      box-shadow: 0 8px 18px rgba(0,0,0,0.24);
+    }
+
+    .draw-pile.must-draw::before {
+      content: "";
+      position: absolute;
+      inset: 4px;
+      border-radius: 16px;
+      border: 3px solid rgba(255,209,102,0.92);
+      box-shadow: 0 0 22px rgba(255,209,102,0.72);
+      animation: must-draw-ring 1.15s ease-in-out infinite;
+    }
+
+    .draw-pile.must-draw .pile-card {
+      filter: brightness(1.18) drop-shadow(0 0 7px rgba(255,209,102,0.66));
+    }
+
+    @keyframes must-draw-ring {
+      0%, 100% { opacity: 0.28; transform: scale(0.86); }
+      50% { opacity: 1; transform: scale(1.12); }
+    }
+
+    .domino {
+      --w: var(--hand-tile-w);
+      --h: var(--hand-tile-h);
+      box-sizing: border-box;
+      width: var(--w);
+      height: var(--h);
+      flex: 0 0 auto;
+      display: grid;
+      grid-template-rows: 1fr 1fr;
+      position: relative;
+      border-radius: 11px;
+      border: 2px solid var(--tile-edge);
+      background: linear-gradient(145deg, #fffdf5, var(--tile));
+      box-shadow: 0 10px 18px rgba(0,0,0,0.24), inset 0 0 0 1px rgba(255,255,255,0.75);
+      color: var(--ink);
+      user-select: none;
+      touch-action: manipulation;
+    }
+
+    .domino::after {
+      content: "";
+      position: absolute;
+      left: 10%;
+      right: 10%;
+      top: calc(50% - 1px);
+      height: 2px;
+      border-radius: 99px;
+      background: rgba(19,24,20,0.24);
+    }
+
+    .domino.board-tile {
+      --w: var(--board-tile-w);
+      --h: var(--board-tile-h);
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: none;
+      border-radius: 10px;
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform-origin: center center;
+      will-change: transform, opacity;
+    }
+
+    .domino.board-tile.tile-vertical,
+    .domino.board-tile.double-vertical {
+      --w: var(--board-tile-h);
+      --h: var(--board-tile-w);
+      grid-template-columns: none;
+      grid-template-rows: 1fr 1fr;
+    }
+
+    .domino.board-tile::after {
+      top: 10%;
+      bottom: 10%;
+      left: calc(50% - 1px);
+      right: auto;
+      width: 2px;
+      height: auto;
+    }
+
+    .domino.board-tile.tile-vertical::after,
+    .domino.board-tile.double-vertical::after {
+      left: 10%;
+      right: 10%;
+      top: calc(50% - 1px);
+      bottom: auto;
+      width: auto;
+      height: 2px;
+    }
+
+    .domino.hidden {
+      display: grid;
+      width: var(--hand-tile-w);
+      height: var(--hand-tile-h);
+      background:
+        radial-gradient(circle at 50% 28%, rgba(255,255,255,0.24), transparent 18%),
+        linear-gradient(135deg, rgba(255,255,255,0.16) 25%, transparent 25%) 0 0 / 10px 10px,
+        linear-gradient(135deg, transparent 75%, rgba(255,255,255,0.16) 75%) 0 0 / 10px 10px,
+        linear-gradient(145deg, #235a50, #0a2a26);
+      border-color: rgba(255,255,255,0.46);
+      box-shadow: 0 10px 18px rgba(0,0,0,0.28), inset 0 0 0 1px rgba(255,255,255,0.18);
+    }
+
+    .domino.hidden::after {
+      display: none;
+    }
+
+    .domino.hidden .half,
+    .domino.hidden .pip {
+      display: none;
+    }
+
+    .domino.playable {
+      border-color: var(--gold);
+      transform: translateY(-8px);
+      box-shadow: 0 14px 24px rgba(0,0,0,0.30), 0 0 0 4px rgba(255,209,102,0.26);
+      cursor: pointer;
+    }
+
+    .domino.disabled {
+      opacity: 0.46;
+      filter: saturate(0.45);
+    }
+
+    .domino:active { transform: scale(0.97); }
+
+    .half {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: repeat(3, 1fr);
+      padding: 7px;
+    }
+
+    .pip {
+      width: clamp(4px, calc(var(--hand-tile-w) * 0.145), 7px);
+      height: clamp(4px, calc(var(--hand-tile-w) * 0.145), 7px);
+      border-radius: 999px;
+      align-self: center;
+      justify-self: center;
+      background: #111;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.20);
+    }
+
+    .board-tile .pip {
+      width: clamp(5px, calc(var(--board-tile-w) * 0.09), 8px);
+      height: clamp(5px, calc(var(--board-tile-w) * 0.09), 8px);
+    }
+
+    .slot-1 { grid-area: 1 / 1; }
+    .slot-2 { grid-area: 1 / 3; }
+    .slot-3 { grid-area: 2 / 1; }
+    .slot-4 { grid-area: 2 / 2; }
+    .slot-5 { grid-area: 2 / 3; }
+    .slot-6 { grid-area: 3 / 1; }
+    .slot-7 { grid-area: 3 / 3; }
+
+    .half.pips-horizontal[data-value="6"] .slot-1 { grid-area: 1 / 1; }
+    .half.pips-horizontal[data-value="6"] .slot-2 { grid-area: 1 / 2; }
+    .half.pips-horizontal[data-value="6"] .slot-3 { grid-area: 1 / 3; }
+    .half.pips-horizontal[data-value="6"] .slot-5 { grid-area: 3 / 1; }
+    .half.pips-horizontal[data-value="6"] .slot-6 { grid-area: 3 / 2; }
+    .half.pips-horizontal[data-value="6"] .slot-7 { grid-area: 3 / 3; }
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      display: none;
+      place-items: center;
+      padding: 18px;
+      background: rgba(2, 10, 9, 0.68);
+      backdrop-filter: blur(10px);
+      z-index: 60;
+    }
+
+    .modal-backdrop.open { display: grid; }
+
+    .modal-card {
+      width: min(92vw, 360px);
+      border-radius: 22px;
+      border: 1px solid rgba(255,255,255,0.18);
+      background: #08241f;
+      box-shadow: 0 28px 90px rgba(0,0,0,0.42);
+      padding: 16px;
+    }
+
+    .draw-modal-card {
+      width: min(94vw, 520px);
+    }
+
+    .result-modal-card {
+      width: min(92vw, 390px);
+      text-align: center;
+      padding: 24px;
+    }
+
+    .forced-draw-card {
+      width: min(92vw, 380px);
+      text-align: center;
+      padding: 24px;
+    }
+
+    .forced-draw-icon {
+      width: 60px;
+      height: 60px;
+      margin: 0 auto 14px;
+      display: grid;
+      place-items: center;
+      border-radius: 999px;
+      color: #ffd166;
+      background: rgba(255,209,102,0.14);
+      box-shadow: inset 0 0 0 1px rgba(255,209,102,0.24);
+    }
+
+    .result-symbol {
+      width: 64px;
+      height: 64px;
+      margin: 0 auto 14px;
+      display: grid;
+      place-items: center;
+      border-radius: 999px;
+      font-size: 1.8rem;
+      background: rgba(255,255,255,0.08);
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.12);
+    }
+
+    .result-modal-card.result-win .result-symbol {
+      background: rgba(52,211,153,0.16);
+      color: #6ee7b7;
+    }
+
+    .result-modal-card.result-loss .result-symbol {
+      background: rgba(251,113,133,0.16);
+      color: #fda4af;
+    }
+
+    .result-modal-card.result-draw .result-symbol {
+      background: rgba(255,209,102,0.16);
+      color: #ffd166;
+    }
+
+    .result-details {
+      margin-top: 8px;
+      color: rgba(255,255,255,0.72);
+      font-size: 0.86rem;
+      font-weight: 700;
+      line-height: 1.5;
+    }
+
+    .result-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 20px;
+    }
+
+    .board-replay-btn {
+      position: absolute;
+      top: clamp(96px, 16vh, 124px);
+      left: 12px;
+      z-index: 40;
+      min-height: 34px;
+      padding-inline: 13px;
+      background: linear-gradient(180deg, #2997ff, #0879e8);
+      color: white;
+      box-shadow: 0 10px 26px rgba(0,0,0,0.28);
+    }
+
+    .board-replay-btn[hidden] {
+      display: none !important;
+    }
+
+    .draw-choices {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));
+      gap: 10px;
+      max-height: min(52vh, 360px);
+      overflow-y: auto;
+      padding: 4px;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .draw-choice {
+      min-width: 0;
+      border: 0;
+      border-radius: 12px;
+      display: grid;
+      place-items: center;
+      padding: 7px 3px;
+      background: rgba(255,255,255,0.06);
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08);
+      touch-action: manipulation;
+    }
+
+    .draw-choice:active {
+      transform: scale(0.96);
+    }
+
+    .draw-choice .domino {
+      --hand-tile-w: 42px;
+      pointer-events: none;
+    }
+
+    .bot-level-card {
+      width: min(94vw, 460px);
+    }
+
+    .bot-level-options {
+      display: grid;
+      gap: 12px;
+      margin-top: 18px;
+    }
+
+    .bot-level-btn {
+      min-height: 72px;
+      border-radius: 18px;
+      border: 1px solid rgba(255,255,255,0.14);
+      display: grid;
+      grid-template-columns: 42px 1fr;
+      align-items: center;
+      gap: 12px;
+      padding: 12px;
+      color: white;
+      text-align: left;
+      background: rgba(255,255,255,0.08);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 12px 28px rgba(0,0,0,0.24);
+      touch-action: manipulation;
+    }
+
+    .bot-level-btn strong,
+    .bot-level-btn span {
+      display: block;
+    }
+
+    .bot-level-btn strong {
+      font-size: 0.95rem;
+      font-weight: 900;
+    }
+
+    .bot-level-btn span {
+      margin-top: 2px;
+      color: rgba(255,255,255,0.68);
+      font-size: 0.76rem;
+      font-weight: 700;
+      line-height: 1.25;
+    }
+
+    .bot-level-icon {
+      width: 42px;
+      height: 42px;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      background: rgba(255,255,255,0.10);
+      color: #dbeaff;
+    }
+
+    .bot-level-btn[data-bot-level="strong"] {
+      background: linear-gradient(145deg, rgba(37,99,235,0.38), rgba(255,255,255,0.08));
+      border-color: rgba(92,164,255,0.34);
+    }
+
+    @media (min-width: 700px) {
+      .game-screen {
+        max-width: none;
+        padding-inline: 0;
+      }
+
+      .board-wrap {
+        width: min(1320px, 94vw);
+        height: 90vh;
+      }
+
+      .board-scroll {
+        padding: clamp(54px, 9vh, 82px) clamp(10px, 3vw, 20px) clamp(84px, 15vh, 132px);
+      }
+
+      .avatar {
+        flex-basis: 48px;
+        width: 48px;
+        min-width: 48px;
+        max-width: 48px;
+        height: 48px;
+        min-height: 48px;
+        max-height: 48px;
+      }
+
+      .avatar i,
+      .avatar svg {
+        width: 22px;
+        height: 22px;
+      }
+
+      .draw-pile {
+        top: -86px;
+        width: 74px;
+        height: 68px;
+      }
+
+      .pile-card {
+        width: 42px;
+        height: 58px;
+      }
+    }
+    /* Midnight Glass — a calm, premium game-table treatment */
+    :root {
+      color-scheme: dark;
+      --felt: #1d222a;
+      --felt-deep: #0d1015;
+      --header: rgba(18, 21, 27, 0.78);
+      --tile: #f4f3ee;
+      --tile-edge: #d8d7d1;
+      --ink: #101216;
+      --gold: #7db8ff;
+      --you: #0a84ff;
+      --bot: #a7adb8;
+      --glass-border: rgba(255, 255, 255, 0.12);
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", system-ui, sans-serif;
+      color: #f5f7fb;
+      background:
+        radial-gradient(circle at 50% -10%, rgba(83, 144, 255, 0.18), transparent 38%),
+        radial-gradient(circle at 92% 88%, rgba(95, 63, 184, 0.11), transparent 34%),
+        linear-gradient(160deg, #171a20 0%, #0b0d11 52%, #050609 100%);
+    }
+
+    .game-screen::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background: linear-gradient(115deg, rgba(255,255,255,0.035), transparent 28%, transparent 72%, rgba(255,255,255,0.018));
+    }
+
+    .avatar {
+      border: 1px solid rgba(255,255,255,0.16);
+      background: linear-gradient(145deg, rgba(61,66,78,0.94), rgba(22,25,31,0.96));
+      box-shadow: 0 10px 30px rgba(0,0,0,0.38), inset 0 1px 0 rgba(255,255,255,0.12);
+    }
+
+    .avatar.bot { border-color: rgba(196,201,211,0.52); color: #d8dbe2; }
+
+    .avatar.you {
+      border-color: rgba(74,155,255,0.78);
+      background: linear-gradient(145deg, #2494ff, #0061d5);
+      color: white;
+    }
+
+    .opponent-area.active .avatar,
+    .player-area.active .avatar {
+      box-shadow: 0 0 0 4px rgba(10,132,255,0.16), 0 0 28px rgba(10,132,255,0.22), 0 12px 28px rgba(0,0,0,0.34);
+    }
+
+    .badge {
+      background: rgba(29, 33, 41, 0.78);
+      border-color: var(--glass-border);
+      color: #eef1f6;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.06);
+      backdrop-filter: blur(18px) saturate(1.2);
+    }
+
+    .board-wrap {
+      --light-angle: 0deg;
+      border-radius: 30px;
+      border-color: rgba(255,255,255,0.10);
+      background:
+        radial-gradient(circle at 50% 44%, rgba(255,255,255,0.065), transparent 36%),
+        radial-gradient(circle at 22% 85%, rgba(52,114,224,0.07), transparent 35%),
+        linear-gradient(145deg, rgba(36,41,50,0.985), rgba(15,18,24,0.99));
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,0.08),
+        inset 0 -45px 90px rgba(0,0,0,0.18),
+        0 30px 80px rgba(0,0,0,0.48),
+        0 0 30px rgba(10,132,255,0.08),
+        0 0 0 8px rgba(255,255,255,0.018);
+    }
+
+    .board-wrap::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      pointer-events: none;
+      background:
+        linear-gradient(120deg, rgba(255,255,255,0.045), transparent 24%, transparent 76%, rgba(255,255,255,0.018)),
+        repeating-linear-gradient(135deg, rgba(255,255,255,0.008) 0 1px, transparent 1px 4px);
+    }
+
+    @property --light-angle {
+      syntax: "<angle>";
+      inherits: false;
+      initial-value: 0deg;
+    }
+
+    .board-wrap::after {
+      content: "";
+      position: absolute;
+      inset: 1px;
+      z-index: 4;
+      padding: 2px;
+      border-radius: 29px;
+      pointer-events: none;
+      opacity: 0;
+      background: conic-gradient(
+        from var(--light-angle),
+        transparent 0 69%,
+        rgba(10,132,255,0.08) 73%,
+        rgba(10,132,255,0.52) 77%,
+        rgba(116,190,255,0.96) 79%,
+        rgba(10,132,255,0.30) 82%,
+        transparent 87% 100%
+      );
+      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      filter: drop-shadow(0 0 5px rgba(10,132,255,0.62));
+      animation: table-light-choreography 26s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+      will-change: opacity;
+    }
+
+    @keyframes table-light-choreography {
+      0%   { --light-angle: 0deg; opacity: 0; }
+      3%   { --light-angle: 0deg; opacity: 0.78; }
+      10%  { --light-angle: 0deg; opacity: 0.78; }
+      22%  { --light-angle: 90deg; opacity: 0.88; }
+      32%  { --light-angle: 90deg; opacity: 0.78; }
+      44%  { --light-angle: 0deg; opacity: 0.86; }
+      54%  { --light-angle: 0deg; opacity: 0.76; }
+      68%  { --light-angle: 180deg; opacity: 0.88; }
+      78%  { --light-angle: 180deg; opacity: 0.76; }
+      91%  { --light-angle: 540deg; opacity: 0.88; }
+      96%  { --light-angle: 540deg; opacity: 0; }
+      100% { --light-angle: 0deg; opacity: 0; }
+    }
+
+    .message-bar {
+      background: rgba(29,33,41,0.70);
+      border-color: rgba(255,255,255,0.11);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.06);
+      backdrop-filter: blur(20px) saturate(1.3);
+      font-weight: 700;
+      display: none !important;
+    }
+
+    .board-empty {
+      color: rgba(232,236,244,0.58);
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+
+    .action-btn {
+      font-weight: 700;
+      border-color: rgba(255,255,255,0.12);
+      box-shadow: 0 10px 28px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.12);
+    }
+
+    .action-btn:not(:disabled):hover { filter: brightness(1.06); }
+
+    .action-btn:focus-visible,
+    .draw-pile:focus-visible,
+    .domino.playable:focus-visible {
+      outline: 3px solid rgba(10,132,255,0.64);
+      outline-offset: 3px;
+    }
+
+    .pile-card {
+      background:
+        radial-gradient(circle at 50% 34%, rgba(255,255,255,0.10), transparent 20%),
+        linear-gradient(145deg, #353b47, #151820);
+      border-color: rgba(255,255,255,0.20);
+      box-shadow: 0 12px 26px rgba(0,0,0,0.36), inset 0 1px 0 rgba(255,255,255,0.09);
+    }
+
+    .draw-pile .badge { background: rgba(24,28,35,0.78); }
+
+    .draw-pile:not(:disabled) .badge,
+    .draw-pile.must-draw .badge,
+    .draw-pile:hover .badge,
+    .draw-pile:focus-visible .badge {
+      background: rgba(24,28,35,0.94);
+    }
+
+    .domino {
+      border-radius: 12px;
+      border-width: 1px;
+      background: linear-gradient(145deg, #ffffff 0%, var(--tile) 72%, #e9e8e2 100%);
+      box-shadow: 0 10px 22px rgba(0,0,0,0.34), inset 0 1px 0 rgba(255,255,255,0.95), inset 0 -1px 0 rgba(0,0,0,0.05);
+    }
+
+    .domino::after { background: rgba(16,18,22,0.18); }
+    .pip { background: #16181d; }
+
+    .domino.hidden {
+      background:
+        radial-gradient(circle at 50% 28%, rgba(255,255,255,0.13), transparent 18%),
+        linear-gradient(135deg, rgba(255,255,255,0.065) 25%, transparent 25%) 0 0 / 10px 10px,
+        linear-gradient(135deg, transparent 75%, rgba(255,255,255,0.055) 75%) 0 0 / 10px 10px,
+        linear-gradient(145deg, #3a414e, #171a21);
+      border-color: rgba(255,255,255,0.18);
+      box-shadow: 0 10px 22px rgba(0,0,0,0.34), inset 0 1px 0 rgba(255,255,255,0.10);
+    }
+
+    .domino.playable {
+      border-color: var(--gold);
+      box-shadow: 0 16px 30px rgba(0,0,0,0.38), 0 0 0 4px rgba(10,132,255,0.20), 0 0 28px rgba(10,132,255,0.16);
+    }
+
+    .modal-backdrop {
+      background: rgba(4, 6, 9, 0.66);
+      backdrop-filter: blur(20px) saturate(1.15);
+    }
+
+    .modal-card {
+      border-radius: 26px;
+      border-color: rgba(255,255,255,0.13);
+      background: linear-gradient(145deg, rgba(43,48,58,0.96), rgba(18,21,27,0.98));
+      box-shadow: 0 32px 100px rgba(0,0,0,0.58), inset 0 1px 0 rgba(255,255,255,0.09);
+      padding: 20px;
+    }
+
+    .bot-level-card {
+      width: min(92vw, 420px);
+      padding: 22px;
+      border: 1px solid rgba(255,209,102,0.22);
+      border-radius: 18px;
+      background: linear-gradient(145deg, rgba(8,38,35,0.98), rgba(5,24,29,0.99));
+      box-shadow: 0 26px 72px rgba(0,0,0,0.46), inset 0 1px 0 rgba(255,255,255,0.06);
+    }
+
+    .bot-level-eyebrow {
+      margin: 0;
+      color: #dcb15b;
+      font-size: 0.62rem;
+      font-weight: 800;
+      letter-spacing: 0.14em;
+    }
+
+    .bot-level-card h2 {
+      margin: 7px 0 0;
+      color: #f7f9f8;
+      font-size: 1.35rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+
+    .bot-level-intro {
+      margin: 6px 0 0;
+      color: rgba(222,234,231,0.66);
+      font-size: 0.78rem;
+      font-weight: 600;
+    }
+
+    .bot-level-options {
+      gap: 8px;
+      margin-top: 18px;
+    }
+
+    .bot-level-btn,
+    .bot-level-btn[data-bot-level="strong"] {
+      grid-template-columns: 38px minmax(0,1fr) 16px;
+      gap: 11px;
+      min-height: 64px;
+      padding: 10px 12px;
+      border: 1px solid rgba(255,255,255,0.11);
+      border-radius: 10px;
+      background: rgba(255,255,255,0.035);
+      box-shadow: none;
+      transition: border-color 180ms ease, background 180ms ease, transform 180ms ease;
+      cursor: pointer;
+    }
+
+    .bot-level-btn:hover,
+    .bot-level-btn:focus-visible,
+    .bot-level-btn[data-bot-level="strong"]:hover,
+    .bot-level-btn[data-bot-level="strong"]:focus-visible {
+      border-color: rgba(255,209,102,0.52);
+      background: rgba(255,209,102,0.07);
+      transform: translateY(-1px);
+      outline: 2px solid rgba(255,209,102,0.18);
+      outline-offset: 2px;
+    }
+
+    .bot-level-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      background: rgba(255,255,255,0.07);
+      color: #d8e3e0;
+    }
+
+    .bot-level-btn[data-bot-level="strong"] .bot-level-icon {
+      background: rgba(255,209,102,0.09);
+      color: #e4bb68;
+    }
+
+    .bot-level-btn .bot-level-copy {
+      min-width: 0;
+      margin: 0;
+    }
+
+    .bot-level-btn .bot-level-copy strong {
+      color: #f4f7f6;
+      font-size: 0.88rem;
+      font-weight: 800;
+    }
+
+    .bot-level-btn .bot-level-copy span {
+      margin-top: 3px;
+      color: rgba(218,230,227,0.62);
+      font-size: 0.7rem;
+      font-weight: 600;
+    }
+
+    .bot-level-arrow {
+      width: 16px;
+      height: 16px;
+      color: rgba(226,235,233,0.42);
+      transition: color 180ms ease, transform 180ms ease;
+    }
+
+    .bot-level-btn:hover .bot-level-arrow,
+    .bot-level-btn:focus-visible .bot-level-arrow {
+      color: #e4bb68;
+      transform: translateX(2px);
+    }
+
+    @media (max-width: 480px) {
+      .bot-level-card { padding: 17px; border-radius: 15px; }
+      .bot-level-card h2 { font-size: 1.2rem; }
+      .bot-level-btn,
+      .bot-level-btn[data-bot-level="strong"] { min-height: 60px; padding: 9px 10px; }
+    }
+
+    #leftBtn {
+      background: rgba(255,255,255,0.10);
+      color: #f5f7fb;
+    }
+
+    #rightBtn {
+      background: linear-gradient(180deg, #2997ff, #0879e8);
+      border-color: rgba(255,255,255,0.18);
+      color: white;
+    }
+
+    .ends-info {
+      top: clamp(96px, 16vh, 124px);
+      color: #dbeaff;
+      border-color: rgba(92,164,255,0.25);
+      background: rgba(10, 73, 146, 0.32);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        scroll-behavior: auto !important;
+        transition-duration: 0.01ms !important;
+        animation-duration: 0.01ms !important;
+      }
+
+      .board-wrap::after {
+        --light-angle: 220deg;
+        animation: none !important;
+        opacity: 0.28;
+      }
+    }
+
+    body.official-mode #resultModal,
+    body.official-mode #botLevelModal,
+    body.official-mode #drawModal,
+    body.official-mode #forcedDrawModal,
+    body.official-mode #boardReplayBtn {
+      display: none !important;
+    }
+  </style>
+</head>
+<body>
+  <main class="game-screen">
+    <section id="botZone" class="opponent-area" aria-label="Zon bot">
+      <div>
+        <div id="botHand" class="hand"></div>
+      </div>
+      <div class="avatar bot" aria-label="Profil bot">
+        <i data-lucide="user" aria-hidden="true"></i>
+      </div>
+    </section>
+
+    <div class="message-bar" role="status" aria-live="polite">
+      <span id="message">Double 6 kòmanse jwèt la</span>
+    </div>
+
+    <section class="board-wrap" aria-label="Plato domino">
+      <div id="turnTimer" class="turn-timer" aria-label="Tan ki rete" hidden>
+        <i data-lucide="clock-3" aria-hidden="true"></i>
+        <span id="turnTimerValue">30s</span>
+      </div>
+      <button id="boardReplayBtn" class="action-btn board-replay-btn" type="button" hidden>
+        <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+        Rejouer
+      </button>
+      <span id="endsInfo" class="badge ends-info" hidden>0 - 0</span>
+      <div class="board-scroll">
+        <div id="board" class="board"></div>
+      </div>
+      <div id="introLayer" class="intro-layer" hidden>
+        <div id="introStack" class="intro-stack" aria-hidden="true"></div>
+      </div>
+    </section>
+
+    <section id="youZone" class="player-area" aria-label="Zon jwè">
+      <div class="avatar you">YOU</div>
+      <button id="drawBtn" class="draw-pile" type="button" aria-label="Piocher nan pil la">
+        <span class="pile-card"></span>
+        <span class="pile-card"></span>
+        <span class="pile-card"></span>
+        <span id="pileCount" class="badge">14 domino</span>
+      </button>
+      <div id="youHand" class="hand"></div>
+    </section>
+  </main>
+
+  <div id="sideModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="sideTitle">
+    <div class="modal-card">
+      <h2 id="sideTitle" class="text-xl font-black">Ki bò ou vle jwe?</h2>
+      <p class="mt-1 text-sm text-white/70 font-semibold">Domino sa ka ale a goch oswa a dwat.</p>
+      <div id="modalTile" class="mt-5 flex justify-center"></div>
+      <div class="mt-5 grid grid-cols-2 gap-3">
+        <button id="leftBtn" class="action-btn bg-white text-stone-950" type="button">
+          <i data-lucide="arrow-left" class="w-5 h-5"></i>
+          Gòch
+        </button>
+        <button id="rightBtn" class="action-btn bg-amber-300 text-stone-950" type="button">
+          Dwat
+          <i data-lucide="arrow-right" class="w-5 h-5"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div id="drawModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="drawTitle">
+    <div class="modal-card draw-modal-card">
+      <h2 id="drawTitle" class="text-xl font-black">Chwazi yon domino pou piocher</h2>
+      <p class="mt-1 text-sm text-white/70 font-semibold">Chwazi yon domino nan pil la.</p>
+      <div id="drawChoices" class="draw-choices mt-5"></div>
+    </div>
+  </div>
+
+  <div id="forcedDrawModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="forcedDrawTitle">
+    <div id="forcedDrawCard" class="modal-card forced-draw-card">
+      <div class="forced-draw-icon" aria-hidden="true">
+        <i data-lucide="layers-3" class="w-7 h-7"></i>
+      </div>
+      <h2 id="forcedDrawTitle" class="text-xl font-black">Ou dwe pran nan pil la</h2>
+      <p class="mt-2 text-sm text-white/70 font-semibold">Ou pa gen okenn domino ou ka jwe. Chwazi yon domino nan pil la pou w kontinye.</p>
+      <button id="forcedDrawActionBtn" class="action-btn bg-amber-300 text-stone-950 mt-5 w-full" type="button">
+        Chwazi nan pil la
+      </button>
+    </div>
+  </div>
+
+  <div id="botLevelModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="botLevelTitle">
+    <div class="modal-card bot-level-card">
+      <p class="bot-level-eyebrow">DOMINO · ANTRENMAN</p>
+      <h2 id="botLevelTitle">Chwazi nivo bot la</h2>
+      <p class="bot-level-intro">Chwazi ritm ki pi bon pou ou.</p>
+      <div class="bot-level-options">
+        <button class="bot-level-btn" type="button" data-bot-level="weak">
+          <span class="bot-level-icon" aria-hidden="true"><i data-lucide="bot" class="w-5 h-5"></i></span>
+          <span class="bot-level-copy">
+            <strong>Nòmal</strong>
+            <span>Yon jwèt senp pou pratike.</span>
+          </span>
+          <i class="bot-level-arrow" data-lucide="chevron-right" aria-hidden="true"></i>
+        </button>
+        <button class="bot-level-btn" type="button" data-bot-level="strong">
+          <span class="bot-level-icon" aria-hidden="true"><i data-lucide="shield" class="w-5 h-5"></i></span>
+          <span class="bot-level-copy">
+            <strong>Avanse</strong>
+            <span>Plis estrateji ak presyon.</span>
+          </span>
+          <i class="bot-level-arrow" data-lucide="chevron-right" aria-hidden="true"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div id="resultModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="resultTitle">
+    <div id="resultCard" class="modal-card result-modal-card">
+      <div id="resultSymbol" class="result-symbol" aria-hidden="true">★</div>
+      <h2 id="resultTitle" class="text-2xl font-black">Ou genyen!</h2>
+      <p id="resultDetails" class="result-details"></p>
+      <div class="result-actions">
+        <button id="replayBtn" class="action-btn bg-white text-stone-950" type="button">
+          <i data-lucide="rotate-ccw" class="w-5 h-5"></i>
+          Rejouer
+        </button>
+        <button id="viewBoardBtn" class="action-btn bg-amber-300 text-stone-950" type="button">
+          <i data-lucide="layout-grid" class="w-5 h-5"></i>
+          Wè plato a
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    window.gsap = window.gsap || {
+      registerPlugin() {},
+      from() {},
+      to() { return { fromTo() { return this; }, to() { return this; } }; },
+      fromTo() {},
+      timeline() { return { to() { return this; }, fromTo() { return this; } }; }
+    };
+    window.ScrollTrigger = window.ScrollTrigger || {};
+    window.lucide = window.lucide || { createIcons() {} };
+
+    gsap.registerPlugin(ScrollTrigger);
+
+    const HUMAN = 0;
+    const BOT = 1;
+    const BOT_LEVEL_WEAK = "weak";
+    const BOT_LEVEL_STRONG = "strong";
+    const DEFAULT_BOT_LEVEL = BOT_LEVEL_STRONG;
+    const OFFICIAL_MODE = new URLSearchParams(window.location.search).get("official") === "1";
+    const TARGET_SCORE = 100;
+    const BOARD_MARGIN = 8;
+    const BOARD_CONNECTED_GAP = 2;
+    const BOARD_BASE_TILE_WIDTH = 96;
+    const BOARD_MIN_SCALE = 0.48;
+    const BOARD_MAX_SCALE = 1;
+    const BOT_MIN_THINK_MS = 1200;
+    const BOT_MAX_THINK_MS = 2200;
+    const BOT_MIN_DRAW_RECHECK_MS = 800;
+    const BOT_MAX_DRAW_RECHECK_MS = 1400;
+    const PLAYED_TILE_SETTLE_MS = 650;
+    const HUMAN_TURN_SECONDS = 30;
+
+    const sounds = {
+      music: new Audio("assets/musicbg.mp3"),
+      win: new Audio("assets/win.mp3"),
+      lose: new Audio("assets/lose.mp3"),
+      playDomino: new Audio("assets/jouezdomino.mp3"),
+      doubleDomino: new Audio("assets/doub.mp3"),
+      draw: new Audio("assets/pioche.mp3"),
+      shuffle: new Audio("assets/brassage.mp3"),
+      deal: new Audio("assets/distribution.mp3"),
+      click: new Audio("assets/click.mp3")
+    };
+
+    sounds.music.loop = true;
+    sounds.music.volume = 0.16;
+    sounds.win.volume = 0.78;
+    sounds.lose.volume = 0.72;
+    sounds.playDomino.volume = 0.58;
+    sounds.doubleDomino.volume = 0.62;
+    sounds.draw.volume = 0.58;
+    sounds.shuffle.volume = 0.52;
+    sounds.deal.volume = 0.56;
+    sounds.click.volume = 0.38;
+    Object.values(sounds).forEach(audio => { audio.preload = "auto"; });
+
+    let audioUnlocked = false;
+    let openingSoundPhase = null;
+
+    function startBackgroundMusic() {
+      if (!audioUnlocked || document.hidden || !sounds.music.paused) return;
+      sounds.music.play().catch(() => {});
+    }
+
+    function unlockAudio() {
+      audioUnlocked = true;
+      startBackgroundMusic();
+      if (openingSoundPhase) playSoundEffect(openingSoundPhase);
+    }
+
+    function playSoundEffect(name) {
+      const audio = sounds[name];
+      if (!audio) return;
+      try {
+        audio.currentTime = 0;
+        audio.play().catch(() => {});
+      } catch (_) {}
+    }
+
+    function stopSoundEffect(name) {
+      const audio = sounds[name];
+      if (!audio) return;
+      audio.pause();
+      try { audio.currentTime = 0; } catch (_) {}
+    }
+
+    function stopOpeningSounds() {
+      stopSoundEffect("shuffle");
+      stopSoundEffect("deal");
+      openingSoundPhase = null;
+    }
+
+    const gameState = {
+      players: [[], []],
+      currentPlayer: HUMAN,
+      boardTiles: [],
+      drawPile: [],
+      scores: [0, 0],
+      selectedTile: null,
+      starterTileId: null,
+      firstMove: true,
+      gameOver: false,
+      isBusy: false,
+      autoPassScheduled: false,
+      revealBotHand: false,
+      viewingFinalBoard: false,
+      strongSwapUsedThisTurn: false,
+      strongSwapEvaluatedThisTurn: false,
+      strongLastSwapBoardLength: -99,
+      strongBotSwapCount: 0,
+      strongBotStyle: "balanced",
+      botPublicMissingValues: [],
+      humanDrawsThisTurn: 0,
+      botLevel: getConfiguredBotLevel()
+    };
+
+    let resultModalTimer = null;
+    let humanTurnTimerId = null;
+    let humanTurnDeadline = 0;
+
+    const els = {
+      gameScreen: document.querySelector(".game-screen"),
+      youHand: document.getElementById("youHand"),
+      botHand: document.getElementById("botHand"),
+      board: document.getElementById("board"),
+      messageBar: document.querySelector(".message-bar"),
+      message: document.getElementById("message"),
+      endsInfo: document.getElementById("endsInfo"),
+      pileCount: document.getElementById("pileCount"),
+      drawBtn: document.getElementById("drawBtn"),
+      sideModal: document.getElementById("sideModal"),
+      modalTile: document.getElementById("modalTile"),
+      drawModal: document.getElementById("drawModal"),
+      drawChoices: document.getElementById("drawChoices"),
+      forcedDrawModal: document.getElementById("forcedDrawModal"),
+      forcedDrawCard: document.getElementById("forcedDrawCard"),
+      forcedDrawActionBtn: document.getElementById("forcedDrawActionBtn"),
+      botLevelModal: document.getElementById("botLevelModal"),
+      resultModal: document.getElementById("resultModal"),
+      resultCard: document.getElementById("resultCard"),
+      resultSymbol: document.getElementById("resultSymbol"),
+      resultTitle: document.getElementById("resultTitle"),
+      resultDetails: document.getElementById("resultDetails"),
+      replayBtn: document.getElementById("replayBtn"),
+      viewBoardBtn: document.getElementById("viewBoardBtn"),
+      boardReplayBtn: document.getElementById("boardReplayBtn"),
+      turnTimer: document.getElementById("turnTimer"),
+      turnTimerValue: document.getElementById("turnTimerValue"),
+      introLayer: document.getElementById("introLayer"),
+      introStack: document.getElementById("introStack"),
+      leftBtn: document.getElementById("leftBtn"),
+      rightBtn: document.getElementById("rightBtn"),
+      youZone: document.getElementById("youZone"),
+      botZone: document.getElementById("botZone")
+    };
+
+    const pipSlots = {
+      0: [],
+      1: [4],
+      2: [1, 7],
+      3: [1, 4, 7],
+      4: [1, 2, 6, 7],
+      5: [1, 2, 4, 6, 7],
+      6: [1, 2, 3, 5, 6, 7]
+    };
+
+    let officialMatchId = "";
+    let officialInteractive = false;
+    let officialAutoPassKey = "";
+
+    function validOfficialTile(tile) {
+      return tile && Number.isInteger(tile.a) && Number.isInteger(tile.b) && tile.a >= 0 && tile.a <= 6 && tile.b >= 0 && tile.b <= 6 && typeof tile.id === "string";
+    }
+
+    function sendOfficialAction(action, tileId = "", side = "") {
+      if (!OFFICIAL_MODE || !officialInteractive || !officialMatchId || gameState.isBusy) return;
+      if (!['play', 'draw', 'pass'].includes(action)) return;
+      gameState.isBusy = true;
+      officialInteractive = false;
+      closeSideModal();
+      renderGame();
+      window.parent.postMessage({type: 'jwetpro-domino-action', matchId: officialMatchId, action, tileId, side}, window.location.origin);
+    }
+
+    function applyOfficialState(payload) {
+      if (!OFFICIAL_MODE || !payload || typeof payload !== 'object') return;
+      const hand = Array.isArray(payload.hand) ? payload.hand.filter(validOfficialTile).map(tile => ({id:tile.id,a:tile.a,b:tile.b})) : [];
+      const boardTiles = Array.isArray(payload.boardTiles) ? payload.boardTiles.filter(validOfficialTile).map(tile => ({id:tile.id,a:tile.a,b:tile.b})) : [];
+      const opponentCount = Math.min(28, Math.max(0, Number(payload.opponentCount) || 0));
+      const drawPileCount = Math.min(28, Math.max(0, Number(payload.drawPileCount) || 0));
+      officialMatchId = String(payload.matchId || '');
+      officialInteractive = payload.interactive === true && payload.currentTurn === 'self' && payload.complete !== true;
+      gameState.players = [hand, Array.from({length:opponentCount}, (_,index) => ({id:`hidden-${index}`,a:0,b:0}))];
+      gameState.boardTiles = boardTiles;
+      gameState.drawPile = Array.from({length:drawPileCount}, (_,index) => ({id:`draw-${index}`,a:0,b:0}));
+      gameState.currentPlayer = payload.currentTurn === 'self' ? HUMAN : BOT;
+      gameState.starterTileId = typeof payload.starterTileId === 'string' ? payload.starterTileId : null;
+      gameState.firstMove = boardTiles.length === 0;
+      gameState.gameOver = payload.complete === true;
+      gameState.isBusy = false;
+      gameState.selectedTile = null;
+      gameState.revealBotHand = false;
+      closeSideModal();
+      closeDrawModal();
+      closeForcedDrawModal();
+      stopHumanTurnTimer();
+      renderGame();
+
+      const mustPass = officialInteractive && gameState.currentPlayer === HUMAN && !playerPlayableTiles(HUMAN).length && !drawPileCount;
+      const passKey = `${officialMatchId}:${String(payload.revision || '')}`;
+      if (mustPass && officialAutoPassKey !== passKey) {
+        officialAutoPassKey = passKey;
+        window.setTimeout(() => {
+          if (officialInteractive && officialMatchId === String(payload.matchId || '') && !playerPlayableTiles(HUMAN).length && !gameState.drawPile.length) sendOfficialAction('pass');
+        }, 700);
+      }
+    }
+
+    if (OFFICIAL_MODE) {
+      window.addEventListener('message', event => {
+        if (event.origin !== window.location.origin || event.source !== window.parent || event.data?.type !== 'jwetpro-domino-state') return;
+        applyOfficialState(event.data.payload);
+      });
+    }
+
+    function initGame(resetScores = false) {
+      stopOpeningSounds();
+      stopHumanTurnTimer();
+      if (resetScores) gameState.scores = [0, 0];
+      gameState.botLevel = getConfiguredBotLevel();
+      const deck = prepareRoundDeck(shuffleTiles(generateDominoSet()));
+      const playIntro = shouldPlayOpeningAnimation();
+      gameState.players = playIntro ? [[], []] : [deck.slice(0, 7), deck.slice(7, 14)];
+      gameState.drawPile = playIntro ? deck : deck.slice(14);
+      gameState.boardTiles = [];
+      gameState.selectedTile = null;
+      gameState.firstMove = true;
+      gameState.gameOver = false;
+      gameState.isBusy = playIntro;
+      gameState.autoPassScheduled = false;
+      gameState.revealBotHand = false;
+      gameState.viewingFinalBoard = false;
+      gameState.strongSwapUsedThisTurn = false;
+      gameState.strongSwapEvaluatedThisTurn = false;
+      gameState.strongLastSwapBoardLength = -99;
+      gameState.strongBotSwapCount = 0;
+      gameState.botPublicMissingValues = [];
+      gameState.humanDrawsThisTurn = 0;
+      clearTimeout(resultModalTimer);
+      resultModalTimer = null;
+      closeResultModal();
+      closeForcedDrawModal();
+      els.boardReplayBtn.hidden = true;
+
+      if (playIntro) {
+        closeSideModal();
+        setMessage("N ap brase domino yo...");
+        renderGame();
+        gsap.from(".opponent-area, .board-wrap, .player-area", {
+          y: 18,
+          opacity: 0,
+          duration: 0.5,
+          stagger: 0.06,
+          ease: "power2.out"
+        });
+        runOpeningAnimation(deck);
+        return;
+      }
+
+      const starter = findStartingPlayer();
+      gameState.currentPlayer = starter.player;
+      gameState.starterTileId = starter.id;
+      setMessage(starter.id === "6-6" ? "Double 6 kòmanse jwèt la." : `${nameOf(starter.player)} kòmanse ak ${starter.a}-${starter.b}.`);
+      closeSideModal();
+      renderGame();
+
+      gsap.from(".opponent-area, .board-wrap, .player-area", {
+        y: 18,
+        opacity: 0,
+        duration: 0.5,
+        stagger: 0.06,
+        ease: "power2.out"
+      });
+
+      if (gameState.currentPlayer === BOT) scheduleBotTurn();
+      else startHumanTurnTimer();
+    }
+
+    function generateDominoSet() {
+      const tiles = [];
+      for (let a = 0; a <= 6; a++) {
+        for (let b = a; b <= 6; b++) tiles.push({ a, b, id: `${a}-${b}` });
+      }
+      return tiles;
+    }
+
+    function shouldPlayOpeningAnimation() {
+      const params = new URLSearchParams(window.location.search);
+      return !(
+        params.get("intro") === "0" ||
+        params.has("layoutTest") ||
+        params.has("layoutTiles") ||
+        params.has("drawTest")
+      );
+    }
+
+    function finishOpeningDeal(deck) {
+      stopOpeningSounds();
+      gameState.players = [deck.slice(0, 7), deck.slice(7, 14)];
+      gameState.drawPile = deck.slice(14);
+      gameState.isBusy = false;
+
+      const starter = findStartingPlayer();
+      gameState.currentPlayer = starter.player;
+      gameState.starterTileId = starter.id;
+      setMessage(starter.id === "6-6" ? "Double 6 kÃ²manse jwÃ¨t la." : `${nameOf(starter.player)} kÃ²manse ak ${starter.a}-${starter.b}.`);
+      setMessage(starter.id === "6-6" ? "Double 6 komanse jwet la." : `${nameOf(starter.player)} komanse ak ${starter.a}-${starter.b}.`);
+      renderGame();
+
+      if (gameState.currentPlayer === BOT) scheduleBotTurn();
+      else startHumanTurnTimer();
+    }
+
+    function getConfiguredBotLevel() {
+      const params = new URLSearchParams(window.location.search);
+      const level = (params.get("bot") || localStorage.getItem("dominoBotLevel") || DEFAULT_BOT_LEVEL).toLowerCase();
+      return level === BOT_LEVEL_WEAK ? BOT_LEVEL_WEAK : BOT_LEVEL_STRONG;
+    }
+
+    function shouldShowBotLevelModal() {
+      const params = new URLSearchParams(window.location.search);
+      return !(
+        params.has("bot") ||
+        params.has("layoutTest") ||
+        params.has("layoutTiles") ||
+        params.has("drawTest")
+      );
+    }
+
+    function openBotLevelModal(resetScores = false) {
+      els.botLevelModal.dataset.resetScores = resetScores ? "1" : "0";
+      els.botLevelModal.classList.add("open");
+      lucide.createIcons();
+      gsap.fromTo(".bot-level-card", { y: 24, opacity: 0, scale: 0.94 }, { y: 0, opacity: 1, scale: 1, duration: 0.32, ease: "back.out(1.45)" });
+    }
+
+    function closeBotLevelModal() {
+      els.botLevelModal.classList.remove("open");
+    }
+
+    function startGameWithBotLevel(level) {
+      const safeLevel = level === BOT_LEVEL_WEAK ? BOT_LEVEL_WEAK : BOT_LEVEL_STRONG;
+      localStorage.setItem("dominoBotLevel", safeLevel);
+      closeBotLevelModal();
+      initGame(els.botLevelModal.dataset.resetScores === "1");
+    }
+
+    function isStrongBot() {
+      return gameState.botLevel === BOT_LEVEL_STRONG;
+    }
+
+    function prepareRoundDeck(deck) {
+      return isStrongBot() ? buildStrongBotRound(deck) : deck;
+    }
+
+    function buildStrongBotRound(deck) {
+      const pool = new Map(deck.map(tile => [tile.id, tile]));
+      const naturalDeal = shuffleTiles(deck);
+      let humanHand = naturalDeal.slice(0, 7);
+      humanHand.forEach(tile => pool.delete(tile.id));
+      let botHand = chooseNaturalStrongBotHand([...pool.values()], humanHand);
+      botHand.forEach(tile => pool.delete(tile.id));
+
+      const pile = orderStrongDrawPile([...pool.values()], humanHand, botHand);
+      gameState.strongBotScenario = "natural-pressure";
+      gameState.strongBotStyle = chooseStrongBotStyle();
+      return [...humanHand, ...botHand, ...pile];
+    }
+
+    function chooseStrongBotStyle() {
+      const roll = Math.random();
+      if (roll < 0.5) return "balanced";
+      if (roll < 0.85) return "adaptive";
+      return "pressure";
+    }
+
+    function chooseNaturalStrongBotHand(pool, humanHand) {
+      const chosen = [];
+      const available = shuffleTiles(pool);
+      const valuesInHumanHand = humanHand.reduce((counts, tile) => {
+        counts[tile.a] = (counts[tile.a] || 0) + 1;
+        counts[tile.b] = (counts[tile.b] || 0) + 1;
+        return counts;
+      }, {});
+      const botDraftCount = 4 + Math.floor(Math.random() * 2);
+      const scored = available
+        .map(tile => ({
+          tile,
+          score:
+            (tile.a + tile.b) * 1.4 +
+            (tile.a === tile.b ? 14 : 0) +
+            (valuesInHumanHand[tile.a] || 0) * 2 +
+            (valuesInHumanHand[tile.b] || 0) * 2 +
+            Math.random() * 9
+        }))
+        .sort((a, b) => b.score - a.score);
+
+      for (const item of scored) {
+        if (chosen.length >= botDraftCount) break;
+        chosen.push(item.tile);
+      }
+
+      for (const tile of available) {
+        if (chosen.length >= 7) break;
+        if (!chosen.some(item => item.id === tile.id)) chosen.push(tile);
+      }
+
+      return chosen;
+    }
+
+    function orderStrongDrawPile(pile, humanHand, botHand) {
+      return shuffleTiles(pile);
+    }
+
+    function getHandValueCounts(hand) {
+      return hand.reduce((counts, tile) => {
+        counts[tile.a] = (counts[tile.a] || 0) + 1;
+        counts[tile.b] = (counts[tile.b] || 0) + 1;
+        return counts;
+      }, {});
+    }
+
+    function runOpeningAnimation(deck) {
+      openingSoundPhase = "shuffle";
+      playSoundEffect("shuffle");
+      els.introStack.innerHTML = "";
+      els.introLayer.hidden = false;
+
+      const cards = deck.map((tile, index) => {
+        const card = createDomino(tile, { hidden: true });
+        card.classList.add("intro-card");
+        card.style.zIndex = index + 1;
+        card.style.transform = `translate(-50%, -50%) rotate(${(index % 7 - 3) * 5}deg)`;
+        els.introStack.appendChild(card);
+        return card;
+      });
+
+      gsap.fromTo(
+        cards,
+        {
+          x: () => Math.random() * 120 - 60,
+          y: () => Math.random() * 70 - 35,
+          rotate: () => Math.random() * 80 - 40
+        },
+        {
+          x: () => Math.random() * 120 - 60,
+          y: () => Math.random() * 70 - 35,
+          rotate: () => Math.random() * 120 - 60,
+          duration: 0.22,
+          repeat: 12,
+          yoyo: true,
+          stagger: { each: 0.012, from: "random" },
+          ease: "sine.inOut"
+        }
+      );
+
+      setTimeout(() => animateOpeningDeal(deck, cards), 3000);
+    }
+
+    function animateOpeningDeal(deck, cards) {
+      stopSoundEffect("shuffle");
+      openingSoundPhase = "deal";
+      playSoundEffect("deal");
+      setMessage("N ap distribye domino yo...");
+      if (gsap.killTweensOf) gsap.killTweensOf(cards);
+
+      const layerRect = els.introLayer.getBoundingClientRect();
+      const centerX = layerRect.left + layerRect.width / 2;
+      const centerY = layerRect.top + layerRect.height / 2;
+      const targetFromRect = rect => ({
+        x: rect.left + rect.width / 2 - centerX,
+        y: rect.top + rect.height / 2 - centerY
+      });
+      const humanTarget = targetFromRect(els.youHand.getBoundingClientRect());
+      const botTarget = targetFromRect(els.botHand.getBoundingClientRect());
+      const pileTarget = targetFromRect(els.drawBtn.getBoundingClientRect());
+      let completed = false;
+      const completeDeal = () => {
+        if (completed) return;
+        completed = true;
+        stopSoundEffect("deal");
+        openingSoundPhase = null;
+        els.introLayer.hidden = true;
+        els.introStack.innerHTML = "";
+        finishOpeningDeal(deck);
+      };
+
+      gsap.to(cards, {
+        x: index => {
+          const target = index < 7 ? humanTarget : index < 14 ? botTarget : pileTarget;
+          return target.x + ((index % 7) - 3) * 10;
+        },
+        y: index => {
+          const target = index < 7 ? humanTarget : index < 14 ? botTarget : pileTarget;
+          return target.y + (index < 14 ? 0 : (index % 4 - 1.5) * 5);
+        },
+        rotate: index => index < 14 ? 0 : (index % 5 - 2) * 8,
+        opacity: index => index < 14 ? 1 : 0.5,
+        scale: index => index < 14 ? 0.95 : 0.78,
+        duration: 0.58,
+        stagger: 0.035,
+        ease: "power2.inOut",
+        onComplete: completeDeal
+      });
+
+      setTimeout(completeDeal, 1900);
+    }
+
+    function shuffleTiles(tiles) {
+      const copy = [...tiles];
+      for (let i = copy.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [copy[i], copy[j]] = [copy[j], copy[i]];
+      }
+      return copy;
+    }
+
+    function findStartingPlayer() {
+      const all = gameState.players.flatMap((hand, player) => hand.map(tile => ({ ...tile, player })));
+      const doubleSix = all.find(tile => tile.id === "6-6");
+      if (doubleSix) return doubleSix;
+
+      const bestDouble = all.filter(tile => tile.a === tile.b).sort((x, y) => y.a - x.a)[0];
+      if (bestDouble) return bestDouble;
+
+      return all.sort((x, y) => (y.a + y.b) - (x.a + x.b))[0];
+    }
+
+    function renderGame() {
+      renderOpponentHand();
+      renderPlayerHand();
+      adjustHandLayouts();
+      renderBoard();
+      renderHud();
+      positionMessageBar();
+      lucide.createIcons();
+    }
+
+    function renderOpponentHand() {
+      els.botHand.innerHTML = "";
+      gameState.players[BOT].forEach(tile => {
+        els.botHand.appendChild(createDomino(tile, { hidden: !gameState.revealBotHand }));
+      });
+      els.botZone.classList.toggle("revealed", gameState.revealBotHand);
+    }
+
+    function renderPlayerHand() {
+      els.youHand.innerHTML = "";
+      const humanTurn = gameState.currentPlayer === HUMAN && !gameState.gameOver && !gameState.isBusy && (!OFFICIAL_MODE || officialInteractive);
+      gameState.players[HUMAN].forEach(tile => {
+        const sides = canPlayTile(tile);
+        const forcedStarter = gameState.firstMove && tile.id !== gameState.starterTileId;
+        const tileEl = createDomino(tile);
+
+        if (humanTurn && sides.length && !forcedStarter) {
+          tileEl.classList.add("playable");
+          tileEl.addEventListener("click", () => selectTile(tile));
+        } else if (humanTurn) {
+          tileEl.classList.add("disabled");
+        }
+
+        els.youHand.appendChild(tileEl);
+      });
+    }
+
+    function adjustHandLayouts() {
+      fitHand(els.youHand, gameState.players[HUMAN].length);
+      fitHand(els.botHand, gameState.players[BOT].length);
+    }
+
+    function fitHand(handEl, count) {
+      if (!handEl || count <= 0) return;
+
+      const viewportWidth = Math.max(280, window.innerWidth || 360);
+      const isPlayerHand = handEl === els.youHand;
+      const baseWidth = isPlayerHand ? 48 : 42;
+      const minWidth = isPlayerHand ? 44 : 36;
+      const tileWidth = Math.max(minWidth, Math.min(baseWidth, viewportWidth * 0.135));
+      const gap = viewportWidth < 380 ? 5 : 6;
+
+      handEl.style.setProperty("--hand-tile-w", `${tileWidth}px`);
+      handEl.style.setProperty("--hand-gap", `${gap}px`);
+      handEl.style.setProperty("--hand-overlap", "0px");
+    }
+
+    function renderBoard() {
+      els.board.innerHTML = "";
+      if (!gameState.boardTiles.length) {
+        const empty = document.createElement("div");
+        empty.className = "board-empty";
+        empty.textContent = "Chwazi domino ki bay dwa pou kòmanse jwèt la.";
+        els.board.appendChild(empty);
+        return;
+      }
+
+      gameState.boardTiles.forEach(tile => {
+        els.board.appendChild(createDomino(tile, { board: true }));
+      });
+
+      layoutBoardTiles();
+    }
+
+    function layoutBoardTiles() {
+      const tiles = [...els.board.querySelectorAll(".board-tile")];
+      if (!tiles.length) return;
+
+      let boardWidth = els.board.clientWidth;
+      let boardHeight = els.board.clientHeight;
+      const layout = computeDominoLayout(tiles, boardWidth, boardHeight);
+
+      els.board.style.setProperty("--board-tile-w", `${layout.tileWidth}px`);
+      placeBoardSnake(tiles, layout);
+    }
+
+    function placeBoardSnake(tiles, layout) {
+      const layoutClasses = ["tile-horizontal", "tile-vertical", "double-horizontal", "double-vertical", "turn-tile", "start-vertical", "vertical-turn"];
+      tiles.forEach(tile => tile.classList.remove(...layoutClasses));
+
+      layout.items.forEach(item => {
+        item.tile.classList.add(item.cssClass);
+        orientBoardTileValues(item);
+        item.tile.classList.toggle("turn-tile", item.isTurn);
+        item.tile.style.left = `calc(50% + ${item.x * layout.scale}px)`;
+        item.tile.style.top = `calc(50% + ${item.y * layout.scale}px)`;
+        item.tile.style.zIndex = item.zIndex;
+        item.tile.style.transform = `translate(-50%, -50%) scale(${layout.scale})`;
+      });
+    }
+
+    function orientBoardTileValues(item) {
+      const a = Number(item.tile.dataset.a);
+      const b = Number(item.tile.dataset.b);
+      if (!Number.isFinite(a) || !Number.isFinite(b)) return;
+
+      const shouldReverse = item.exitDirection === "left" || item.exitDirection === "up";
+      const values = shouldReverse ? [b, a] : [a, b];
+      item.tile.replaceChildren(...values.map(value => createHalf(value, {
+        pipsOrientation: getBoardPipOrientation(item, value)
+      })));
+    }
+
+    function getBoardPipOrientation(item, value) {
+      if (item.orientation !== "horizontal") return "upright";
+      return value === 6 ? "horizontal" : "upright";
+    }
+
+    function computeDominoLayout(playedDominoes, boardWidth, boardHeight) {
+      const planningScales = getLayoutPlanningScales();
+      const candidates = planningScales.map(planningScale =>
+        calculateDominoLayoutCandidate(playedDominoes, boardWidth, boardHeight, planningScale)
+      );
+      const readableCandidate = candidates.find(candidate =>
+        candidate.fits && !candidate.hasOverlap && candidate.scale >= BOARD_MIN_SCALE
+      );
+
+      if (readableCandidate) return readableCandidate;
+
+      return candidates
+        .slice()
+        .sort((a, b) => {
+          if (a.hasOverlap !== b.hasOverlap) return a.hasOverlap ? 1 : -1;
+          if (a.fits !== b.fits) return a.fits ? -1 : 1;
+          if (b.scale !== a.scale) return b.scale - a.scale;
+          return a.overflowScore - b.overflowScore;
+        })[0];
+    }
+
+    function getLayoutPlanningScales() {
+      return [BOARD_MAX_SCALE, 0.86, 0.72, 0.6, BOARD_MIN_SCALE]
+        .filter((scale, index, scales) => scale >= BOARD_MIN_SCALE && scales.indexOf(scale) === index);
+    }
+
+    function calculateDominoLayoutCandidate(playedDominoes, boardWidth, boardHeight, planningScale) {
+      const tileWidth = BOARD_BASE_TILE_WIDTH;
+      const tileHeight = tileWidth / 2;
+      const safePlanningScale = Math.max(BOARD_MIN_SCALE, Math.min(BOARD_MAX_SCALE, planningScale));
+      const planningMargin = BOARD_MARGIN / safePlanningScale;
+      const boardBounds = {
+        left: -boardWidth / (2 * safePlanningScale) + planningMargin,
+        top: -boardHeight / (2 * safePlanningScale) + planningMargin,
+        right: boardWidth / (2 * safePlanningScale) - planningMargin,
+        bottom: boardHeight / (2 * safePlanningScale) - planningMargin
+      };
+      const visualPath = [];
+      const items = [];
+      let currentDirection = "right";
+      let previousHorizontalDirection = "right";
+      let openEnd = null;
+      let minX = Infinity;
+      let minY = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
+      let fits = boardWidth > 0 && boardHeight > 0;
+
+      for (let index = 0; index < playedDominoes.length; index++) {
+        const tile = playedDominoes[index];
+        const isDouble = tile.classList.contains("double");
+        let entryDirection = oppositeDirection(currentDirection);
+        let exitDirection = currentDirection;
+        let isTurn = false;
+        let placement = index === 0
+          ? placeFirstTile(isDouble, currentDirection, tileWidth, tileHeight)
+          : placeTileFromOpenEnd(tile, isDouble, currentDirection, openEnd, tileWidth, tileHeight);
+
+        if (currentDirection === "right" && placement.rect.right > boardBounds.right) {
+          fits = !isDouble && fits;
+          previousHorizontalDirection = "right";
+          currentDirection = chooseVerticalTurnDirection(tile, isDouble, openEnd, boardBounds, tileWidth, tileHeight, items);
+          entryDirection = oppositeDirection(currentDirection);
+          exitDirection = currentDirection;
+          isTurn = !isDouble;
+          placement = placeTileFromOpenEnd(tile, isDouble, currentDirection, openEnd, tileWidth, tileHeight);
+        } else if (currentDirection === "left" && placement.rect.left < boardBounds.left) {
+          fits = !isDouble && fits;
+          previousHorizontalDirection = "left";
+          currentDirection = chooseVerticalTurnDirection(tile, isDouble, openEnd, boardBounds, tileWidth, tileHeight, items);
+          entryDirection = oppositeDirection(currentDirection);
+          exitDirection = currentDirection;
+          isTurn = !isDouble;
+          placement = placeTileFromOpenEnd(tile, isDouble, currentDirection, openEnd, tileWidth, tileHeight);
+        }
+
+        if (index > 0 && (currentDirection === "right" || currentDirection === "left") && placementOverlapsItems(placement, items)) {
+          fits = !isDouble && fits;
+          previousHorizontalDirection = currentDirection;
+          currentDirection = chooseVerticalTurnDirection(tile, isDouble, openEnd, boardBounds, tileWidth, tileHeight, items);
+          entryDirection = oppositeDirection(currentDirection);
+          exitDirection = currentDirection;
+          isTurn = !isDouble;
+          placement = placeTileFromOpenEnd(tile, isDouble, currentDirection, openEnd, tileWidth, tileHeight);
+        }
+
+        if (isVerticalDirection(currentDirection)) {
+          entryDirection = oppositeDirection(currentDirection);
+          exitDirection = currentDirection;
+        }
+
+        const item = {
+          tile,
+          x: placement.rect.left,
+          y: placement.rect.top,
+          rectX: placement.rect.left,
+          rectY: placement.rect.top,
+          width: placement.rect.width,
+          height: placement.rect.height,
+          centerX: placement.rect.centerX,
+          centerY: placement.rect.centerY,
+          orientation: placement.orientation,
+          cssClass: getBoardTileClass(isDouble, placement.orientation),
+          isDouble,
+          isTurn,
+          entryDirection,
+          exitDirection,
+          rotation: placement.orientation === "vertical" ? 90 : 0,
+          zIndex: index + 1
+        };
+
+        if (!rectInsideBounds(item, boardBounds) || placementOverlapsItems(placement, items)) {
+          fits = false;
+        }
+
+        items.push(item);
+        visualPath.push({
+          x: item.centerX,
+          y: item.centerY,
+          rotation: item.rotation,
+          orientation: item.orientation,
+          zIndex: item.zIndex,
+          isDouble,
+          isTurn,
+          entryDirection,
+          exitDirection
+        });
+
+        minX = Math.min(minX, item.x);
+        minY = Math.min(minY, item.y);
+        maxX = Math.max(maxX, item.x + item.width);
+        maxY = Math.max(maxY, item.y + item.height);
+
+        openEnd = placement.exit;
+
+        if (isVerticalDirection(currentDirection) && !canContinueVertical(playedDominoes, index + 1, currentDirection, openEnd, boardBounds, tileWidth, tileHeight, items)) {
+          currentDirection = previousHorizontalDirection === "right" ? "left" : "right";
+        }
+      }
+
+      let hasOverlap = false;
+      for (let i = 0; i < items.length; i++) {
+        const a = items[i];
+        for (let j = i + 1; j < items.length; j++) {
+          if (rectsOverlap(rectFromItem(a), rectFromItem(items[j]))) {
+            hasOverlap = true;
+            fits = false;
+          }
+        }
+      }
+
+      const layoutWidth = maxX - minX;
+      const layoutHeight = maxY - minY;
+      const availableWidth = Math.max(1, boardWidth - BOARD_MARGIN * 2);
+      const availableHeight = Math.max(1, boardHeight - BOARD_MARGIN * 2);
+      const requiredScale = Math.min(BOARD_MAX_SCALE, availableWidth / Math.max(1, layoutWidth), availableHeight / Math.max(1, layoutHeight));
+      const scale = Math.max(Math.min(BOARD_MAX_SCALE, requiredScale), 0.01);
+      const layoutCenterX = minX + layoutWidth / 2;
+      const layoutCenterY = minY + layoutHeight / 2;
+
+      items.forEach(item => {
+        item.x = item.centerX - layoutCenterX;
+        item.y = item.centerY - layoutCenterY;
+      });
+
+      const finalBounds = {
+        left: -availableWidth / (2 * Math.max(scale, 0.01)),
+        top: -availableHeight / (2 * Math.max(scale, 0.01)),
+        right: availableWidth / (2 * Math.max(scale, 0.01)),
+        bottom: availableHeight / (2 * Math.max(scale, 0.01))
+      };
+      const finalOverflowScore = items.reduce((total, item) => {
+        const rect = centeredRectFromItem(item);
+        return total + getLayoutOverflowScore(rect.x, rect.y, rect.x + rect.width, rect.y + rect.height, finalBounds);
+      }, 0);
+      if (finalOverflowScore > 0.5) fits = false;
+
+      return {
+        items,
+        visualPath,
+        scale,
+        planningScale: safePlanningScale,
+        isBelowReadableScale: scale < BOARD_MIN_SCALE,
+        hasOverlap,
+        overflowScore: finalOverflowScore + getLayoutOverflowScore(minX, minY, maxX, maxY, boardBounds),
+        tileWidth,
+        tileHeight,
+        fits,
+        width: layoutWidth,
+        height: layoutHeight
+      };
+    }
+
+    function isVerticalBoardTile(tile) {
+      return tile.classList.contains("tile-vertical") || tile.classList.contains("double-vertical");
+    }
+
+    function getBoardTileSize(orientation, tileWidth, tileHeight) {
+      return orientation === "vertical"
+        ? { width: tileHeight, height: tileWidth }
+        : { width: tileWidth, height: tileHeight };
+    }
+
+    function getBoardTileOrientation(isDouble, pathDirection) {
+      const pathIsHorizontal = pathDirection === "left" || pathDirection === "right";
+      if (isDouble) return pathIsHorizontal ? "vertical" : "horizontal";
+      return pathIsHorizontal ? "horizontal" : "vertical";
+    }
+
+    function getBoardTileClass(isDouble, orientation) {
+      if (isDouble) return orientation === "vertical" ? "double-vertical" : "double-horizontal";
+      return orientation === "vertical" ? "tile-vertical" : "tile-horizontal";
+    }
+
+    function placeTileFromOpenEnd(tile, isDouble, pathDirection, openEnd, tileWidth, tileHeight) {
+      const previousDirection = openEnd.direction;
+      const orientation = isDouble
+        ? getBoardDoubleOrientation(previousDirection, pathDirection)
+        : getBoardTileOrientation(false, pathDirection);
+      const size = getBoardTileSize(orientation, tileWidth, tileHeight);
+      const isTurnFromHorizontal = (previousDirection === "left" || previousDirection === "right") && (pathDirection === "up" || pathDirection === "down");
+      const isTurnFromVertical = (previousDirection === "up" || previousDirection === "down") && (pathDirection === "left" || pathDirection === "right");
+      let x = openEnd.x;
+      let y = openEnd.y;
+      let exit = { ...openEnd };
+
+      if (openEnd.fromDouble && isTurnFromHorizontal) {
+        x = openEnd.centerX - size.width / 2;
+        y = pathDirection === "down"
+          ? openEnd.bottom + BOARD_CONNECTED_GAP
+          : openEnd.top - BOARD_CONNECTED_GAP - size.height;
+        exit = {
+          x: openEnd.centerX,
+          y: pathDirection === "down" ? y + size.height : y,
+          direction: pathDirection
+        };
+      } else if (openEnd.fromDouble && isTurnFromVertical) {
+        x = pathDirection === "right"
+          ? openEnd.right + BOARD_CONNECTED_GAP
+          : openEnd.left - BOARD_CONNECTED_GAP - size.width;
+        y = openEnd.centerY - size.height / 2;
+        exit = {
+          x: pathDirection === "right" ? x + size.width : x,
+          y: openEnd.centerY,
+          direction: pathDirection
+        };
+      } else if (isTurnFromHorizontal && previousDirection === "right") {
+        x = openEnd.x + BOARD_CONNECTED_GAP;
+        y = pathDirection === "down"
+          ? openEnd.y - tileHeight / 2
+          : openEnd.y - size.height + tileHeight / 2;
+        exit = {
+          x: x + size.width / 2,
+          y: pathDirection === "down" ? y + size.height : y,
+          direction: pathDirection
+        };
+      } else if (isTurnFromHorizontal) {
+        x = openEnd.x - BOARD_CONNECTED_GAP - size.width;
+        y = pathDirection === "down"
+          ? openEnd.y - tileHeight / 2
+          : openEnd.y - size.height + tileHeight / 2;
+        exit = {
+          x: x + size.width / 2,
+          y: pathDirection === "down" ? y + size.height : y,
+          direction: pathDirection
+        };
+      } else if (isTurnFromVertical) {
+        x = pathDirection === "right"
+          ? openEnd.x - tileHeight / 2
+          : openEnd.x - size.width + tileHeight / 2;
+        y = previousDirection === "down"
+          ? openEnd.y + BOARD_CONNECTED_GAP
+          : openEnd.y - BOARD_CONNECTED_GAP - size.height;
+        exit = {
+          x: pathDirection === "right" ? x + size.width : x,
+          y: y + size.height / 2,
+          direction: pathDirection
+        };
+      } else if (pathDirection === "right") {
+        x = openEnd.x + BOARD_CONNECTED_GAP;
+        y = openEnd.y - size.height / 2;
+        exit = { x: x + size.width, y: openEnd.y, direction: pathDirection };
+      } else if (pathDirection === "left") {
+        x = openEnd.x - BOARD_CONNECTED_GAP - size.width;
+        y = openEnd.y - size.height / 2;
+        exit = { x, y: openEnd.y, direction: pathDirection };
+      } else if (pathDirection === "down") {
+        x = openEnd.x - size.width / 2;
+        y = openEnd.y + BOARD_CONNECTED_GAP;
+        exit = { x: openEnd.x, y: y + size.height, direction: pathDirection };
+      } else {
+        x = openEnd.x - size.width / 2;
+        y = openEnd.y - BOARD_CONNECTED_GAP - size.height;
+        exit = { x: openEnd.x, y, direction: pathDirection };
+      }
+
+      exit = adjustDoubleExit(isDouble, pathDirection, x, y, size, exit);
+
+      return {
+        orientation,
+        rect: {
+          left: x,
+          top: y,
+          right: x + size.width,
+          bottom: y + size.height,
+          centerX: x + size.width / 2,
+          centerY: y + size.height / 2,
+          width: size.width,
+          height: size.height
+        },
+        exit
+      };
+    }
+
+    function adjustDoubleExit(isDouble, pathDirection, x, y, size, exit) {
+      if (!isDouble) return exit;
+
+      const centerX = x + size.width / 2;
+      const centerY = y + size.height / 2;
+      const doubleMeta = {
+        fromDouble: true,
+        centerX,
+        centerY,
+        left: x,
+        top: y,
+        right: x + size.width,
+        bottom: y + size.height
+      };
+
+      if (pathDirection === "right") return { ...doubleMeta, x: x + size.width, y: centerY, direction: pathDirection };
+      if (pathDirection === "left") return { ...doubleMeta, x, y: centerY, direction: pathDirection };
+      if (pathDirection === "down") return { ...doubleMeta, x: centerX, y: y + size.height, direction: pathDirection };
+      if (pathDirection === "up") return { ...doubleMeta, x: centerX, y, direction: pathDirection };
+      return exit;
+    }
+
+    function getBoardDoubleOrientation(previousDirection, pathDirection) {
+      return isVerticalDirection(previousDirection) || isVerticalDirection(pathDirection)
+        ? "horizontal"
+        : "vertical";
+    }
+
+    function placeFirstTile(isDouble, pathDirection, tileWidth, tileHeight) {
+      const orientation = getBoardTileOrientation(isDouble, pathDirection);
+      const size = getBoardTileSize(orientation, tileWidth, tileHeight);
+      const x = -size.width / 2;
+      const y = -size.height / 2;
+      const exit = pathDirection === "left"
+        ? { x, y: 0, direction: pathDirection }
+        : { x: x + size.width, y: 0, direction: pathDirection };
+
+      return {
+        orientation,
+        rect: {
+          left: x,
+          top: y,
+          right: x + size.width,
+          bottom: y + size.height,
+          centerX: 0,
+          centerY: 0,
+          width: size.width,
+          height: size.height
+        },
+        exit
+      };
+    }
+
+    function chooseVerticalTurnDirection(tile, isDouble, openEnd, boardBounds, tileWidth, tileHeight, items) {
+      return "down";
+    }
+
+    function canContinueVertical(tiles, nextIndex, direction, openEnd, boardBounds, tileWidth, tileHeight, items) {
+      if (nextIndex >= tiles.length) return false;
+      const nextTile = tiles[nextIndex];
+      const isDouble = nextTile.classList.contains("double");
+      const nextPlacement = placeTileFromOpenEnd(nextTile, isDouble, direction, openEnd, tileWidth, tileHeight);
+      return placementInsideBounds(nextPlacement, boardBounds) && !placementOverlapsItems(nextPlacement, items);
+    }
+
+    function placementOverlapsItems(placement, items) {
+      const candidate = {
+        x: placement.rect.left,
+        y: placement.rect.top,
+        width: placement.rect.width,
+        height: placement.rect.height
+      };
+      return items.some(item => rectsOverlap(candidate, rectFromItem(item)));
+    }
+
+    function placementInsideBounds(placement, boardBounds) {
+      return rectInsideBounds({
+        x: placement.rect.left,
+        y: placement.rect.top,
+        width: placement.rect.width,
+        height: placement.rect.height
+      }, boardBounds);
+    }
+
+    function rectInsideBounds(rect, boardBounds) {
+      const tolerance = 0.5;
+      return (
+        rect.x >= boardBounds.left - tolerance &&
+        rect.y >= boardBounds.top - tolerance &&
+        rect.x + rect.width <= boardBounds.right + tolerance &&
+        rect.y + rect.height <= boardBounds.bottom + tolerance
+      );
+    }
+
+    function getPlacementOverflowScore(placement, boardBounds) {
+      return getLayoutOverflowScore(
+        placement.rect.left,
+        placement.rect.top,
+        placement.rect.right,
+        placement.rect.bottom,
+        boardBounds
+      );
+    }
+
+    function getLayoutOverflowScore(minX, minY, maxX, maxY, boardBounds) {
+      return (
+        Math.max(0, boardBounds.left - minX) +
+        Math.max(0, minY - boardBounds.top) +
+        Math.max(0, maxX - boardBounds.right) +
+        Math.max(0, maxY - boardBounds.bottom)
+      );
+    }
+
+    function oppositeDirection(direction) {
+      if (direction === "right") return "left";
+      if (direction === "left") return "right";
+      if (direction === "down") return "up";
+      if (direction === "up") return "down";
+      return "down";
+    }
+
+    function isVerticalDirection(direction) {
+      return direction === "down" || direction === "up";
+    }
+
+    function rectFromItem(item) {
+      return {
+        x: item.rectX ?? item.x,
+        y: item.rectY ?? item.y,
+        width: item.width,
+        height: item.height
+      };
+    }
+
+    function centeredRectFromItem(item) {
+      return {
+        x: item.x - item.width / 2,
+        y: item.y - item.height / 2,
+        width: item.width,
+        height: item.height
+      };
+    }
+
+    function rectsOverlap(a, b) {
+      const tolerance = 0.5;
+      return !(
+        a.x + a.width <= b.x + tolerance ||
+        b.x + b.width <= a.x + tolerance ||
+        a.y + a.height <= b.y + tolerance ||
+        b.y + b.height <= a.y + tolerance
+      );
+    }
+
+    function renderHud() {
+      const humanPlayable = playerPlayableTiles(HUMAN).length > 0;
+      const humanTurn = gameState.currentPlayer === HUMAN && !gameState.gameOver && !gameState.isBusy && (!OFFICIAL_MODE || officialInteractive);
+      const canDraw = humanTurn && !humanPlayable && gameState.drawPile.length > 0;
+      const ends = getEnds();
+
+      els.pileCount.textContent = `${gameState.drawPile.length} domino`;
+      els.endsInfo.textContent = ends ? `${ends.left} - ${ends.right}` : "Start";
+      els.drawBtn.disabled = !canDraw;
+      els.drawBtn.classList.toggle("must-draw", canDraw);
+      els.drawBtn.setAttribute("aria-label", canDraw ? "Ou dwe chwazi yon domino nan pil la" : "Piocher nan pil la");
+      els.youZone.classList.toggle("active", humanTurn);
+      els.botZone.classList.toggle("active", gameState.currentPlayer === BOT && !gameState.gameOver);
+
+      if (!canDraw) closeForcedDrawModal();
+
+      if (humanTurn && !humanPlayable) {
+        setMessage(gameState.drawPile.length ? "Pa gen domino pou jwe. Piocher nan pil la." : "Pil la vid. Ou ap pase otomatikman.");
+      } else if (humanTurn) {
+        setMessage("Se tou pa ou. Chwazi yon domino.");
+      }
+    }
+
+    function createDomino(tile, options = {}) {
+      const domino = document.createElement("div");
+      domino.className = `domino${options.hidden ? " hidden" : ""}${options.board ? " board-tile" : ""}${options.board && tile.a === tile.b ? " double" : ""}`;
+      domino.dataset.tileId = tile.id;
+      domino.dataset.a = tile.a;
+      domino.dataset.b = tile.b;
+      domino.append(createHalf(tile.a), createHalf(tile.b));
+      return domino;
+    }
+
+    function createHalf(value, options = {}) {
+      const half = document.createElement("div");
+      half.className = `half${options.pipsOrientation === "horizontal" ? " pips-horizontal" : ""}`;
+      half.dataset.value = value;
+      pipSlots[value].forEach(slot => {
+        const pip = document.createElement("span");
+        pip.className = `pip slot-${slot}`;
+        half.appendChild(pip);
+      });
+      return half;
+    }
+
+    function canPlayTile(tile) {
+      if (gameState.firstMove) return tile.id === gameState.starterTileId ? ["start"] : [];
+      const ends = getEnds();
+      if (!ends) return ["start"];
+      const sides = [];
+      if (tile.a === ends.left || tile.b === ends.left) sides.push("left");
+      if (tile.a === ends.right || tile.b === ends.right) sides.push("right");
+      return sides;
+    }
+
+    function playerPlayableTiles(player) {
+      return gameState.players[player].filter(tile => canPlayTile(tile).length > 0);
+    }
+
+    function getEnds() {
+      if (!gameState.boardTiles.length) return null;
+      return {
+        left: gameState.boardTiles[0].a,
+        right: gameState.boardTiles[gameState.boardTiles.length - 1].b
+      };
+    }
+
+    function selectTile(tile) {
+      if (OFFICIAL_MODE && !officialInteractive) return;
+      if (gameState.currentPlayer !== HUMAN || gameState.gameOver || gameState.isBusy) return;
+      const sides = canPlayTile(tile);
+      if (!sides.length) return;
+      if (sides.includes("start")) return OFFICIAL_MODE ? sendOfficialAction('play', tile.id, 'start') : playTile(tile, "start");
+      const uniqueSides = [...new Set(sides)];
+      if (uniqueSides.length > 1) {
+        gameState.selectedTile = tile;
+        openSideModal(tile);
+      } else {
+        if (OFFICIAL_MODE) sendOfficialAction('play', tile.id, uniqueSides[0]);
+        else playTile(tile, uniqueSides[0]);
+      }
+    }
+
+    function playTile(tile, side) {
+      const hand = gameState.players[gameState.currentPlayer];
+      const index = hand.findIndex(item => item.id === tile.id);
+      if (index === -1) return;
+      const sourceRect = getHandTileRect(gameState.currentPlayer, tile.id);
+
+      if (gameState.currentPlayer === HUMAN) stopHumanTurnTimer();
+
+      gameState.isBusy = true;
+      hand.splice(index, 1);
+      placeTileOnBoard(tile, side);
+      playSoundEffect(tile.a === tile.b ? "doubleDomino" : "playDomino");
+      gameState.firstMove = false;
+      closeSideModal();
+      setMessage(`${nameOf(gameState.currentPlayer)} jwe ${tile.a}-${tile.b}.`);
+      renderGame();
+      animatePlayedTile(tile.id, sourceRect);
+
+      setTimeout(() => {
+        if (checkWinner()) return;
+        if (checkBlocked()) return;
+        gameState.isBusy = false;
+        changeTurn();
+      }, PLAYED_TILE_SETTLE_MS);
+    }
+
+    function placeTileOnBoard(tile, side) {
+      if (side === "start" || !gameState.boardTiles.length) {
+        gameState.boardTiles.push({ ...tile });
+        return;
+      }
+
+      const ends = getEnds();
+      if (side === "left") {
+        const oriented = tile.b === ends.left ? { ...tile } : { ...tile, a: tile.b, b: tile.a };
+        gameState.boardTiles.unshift(oriented);
+      } else {
+        const oriented = tile.a === ends.right ? { ...tile } : { ...tile, a: tile.b, b: tile.a };
+        gameState.boardTiles.push(oriented);
+      }
+    }
+
+    function mustHumanDraw() {
+      return (
+        gameState.currentPlayer === HUMAN &&
+        !gameState.gameOver &&
+        !gameState.isBusy &&
+        (!OFFICIAL_MODE || officialInteractive) &&
+        gameState.drawPile.length > 0 &&
+        playerPlayableTiles(HUMAN).length === 0
+      );
+    }
+
+    function drawTile() {
+      if (!mustHumanDraw()) return;
+      if (OFFICIAL_MODE) return sendOfficialAction('draw');
+      closeForcedDrawModal();
+      openDrawModal();
+    }
+
+    function changeTurn(message) {
+      if (gameState.gameOver) return;
+      stopHumanTurnTimer();
+      gameState.currentPlayer = gameState.currentPlayer === HUMAN ? BOT : HUMAN;
+      if (gameState.currentPlayer === BOT) {
+        gameState.strongSwapUsedThisTurn = false;
+        gameState.strongSwapEvaluatedThisTurn = false;
+      } else {
+        gameState.humanDrawsThisTurn = 0;
+      }
+      gameState.autoPassScheduled = false;
+      setMessage(message || `${nameOf(gameState.currentPlayer)}: se tou pa li.`);
+      renderGame();
+      if (gameState.currentPlayer === HUMAN) startHumanTurnTimer();
+      gsap.fromTo(gameState.currentPlayer === HUMAN ? els.youZone : els.botZone, { scale: 0.98 }, { scale: 1, duration: 0.28, ease: "power2.out" });
+      if (gameState.currentPlayer === BOT) {
+        scheduleBotTurn();
+      } else {
+        scheduleAutoPassIfNeeded();
+      }
+    }
+
+    function scheduleAutoPassIfNeeded() {
+      if (
+        gameState.currentPlayer !== HUMAN ||
+        gameState.gameOver ||
+        gameState.isBusy ||
+        gameState.autoPassScheduled ||
+        gameState.drawPile.length ||
+        playerPlayableTiles(HUMAN).length
+      ) return;
+
+      if (checkBlocked()) return;
+
+      gameState.autoPassScheduled = true;
+      gameState.isBusy = true;
+      setMessage("Ou pase. Pa gen domino pou jwe e pil la vid.");
+      setTimeout(() => {
+        gameState.isBusy = false;
+        changeTurn("BOT ap jwe apre ou fin pase.");
+      }, 900);
+    }
+
+    function scheduleBotTurn() {
+      setTimeout(botTurn, getBotThinkingDelay());
+    }
+
+    function botTurn() {
+      if (isStrongBot()) return strongBotTurn();
+      return weakBotTurn();
+    }
+
+    function weakBotTurn() {
+      if (gameState.currentPlayer !== BOT || gameState.gameOver) return;
+      const playable = playerPlayableTiles(BOT);
+
+      if (!playable.length && gameState.drawPile.length) {
+        const drawn = gameState.drawPile.shift();
+        gameState.players[BOT].push(drawn);
+        playSoundEffect("draw");
+        setMessage("BOT piocher yon domino.");
+        renderGame();
+        animateDraw(BOT, drawn.id);
+        setTimeout(botTurn, getBotThinkingDelay("draw"));
+        return;
+      }
+
+      if (!playable.length) {
+        if (checkBlocked()) return;
+        setMessage("BOT pase. Li pa gen domino pou jwe e pil la vid.");
+        setTimeout(() => changeTurn("Se tou pa ou apre BOT fin pase."), 900);
+        return;
+      }
+
+      const tile = playable.sort((x, y) => (y.a + y.b) - (x.a + x.b))[0];
+      const side = chooseBotSide(tile);
+      setTimeout(() => playTile(tile, side), getBotThinkingDelay());
+    }
+
+    function strongBotTurn() {
+      if (gameState.currentPlayer !== BOT || gameState.gameOver) return;
+      const naturalPlayable = playerPlayableTiles(BOT);
+      if (naturalPlayable.length) prepareStrongBotHandForTurn();
+      const playable = playerPlayableTiles(BOT);
+
+      if (!playable.length && gameState.drawPile.length) {
+        rememberBotPublicMiss();
+        const drawn = drawStrongBotTile();
+        gameState.players[BOT].push(drawn);
+        recordVisibleBotDraw(drawn);
+        playSoundEffect("draw");
+        setMessage("BOT piocher yon domino.");
+        renderGame();
+        animateDraw(BOT, drawn.id);
+        setTimeout(botTurn, getBotThinkingDelay("draw"));
+        return;
+      }
+
+      if (!playable.length) {
+        rememberBotPublicMiss();
+        if (checkBlocked()) return;
+        setMessage("BOT pase. Li pa gen domino pou jwe e pil la vid.");
+        setTimeout(() => changeTurn("Se tou pa ou apre BOT fin pase."), 900);
+        return;
+      }
+
+      const move = chooseStrongBotMove(playable);
+      setTimeout(() => playTile(move.tile, move.side), getBotThinkingDelay());
+    }
+
+    function prepareStrongBotHandForTurn() {
+      if (
+        gameState.strongSwapUsedThisTurn ||
+        gameState.strongSwapEvaluatedThisTurn ||
+        gameState.firstMove ||
+        !gameState.drawPile.length ||
+        !gameState.players[BOT].length ||
+        !playerPlayableTiles(BOT).length
+      ) return false;
+
+      gameState.strongSwapEvaluatedThisTurn = true;
+      const boardLength = gameState.boardTiles.length;
+      const humanNearFinish = gameState.players[HUMAN].length <= 2;
+      if (!humanNearFinish && boardLength < 6) return false;
+
+      const styleSwapChance = {
+        balanced: 0.28,
+        adaptive: 0.48,
+        pressure: 0.62
+      }[gameState.strongBotStyle] || 0.28;
+      const swapCoolingDown = boardLength - gameState.strongLastSwapBoardLength < 4;
+      if (!humanNearFinish && (swapCoolingDown || Math.random() > styleSwapChance)) return false;
+
+      const botHand = gameState.players[BOT];
+      const currentMove = getBestStrongBotMove(botHand);
+      let bestExchange = null;
+
+      gameState.drawPile.forEach((incomingTile, pileIndex) => {
+        if (!canPlayTile(incomingTile).length) return;
+        if (!botExchangeRespectsPublicKnowledge(incomingTile)) return;
+
+        botHand.forEach((outgoingTile, handIndex) => {
+          const candidateHand = botHand.map((tile, index) => index === handIndex ? incomingTile : tile);
+          const move = getBestStrongBotMove(candidateHand);
+          if (!move) return;
+
+          const continuity = countPlayableTilesForEnds(
+            candidateHand.filter(tile => tile.id !== move.tile.id),
+            getEndsAfterMove(move.tile, move.side)
+          ) * 8;
+          const exchangeScore = move.score + continuity;
+
+          if (!bestExchange || exchangeScore > bestExchange.score) {
+            bestExchange = { incomingTile, outgoingTile, handIndex, pileIndex, move, score: exchangeScore };
+          }
+        });
+      });
+
+      if (!bestExchange) return false;
+
+      const currentScore = currentMove ? currentMove.score : -Infinity;
+      const requiredGain = currentMove ? (humanNearFinish ? 4 : 30) : 0;
+      if (bestExchange.score < currentScore + requiredGain) return false;
+
+      botHand[bestExchange.handIndex] = bestExchange.incomingTile;
+      gameState.drawPile[bestExchange.pileIndex] = bestExchange.outgoingTile;
+      gameState.strongSwapUsedThisTurn = true;
+      gameState.strongLastSwapBoardLength = boardLength;
+      gameState.strongBotSwapCount += 1;
+      return true;
+    }
+
+    function rememberBotPublicMiss() {
+      const ends = getEnds();
+      if (!ends) return;
+      gameState.botPublicMissingValues = [
+        ...new Set([...gameState.botPublicMissingValues, ends.left, ends.right])
+      ];
+    }
+
+    function recordVisibleBotDraw(tile) {
+      gameState.botPublicMissingValues = gameState.botPublicMissingValues.filter(
+        value => value !== tile.a && value !== tile.b
+      );
+    }
+
+    function botExchangeRespectsPublicKnowledge(tile) {
+      return !gameState.botPublicMissingValues.includes(tile.a) &&
+        !gameState.botPublicMissingValues.includes(tile.b);
+    }
+
+    function drawStrongBotTile() {
+      const playableIndex = gameState.drawPile.findIndex(tile => canPlayTile(tile).length);
+      const index = playableIndex >= 0
+        ? playableIndex
+        : findLowestPointTileIndex(gameState.drawPile);
+      return gameState.drawPile.splice(Math.max(0, index), 1)[0];
+    }
+
+    function chooseStrongBotMove(playable) {
+      return getBestStrongBotMove(gameState.players[BOT], playable) || {
+        tile: playable[0],
+        side: chooseBotSide(playable[0])
+      };
+    }
+
+    function getBestStrongBotMove(botHand, playable = null) {
+      const candidates = [];
+      const playableTiles = playable || botHand.filter(tile => canPlayTile(tile).length > 0);
+      playableTiles.forEach(tile => {
+        canPlayTile(tile).forEach(side => {
+          candidates.push({
+            tile,
+            side,
+            score: scoreStrongBotMove(tile, side, botHand)
+          });
+        });
+      });
+      return candidates.sort((a, b) => b.score - a.score)[0] || null;
+    }
+
+    function scoreStrongBotMove(tile, side, botHand = gameState.players[BOT]) {
+      if (side === "start") return tile.a === tile.b ? 80 + tile.a : 40 + tile.a + tile.b;
+      const nextEnds = getEndsAfterMove(tile, side);
+      const botHandAfter = botHand.filter(item => item.id !== tile.id);
+      const humanPlayableAfter = gameState.players[HUMAN].filter(item => tileCanPlayAgainstEnds(item, nextEnds)).length;
+      const botPlayableAfter = botHandAfter.filter(item => tileCanPlayAgainstEnds(item, nextEnds)).length;
+      const emptiesHand = botHandAfter.length === 0 ? 1000 : 0;
+      const humanNearFinish = gameState.players[HUMAN].length <= 2;
+      const earlyGame = gameState.boardTiles.length < 7;
+      const styleBlockBonus = {
+        balanced: 120,
+        adaptive: 165,
+        pressure: 220
+      }[gameState.strongBotStyle] || 120;
+      const blocksHuman = humanPlayableAfter === 0
+        ? (humanNearFinish ? 1500 : earlyGame ? -40 : styleBlockBonus)
+        : -humanPlayableAfter * (humanNearFinish ? 420 : 24);
+      const keepsBotAlive = botPlayableAfter * 20;
+      const lowersPoints = -handPoints(botHandAfter) * 2;
+      const doubleBonus = tile.a === tile.b ? 18 : 0;
+      return emptiesHand + blocksHuman + keepsBotAlive + lowersPoints + doubleBonus + tile.a + tile.b;
+    }
+
+    function countPlayableTilesForEnds(hand, ends) {
+      return hand.filter(tile => tileCanPlayAgainstEnds(tile, ends)).length;
+    }
+
+    function getEndsAfterMove(tile, side) {
+      const ends = getEnds();
+      if (!ends || side === "start") return { left: tile.a, right: tile.b };
+      if (side === "left") return { left: tile.a === ends.left ? tile.b : tile.a, right: ends.right };
+      return { left: ends.left, right: tile.a === ends.right ? tile.b : tile.a };
+    }
+
+    function tileCanPlayAgainstEnds(tile, ends) {
+      if (!ends) return true;
+      return tile.a === ends.left || tile.b === ends.left || tile.a === ends.right || tile.b === ends.right;
+    }
+
+    function findLowestPointTileIndex(tiles) {
+      if (!tiles.length) return -1;
+      let bestIndex = 0;
+      let bestScore = tiles[0].a + tiles[0].b;
+      for (let index = 1; index < tiles.length; index++) {
+        const score = tiles[index].a + tiles[index].b;
+        if (score < bestScore) {
+          bestScore = score;
+          bestIndex = index;
+        }
+      }
+      return bestIndex;
+    }
+
+    function getBotThinkingDelay(context = "turn") {
+      const min = context === "draw" ? BOT_MIN_DRAW_RECHECK_MS : BOT_MIN_THINK_MS;
+      const max = context === "draw" ? BOT_MAX_DRAW_RECHECK_MS : BOT_MAX_THINK_MS;
+      return Math.floor(min + Math.random() * (max - min + 1));
+    }
+
+    function chooseBotSide(tile) {
+      const sides = canPlayTile(tile);
+      if (sides.includes("start")) return "start";
+      if (sides.includes("right")) return "right";
+      return "left";
+    }
+
+    function checkWinner() {
+      const player = gameState.currentPlayer;
+      if (gameState.players[player].length) return false;
+      const points = handPoints(gameState.players[player === HUMAN ? BOT : HUMAN]);
+      gameState.scores[player] += points;
+      endRound(`${nameOf(player)} genyen! +${points} pwen`, player);
+      return true;
+    }
+
+    function checkBlocked() {
+      if (gameState.drawPile.length || !gameState.boardTiles.length) return false;
+      if (!gameState.players[HUMAN].length || !gameState.players[BOT].length) return false;
+      const blocked = playerPlayableTiles(HUMAN).length === 0 && playerPlayableTiles(BOT).length === 0;
+      if (!blocked) return false;
+
+      const humanPoints = handPoints(gameState.players[HUMAN]);
+      const botPoints = handPoints(gameState.players[BOT]);
+      const winner = humanPoints === botPoints ? null : humanPoints < botPoints ? HUMAN : BOT;
+      const points = Math.abs(humanPoints - botPoints);
+      if (winner !== null) gameState.scores[winner] += points;
+      endRound(
+        winner === null ? "Jwèt la fèmen ak menm kantite pwen." : `Jwèt la fèmen. ${nameOf(winner)} genyen ak mwens pwen.`,
+        winner,
+        { blocked: true, humanPoints, botPoints }
+      );
+      return true;
+    }
+
+    function handPoints(hand) {
+      return hand.reduce((total, tile) => total + tile.a + tile.b, 0);
+    }
+
+    function startHumanTurnTimer() {
+      stopHumanTurnTimer();
+      if (gameState.currentPlayer !== HUMAN || gameState.gameOver) return;
+      humanTurnDeadline = Date.now() + HUMAN_TURN_SECONDS * 1000;
+      els.turnTimer.hidden = false;
+      updateHumanTurnTimer();
+      humanTurnTimerId = setInterval(updateHumanTurnTimer, 250);
+    }
+
+    function updateHumanTurnTimer() {
+      if (gameState.currentPlayer !== HUMAN || gameState.gameOver) {
+        stopHumanTurnTimer();
+        return;
+      }
+
+      const secondsLeft = Math.max(0, Math.ceil((humanTurnDeadline - Date.now()) / 1000));
+      els.turnTimerValue.textContent = `${secondsLeft}s`;
+      els.turnTimer.classList.toggle("danger", secondsLeft <= 10);
+      if (secondsLeft === 0) handleHumanTimeout();
+    }
+
+    function stopHumanTurnTimer() {
+      clearInterval(humanTurnTimerId);
+      humanTurnTimerId = null;
+      humanTurnDeadline = 0;
+      if (!els?.turnTimer) return;
+      els.turnTimer.hidden = true;
+      els.turnTimer.classList.remove("danger");
+    }
+
+    function handleHumanTimeout() {
+      if (gameState.currentPlayer !== HUMAN || gameState.gameOver) return;
+      stopHumanTurnTimer();
+      const points = handPoints(gameState.players[HUMAN]);
+      gameState.scores[BOT] += points;
+      endRound(`Tan 30 segonn lan fini. BOT genyen +${points} pwen.`, BOT, { timeout: true });
+    }
+
+    function endRound(text, winner, options = {}) {
+      stopHumanTurnTimer();
+      gameState.gameOver = true;
+      gameState.isBusy = false;
+      gameState.revealBotHand = Boolean(options.blocked);
+      closeSideModal();
+      closeDrawModal();
+      closeForcedDrawModal();
+
+      const reachedTarget = winner !== null && gameState.scores[winner] >= TARGET_SCORE;
+      const resultText = reachedTarget ? `${nameOf(winner)} rive 100 pwen.` : text;
+      setMessage(options.blocked ? "Jwèt la fèmen. N ap revele domino BOT yo..." : winner === HUMAN ? "Ou genyen!" : "Ou pèdi.");
+      renderGame();
+
+      gsap.to(".board-wrap", { boxShadow: "0 0 44px rgba(255,209,102,0.50)", duration: 0.35 });
+      if (winner !== null) {
+        gsap.fromTo(
+          winner === HUMAN ? els.youZone : els.botZone,
+          { scale: 0.96 },
+          { scale: 1.04, yoyo: true, repeat: 1, duration: 0.36, ease: "power2.out" }
+        );
+      }
+
+      if (options.blocked) {
+        revealBlockedHandThenShowResult(winner, { ...options, text: resultText });
+      } else {
+        showResultModal(winner, { ...options, text: resultText });
+      }
+    }
+
+    function revealBlockedHandThenShowResult(winner, result) {
+      const botDominoes = [...els.botHand.querySelectorAll(".domino")];
+      gsap.fromTo(
+        botDominoes,
+        { rotateY: -90, opacity: 0.35 },
+        { rotateY: 0, opacity: 1, duration: 0.42, stagger: 0.1, ease: "back.out(1.4)" }
+      );
+
+      const revealDuration = Math.min(1500, 650 + botDominoes.length * 100);
+      resultModalTimer = setTimeout(() => {
+        resultModalTimer = null;
+        showResultModal(winner, result);
+      }, revealDuration);
+    }
+
+    function showResultModal(winner, result = {}) {
+      clearTimeout(resultModalTimer);
+      resultModalTimer = null;
+      gameState.viewingFinalBoard = false;
+      els.boardReplayBtn.hidden = true;
+
+      const resultClass = winner === HUMAN ? "result-win" : winner === BOT ? "result-loss" : "result-draw";
+      els.resultCard.classList.remove("result-win", "result-loss", "result-draw");
+      els.resultCard.classList.add(resultClass);
+      els.resultTitle.textContent = winner === HUMAN ? "Ou genyen!" : winner === BOT ? "Ou pèdi!" : "Match nil";
+      els.resultSymbol.textContent = winner === HUMAN ? "★" : winner === BOT ? "×" : "=";
+      if (winner === HUMAN) playSoundEffect("win");
+      if (winner === BOT) playSoundEffect("lose");
+
+      if (result.blocked) {
+        const conclusion = winner === HUMAN
+          ? "Ou genyen paske total ou pi piti."
+          : winner === BOT
+            ? "BOT genyen paske total li pi piti."
+            : "Nou gen menm total la.";
+        els.resultDetails.textContent = `Jwèt la fèmen. Ou: ${result.humanPoints} pwen • BOT: ${result.botPoints} pwen. ${conclusion}`;
+      } else {
+        els.resultDetails.textContent = result.text || "Manche la fini.";
+      }
+
+      els.resultModal.classList.add("open");
+      gsap.fromTo(els.resultCard, { y: 24, opacity: 0, scale: 0.94 }, { y: 0, opacity: 1, scale: 1, duration: 0.34, ease: "back.out(1.5)" });
+      lucide.createIcons();
+    }
+
+    function closeResultModal() {
+      els.resultModal.classList.remove("open");
+    }
+
+    function viewFinalBoard() {
+      closeResultModal();
+      gameState.viewingFinalBoard = true;
+      gameState.revealBotHand = true;
+      els.boardReplayBtn.hidden = false;
+      renderGame();
+      els.boardReplayBtn.hidden = false;
+      setMessage("W ap gade plato final la.");
+    }
+
+    function replayGame() {
+      closeResultModal();
+      if (shouldShowBotLevelModal()) {
+        openBotLevelModal(true);
+      } else {
+        initGame(true);
+      }
+    }
+
+    function openSideModal(tile) {
+      els.modalTile.innerHTML = "";
+      els.modalTile.appendChild(createDomino(tile));
+      els.sideModal.classList.add("open");
+      gsap.fromTo(".modal-card", { y: 24, opacity: 0, scale: 0.96 }, { y: 0, opacity: 1, scale: 1, duration: 0.28, ease: "power2.out" });
+      lucide.createIcons();
+    }
+
+    function closeSideModal() {
+      gameState.selectedTile = null;
+      els.sideModal.classList.remove("open");
+    }
+
+    function openDrawModal() {
+      closeForcedDrawModal();
+      els.drawChoices.innerHTML = "";
+      gameState.drawPile.forEach((tile, index) => {
+        const choice = document.createElement("button");
+        choice.type = "button";
+        choice.className = "draw-choice";
+        choice.setAttribute("aria-label", `Piocher domino ${index + 1}`);
+        choice.appendChild(createDomino(tile, { hidden: true }));
+        choice.addEventListener("click", () => chooseDrawTile(index));
+        els.drawChoices.appendChild(choice);
+      });
+      els.drawModal.classList.add("open");
+      gsap.fromTo(".draw-modal-card", { y: 24, opacity: 0, scale: 0.96 }, { y: 0, opacity: 1, scale: 1, duration: 0.28, ease: "power2.out" });
+    }
+
+    function closeDrawModal() {
+      els.drawModal.classList.remove("open");
+      els.drawChoices.innerHTML = "";
+    }
+
+    function openForcedDrawModal() {
+      if (!mustHumanDraw() || els.drawModal.classList.contains("open")) return;
+      els.forcedDrawModal.classList.add("open");
+      gsap.fromTo(els.forcedDrawCard, { y: 20, opacity: 0, scale: 0.95 }, { y: 0, opacity: 1, scale: 1, duration: 0.3, ease: "back.out(1.45)" });
+      lucide.createIcons();
+    }
+
+    function closeForcedDrawModal() {
+      els.forcedDrawModal.classList.remove("open");
+    }
+
+    function chooseDrawTile(drawIndex) {
+      if (gameState.currentPlayer !== HUMAN || gameState.gameOver || gameState.isBusy) return;
+      if (!Number.isInteger(drawIndex) || drawIndex < 0 || drawIndex >= gameState.drawPile.length) {
+        closeDrawModal();
+        return;
+      }
+
+      const actualDrawIndex = isStrongBot() ? chooseStrongHumanDrawIndex(drawIndex) : drawIndex;
+      const [tile] = gameState.drawPile.splice(actualDrawIndex, 1);
+      gameState.humanDrawsThisTurn += 1;
+      gameState.isBusy = true;
+      closeDrawModal();
+      playSoundEffect("draw");
+
+      setTimeout(() => {
+        gameState.players[HUMAN].push(tile);
+        gameState.isBusy = false;
+        renderGame();
+        animateDraw(HUMAN, tile.id);
+
+        if (canPlayTile(tile).length) {
+          setMessage("Ou jwenn yon domino pou jwe.");
+        } else if (gameState.drawPile.length) {
+          setMessage("Domino sa pa jwe. Ou ka piocher encore.");
+        } else {
+          setMessage("Pil la vid. Ou ap pase otomatikman.");
+          scheduleAutoPassIfNeeded();
+        }
+      }, 160);
+    }
+
+    function chooseStrongHumanDrawIndex(selectedIndex) {
+      const selectedTile = gameState.drawPile[selectedIndex];
+      if (!selectedTile) return selectedIndex;
+      if (canPlayTile(selectedTile).length > 0) return selectedIndex;
+
+      const playableIndex = gameState.drawPile.findIndex(tile => canPlayTile(tile).length > 0);
+      if (playableIndex < 0) return selectedIndex;
+
+      const nextDrawNumber = gameState.humanDrawsThisTurn + 1;
+      const earlyGame = gameState.boardTiles.length < 7;
+      if (earlyGame || nextDrawNumber >= 3) return playableIndex;
+
+      const assistChance = {
+        balanced: 0.55,
+        adaptive: 0.4,
+        pressure: 0.25
+      }[gameState.strongBotStyle] || 0.55;
+      return Math.random() < assistChance ? playableIndex : selectedIndex;
+    }
+
+    function getHandTileRect(player, tileId) {
+      const hand = player === HUMAN ? els.youHand : els.botHand;
+      const tile = hand.querySelector(`[data-tile-id="${tileId}"]`);
+      if (tile) return tile.getBoundingClientRect();
+      if (player === BOT && els.botHand.lastElementChild) return els.botHand.lastElementChild.getBoundingClientRect();
+      return null;
+    }
+
+    function animatePlayedTile(tileId, sourceRect) {
+      requestAnimationFrame(() => {
+        layoutBoardTiles();
+        const tiles = els.board.querySelectorAll(`[data-tile-id="${tileId}"]`);
+        const tile = tiles[tiles.length - 1];
+        if (!tile) return;
+
+        if (sourceRect) {
+          gsap.fromTo(tile, { opacity: 0.35 }, { opacity: 1, duration: 0.32, ease: "power2.out", overwrite: "auto" });
+          return;
+        }
+
+        gsap.fromTo(tile, { opacity: 0 }, { opacity: 1, duration: 0.28, ease: "power2.out", overwrite: "auto" });
+      });
+    }
+
+    function animateDraw(player, tileId) {
+      const target = player === HUMAN ? els.youHand.querySelector(`[data-tile-id="${tileId}"]`) : els.botHand.lastElementChild;
+      gsap.fromTo(els.drawBtn, { rotate: -8, scale: 0.96 }, { rotate: 0, scale: 1, duration: 0.28, ease: "back.out(1.8)" });
+      if (target) gsap.fromTo(target, { y: -24, opacity: 0, scale: 0.82 }, { y: 0, opacity: 1, scale: 1, duration: 0.35, ease: "back.out(1.6)" });
+    }
+
+    function applyLayoutTestFromUrl() {
+      const isLocal = ["localhost", "127.0.0.1"].includes(window.location.hostname);
+      if (!isLocal) return;
+
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("drawTest") === "1") {
+        gameState.boardTiles = [{ id: "draw-test-board", a: 6, b: 6 }];
+        gameState.players = [
+          [{ id: "draw-test-human", a: 0, b: 1 }],
+          [{ id: "draw-test-bot", a: 2, b: 3 }]
+        ];
+        gameState.drawPile = [
+          { id: "draw-test-pile-0", a: 0, b: 2 },
+          { id: "draw-test-pile-1", a: 6, b: 1 },
+          { id: "draw-test-pile-2", a: 3, b: 4 }
+        ];
+        gameState.currentPlayer = HUMAN;
+        gameState.firstMove = false;
+        gameState.gameOver = false;
+        gameState.isBusy = false;
+        renderGame();
+        requestAnimationFrame(layoutBoardTiles);
+        return;
+      }
+
+      const layoutTiles = parseLayoutTestTiles(params.get("layoutTiles"));
+      if (layoutTiles.length) {
+        gameState.boardTiles = layoutTiles;
+        gameState.players = [[], []];
+        gameState.drawPile = [];
+        gameState.gameOver = true;
+        gameState.isBusy = false;
+        renderGame();
+        requestAnimationFrame(layoutBoardTiles);
+        return;
+      }
+
+      const count = Number.parseInt(params.get("layoutTest") || "", 10);
+      if (!Number.isFinite(count) || count <= 0) return;
+      const doubleEvery = Number.parseInt(params.get("doubleEvery") || "7", 10);
+
+      gameState.boardTiles = createLayoutTestTiles(Math.min(count, 60), Number.isFinite(doubleEvery) && doubleEvery > 0 ? doubleEvery : 7);
+      gameState.players = [[], []];
+      gameState.drawPile = [];
+      gameState.gameOver = true;
+      gameState.isBusy = false;
+      renderGame();
+      requestAnimationFrame(layoutBoardTiles);
+    }
+
+    function createLayoutTestTiles(count, doubleEvery = 7) {
+      return Array.from({ length: count }, (_, index) => {
+        const value = index % 7;
+        if (index % doubleEvery === 0) return { id: `layout-test-${index}`, a: value, b: value };
+        return { id: `layout-test-${index}`, a: value, b: (value + 3) % 7 };
+      });
+    }
+
+    function parseLayoutTestTiles(value) {
+      if (!value) return [];
+      return value.split(",").map((part, index) => {
+        const [a, b] = part.split("-").map(Number);
+        if (!Number.isInteger(a) || !Number.isInteger(b) || a < 0 || a > 6 || b < 0 || b > 6) return null;
+        return { id: `layout-test-seq-${index}`, a, b };
+      }).filter(Boolean);
+    }
+
+    let messageHideTimer = null;
+
+    function positionMessageBar() {
+      const screenRect = els.gameScreen.getBoundingClientRect();
+      const botRect = els.botZone.getBoundingClientRect();
+      els.messageBar.style.top = `${Math.ceil(botRect.bottom - screenRect.top + 6)}px`;
+    }
+
+    function setMessage(text) {
+      els.message.textContent = text;
+      clearTimeout(messageHideTimer);
+      positionMessageBar();
+
+      els.messageBar.classList.remove("is-visible");
+      void els.messageBar.offsetWidth;
+      els.messageBar.classList.add("is-visible");
+
+      messageHideTimer = setTimeout(() => {
+        els.messageBar.classList.remove("is-visible");
+        messageHideTimer = null;
+      }, 3000);
+    }
+
+    function nameOf(player) {
+      return player === HUMAN ? "YOU" : "BOT";
+    }
+
+    document.addEventListener("click", event => {
+      const button = event.target.closest("button");
+      if (!button || button.disabled || button.matches(".draw-choice, .bot-level-btn, #leftBtn, #rightBtn")) return;
+      playSoundEffect("click");
+    });
+    els.drawBtn.addEventListener("click", drawTile);
+    els.leftBtn.addEventListener("click", () => gameState.selectedTile && (OFFICIAL_MODE ? sendOfficialAction('play', gameState.selectedTile.id, 'left') : playTile(gameState.selectedTile, "left")));
+    els.rightBtn.addEventListener("click", () => gameState.selectedTile && (OFFICIAL_MODE ? sendOfficialAction('play', gameState.selectedTile.id, 'right') : playTile(gameState.selectedTile, "right")));
+    els.sideModal.addEventListener("click", event => {
+      if (event.target === els.sideModal) closeSideModal();
+    });
+    els.drawModal.addEventListener("click", event => {
+      if (event.target === els.drawModal && !gameState.isBusy) closeDrawModal();
+    });
+    els.forcedDrawActionBtn.addEventListener("click", drawTile);
+    els.replayBtn.addEventListener("click", replayGame);
+    els.viewBoardBtn.addEventListener("click", viewFinalBoard);
+    els.boardReplayBtn.addEventListener("click", replayGame);
+    els.botLevelModal.addEventListener("click", event => {
+      const button = event.target.closest("[data-bot-level]");
+      if (!button) return;
+      startGameWithBotLevel(button.dataset.botLevel);
+    });
+    els.botHand.addEventListener("wheel", event => {
+      if (!gameState.revealBotHand || els.botHand.scrollWidth <= els.botHand.clientWidth) return;
+      if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+      event.preventDefault();
+      els.botHand.scrollLeft += event.deltaY;
+    }, { passive: false });
+    document.addEventListener("click", event => {
+      if (OFFICIAL_MODE) return;
+      if (!mustHumanDraw()) return;
+      if (
+        els.drawBtn.contains(event.target) ||
+        els.drawModal.classList.contains("open") ||
+        els.forcedDrawModal.classList.contains("open")
+      ) return;
+      openForcedDrawModal();
+    });
+    if ("ResizeObserver" in window) {
+      const boardResizeObserver = new ResizeObserver(() => requestAnimationFrame(layoutBoardTiles));
+      boardResizeObserver.observe(els.board);
+      boardResizeObserver.observe(els.board.parentElement);
+    }
+    window.addEventListener("resize", () => {
+      positionMessageBar();
+      adjustHandLayouts();
+      requestAnimationFrame(layoutBoardTiles);
+    });
+    document.addEventListener("pointerdown", unlockAudio, { once: true });
+    document.addEventListener("keydown", unlockAudio, { once: true });
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) {
+        sounds.music.pause();
+      } else {
+        startBackgroundMusic();
+      }
+    });
+
+    if (OFFICIAL_MODE) {
+      document.body.classList.add('official-mode');
+      gameState.isBusy = true;
+      renderGame();
+      window.parent.postMessage({type:'jwetpro-domino-ready'}, window.location.origin);
+    } else if (shouldShowBotLevelModal()) {
+      openBotLevelModal(false);
+    } else {
+      initGame();
+    }
+    applyLayoutTestFromUrl();
+  </script>
+</body>
+</html>

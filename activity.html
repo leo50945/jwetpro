@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#061c2e" />
+    <meta name="description" content="Suivez les matchs en direct, replays, champions et championnats publiés sur JWETPRO." />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <link rel="canonical" href="https://jwetpro.com/activity.html" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="JWETPRO" />
+    <meta property="og:title" content="Activité JWETPRO — Matchs, replays et champions" />
+    <meta property="og:description" content="Toute l'activité publique des championnats JWETPRO." />
+    <meta property="og:url" content="https://jwetpro.com/activity.html" />
+    <meta property="og:image" content="https://jwetpro.com/og-jwetpro.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./src/styles.css" />
+    <link rel="stylesheet" href="./src/activity-page.css?v=20260820-header" />
+    <link rel="stylesheet" href="./src/activity-page-actions.css?v=20260817-replay" />
+    <title>JWETPRO — Toutes les activités</title>
+  </head>
+  <body class="activity-page-body">
+    <header class="activity-page-header">
+      <div class="activity-page-header-inner">
+        <a class="activity-back" href="./index.html#activity" aria-label="Retour à l’accueil"><i data-lucide="ArrowLeft"></i><span>RETOUR À L’ACCUEIL</span></a>
+        <a class="activity-page-brand" href="./index.html#top" aria-label="JWETPRO accueil"><b>JP</b><span>JWET<span>PRO</span></span></a>
+      </div>
+    </header>
+    <main class="activity-page-main">
+      <section class="activity-page-hero" aria-labelledby="activity-page-title">
+        <div><p class="activity-kicker">JWETPRO · ACTIVITÉS PUBLIQUES</p><h1 id="activity-page-title">Toutes les activités</h1><p>Retrouvez les matchs en direct, les replays et les champions publiés par la plateforme.</p></div>
+        <div class="activity-live-mark"><i data-lucide="Radio"></i><span>DONNÉES EN DIRECT</span></div>
+      </section>
+      <section class="activity-page-section" aria-labelledby="live-title"><div class="activity-page-section-head"><div><p class="activity-section-kicker">MAINTENANT</p><h2 id="live-title">Matchs en direct</h2></div><div class="activity-section-actions"><span class="activity-section-count" data-count="live">0</span><a class="activity-see-more" href="./live.html" aria-label="Voir tous les matchs en direct">VOIR PLUS <i data-lucide="ArrowRight"></i></a></div></div><div class="activity-page-grid" data-list="live"></div></section>
+      <section class="activity-page-section" aria-labelledby="replay-title"><div class="activity-page-section-head"><div><p class="activity-section-kicker">À REVOIR</p><h2 id="replay-title">Matchs terminés</h2></div><div class="activity-section-actions"><span class="activity-section-count" data-count="replays">0</span><a class="activity-see-more" href="./live.html?view=replays" aria-label="Voir tous les matchs terminés et replays">VOIR PLUS <i data-lucide="ArrowRight"></i></a></div></div><div class="activity-page-grid" data-list="replays"></div></section>
+      <section class="activity-page-section" aria-labelledby="champions-title"><div class="activity-page-section-head"><div><p class="activity-section-kicker">PALMARÈS</p><h2 id="champions-title">Vainqueurs</h2></div><div class="activity-section-actions"><span class="activity-section-count" data-count="champions">0</span><a class="activity-see-more" href="./champions.html" aria-label="Voir tous les champions JWETPRO">VOIR PLUS <i data-lucide="ArrowRight"></i></a></div></div><div class="activity-page-grid winners-grid" data-list="champions"></div></section>
+      <section class="activity-page-section" aria-labelledby="championships-title"><div class="activity-page-section-head"><div><p class="activity-section-kicker">PROGRAMME</p><h2 id="championships-title">Championnats publiés</h2></div><div class="activity-section-actions"><span class="activity-section-count" data-count="championships">0</span><a class="activity-see-more" href="./calendar.html" aria-label="Voir tous les championnats publiés">VOIR PLUS <i data-lucide="ArrowRight"></i></a></div></div><div class="activity-page-grid" data-list="championships"></div></section>
+    </main>
+    <footer class="activity-page-footer"><span>JWETPRO · Activités publiques</span><a href="./index.html#top">Accueil <i data-lucide="ArrowUpRight"></i></a></footer>
+    <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+    <script src="./src/icons.js"></script>
+    <script src="./src/activity-page.js?v=20260903-series-matches"></script>
+  </body>
+</html>

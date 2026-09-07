@@ -1,0 +1,10 @@
+functions/node_modules/
+.env
+functions/.env
+.firebase/
+.git/
+.github-publish/
+dominocash/dist/
+**/firebase-debug.log
+*.log
+.tmp-*

@@ -1,0 +1,19 @@
+{
+  "name": "JWETPRO",
+  "short_name": "JWETPRO",
+  "description": "Championnats de jeux de table en Haïti.",
+  "lang": "fr-HT",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#061c2e",
+  "theme_color": "#061c2e",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "functions": { "source": "functions", "runtime": "nodejs20" },
+  "hosting": [
+    {
+      "site": "jwetpro-share",
+      "public": "share-public",
+      "cleanUrls": true,
+      "trailingSlash": false,
+      "rewrites": [
+        {
+          "source": "/s/**",
+          "function": {
+            "functionId": "renderSharePage",
+            "region": "us-central1"
+          }
+        }
+      ],
+      "headers": [
+        {
+          "source": "**/*.@(html|css|js)",
+          "headers": [
+            { "key": "Cache-Control", "value": "public,max-age=300" }
+          ]
+        }
+      ]
+    }
+  ],
+  "firestore": { "rules": "firestore.rules", "indexes": "firestore.indexes.json" },
+  "storage": { "rules": "storage.rules" }
+}

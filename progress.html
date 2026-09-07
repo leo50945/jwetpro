@@ -1,0 +1,36 @@
+<!doctype html><html lang="fr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#061c2e"><meta name="description" content="Suivez en direct la progression d'un championnat JWETPRO : joueurs inscrits, tableau à élimination directe et matchs en cours."><meta name="robots" content="index, follow, max-image-preview:large"><link rel="canonical" href="https://jwetpro.com/progress.html"><meta property="og:type" content="website"><meta property="og:site_name" content="JWETPRO"><meta property="og:title" content="Progression du championnat — JWETPRO"><meta property="og:description" content="Suivez les inscrits, le tableau et les matchs d'un championnat JWETPRO en direct."><meta property="og:url" content="https://jwetpro.com/progress.html"><meta property="og:image" content="https://jwetpro.com/og-jwetpro.png"><meta name="twitter:card" content="summary_large_image"><link rel="icon" href="./favicon.svg"><link rel="stylesheet" href="./src/progress-page.css"><title>Progression du championnat — JWETPRO</title></head><body class="public-page championship-recap-page" data-page="progress"><header class="public-head"><div class="public-head-inner"><a class="public-back" href="./index.html#progress"><i data-lucide="ArrowLeft"></i><span>RETOUR À L’ACCUEIL</span></a><a class="public-brand" href="./index.html#top"><b>JP</b><span>JWET<span>PRO</span></span></a></div></header><main class="public-main championship-recap-main">
+
+<section id="progress-loading" class="recap-loading" role="status" aria-live="polite"><span class="recap-spinner"></span><strong>Chargement du championnat…</strong></section>
+
+<div id="progress-content" hidden>
+  <header class="recap-hero">
+    <div class="recap-hero-copy">
+      <p class="public-kicker" id="progress-kicker">JWETPRO · COMPÉTITION</p>
+      <h1 id="progress-title">Championnat JWETPRO</h1>
+      <p id="progress-date" class="recap-date">Date non publiée</p>
+    </div>
+    <div class="recap-champion"><span>STATUT</span><strong id="progress-status-badge" class="status">—</strong></div>
+  </header>
+
+  <section class="recap-section" aria-labelledby="progress-meter-title">
+    <div class="recap-section-head"><div><p>SUIVI EN DIRECT</p><h2 id="progress-meter-title">Progression du championnat</h2></div><span id="progress-meter-value">0%</span></div>
+    <p class="recap-section-note">Avance à mesure des inscriptions, puis au fil des huitièmes, quarts, demi-finales et de la finale — jusqu’à 100 % au sacre du champion.</p>
+    <div class="meter" style="margin-top:14px"><div id="progress-meter-fill" class="meter-fill" style="width:0%"></div></div>
+    <a id="progress-register-cta" class="progress-register-cta" href="./calendar.html" hidden>S’INSCRIRE AU CHAMPIONNAT <i data-lucide="ArrowRight"></i></a>
+  </section>
+
+  <section class="recap-section" aria-labelledby="participants-title">
+    <div class="recap-section-head"><div><p>JOUEURS</p><h2 id="participants-title">Participants</h2></div><span id="participants-count-badge">0 / 16</span></div>
+    <div id="progress-participants" class="recap-participants"></div>
+  </section>
+
+  <section class="recap-section" aria-labelledby="bracket-title">
+    <div class="recap-section-head"><div><p>PARCOURS DU CHAMPIONNAT</p><h2 id="bracket-title">Tableau du championnat</h2></div><span>ÉLIMINATION DIRECTE</span></div>
+    <p class="recap-section-note">16èmes de finale, 8èmes de finale, quarts, demi-finales et finale — mis à jour en direct à mesure que les résultats sont publiés.</p>
+    <div id="progress-bracket" class="recap-bracket" aria-live="polite"></div>
+  </section>
+</div>
+
+<section id="progress-error" class="recap-error" hidden role="alert"><span aria-hidden="true">!</span><h1>Aucun championnat à suivre</h1><p id="progress-error-message">Revenez dès qu’un championnat sera publié.</p><a href="./calendar.html">Voir le calendrier</a></section>
+
+</main><footer class="public-foot"><span>JWETPRO · Progression en direct</span><a href="./index.html#top">Accueil</a></footer><script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.js"></script><script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script><script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script><script src="./src/progress-page.js?v=20260903-series-score"></script></body></html>

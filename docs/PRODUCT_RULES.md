@@ -1,0 +1,37 @@
+# Regles produit
+
+- Signup public autorise : tout visiteur peut creer un compte joueur simple avec e-mail, nom d'utilisateur et mot de passe. Aucune verification e-mail n'est exigee.
+- La creation d'un compte ne confirme pas une participation. Chaque inscription a un championnat reste independante et depend du paiement ou du processus de participation prevu.
+- Format standard V2 : 32 joueurs, cinq tours a elimination directe, 125 HTG par participation et 2 000 HTG au champion.
+- Plusieurs championnats peuvent etre programmes dans la meme journee. Les dates, heures, jeux, tarifs, gains, capacites et statuts viennent des donnees du championnat.
+- Un meme utilisateur peut participer a plusieurs championnats dans la journee. Chaque participation est independante et payee separement.
+- Le champion recoit 2 000 HTG. Le deuxieme recoit un coupon couvrant une inscription gratuite. Chacun des autres participants recoit un coupon de reduction de 25 HTG.
+- Un coupon est personnel, non transferable, non cumulable et utilisable une seule fois. Il est valable uniquement pour le prochain championnat publie apres son attribution, qu'il soit Domino ou Mopyon, puis expire.
+- Avant le debut d'un championnat ouvert, ne pas afficher le nombre exact de participants inscrits ; afficher seulement la capacite maximale.
+- Le statut public d'un championnat suit son horaire : inscriptions ouvertes avant la limite, inscriptions terminees a la date limite ou des que la capacite de 32 joueurs est atteinte, championnat en cours a partir de `startAt`, puis championnat termine 1 h 30 apres `startAt`.
+- En l'absence d'une date de fin d'inscription distincte (`registrationEndAt` ou equivalent), `startAt` est la limite d'inscription par defaut. Le compteur peut etre fourni par un champ numerique de participants/inscriptions ou par un tableau de participants.
+- La section Activite JWETPRO conserve les championnats termines dans son historique et selectionne les trois activites les plus recentes ; dans cette selection, les championnats termines sont toujours affiches apres les championnats actifs ou a venir.
+- Chaque carte de championnat propose une action correspondant a son etat : s'inscrire lorsque les inscriptions sont ouvertes, suivre le championnat lorsqu'il est en cours, revoir le championnat lorsqu'il est termine, et voir le championnat pour les autres etats non ouverts.
+- Les matchs sont joues sur JWETPRO ; les spectateurs peuvent suivre le live, la progression et les replays.
+- Dans un match entre deux joueurs reels, l'entree du premier joueur dans la salle declenche un delai de presence de 5 minutes. Si l'adversaire n'a pas rejoint la salle a l'expiration, il perd automatiquement par forfait de temps. Le resultat et le replay publient explicitement ce motif.
+- Le forfait de presence ne s'applique jamais a un adversaire simule. Lorsqu'un match Mopyon ou Domino oppose un joueur reel a un participant identifie comme bot/simule, la partie commence des l'arrivee du joueur reel et les coups du bot sont produits par une fonction serveur autoritaire.
+- Pour un match Domino officiel, les mains et la pioche restent exclusivement dans `dominoMatchStates`, une collection interdite aux clients Firestore. Le joueur authentifie recoit seulement sa propre main par fonction callable; un spectateur ne recoit aucune piece privee.
+- Le hero de l'accueil suit une priorité stricte : match officiel à venir ou actif du joueur connecté, championnat avec inscriptions ouvertes, championnat en cours, puis autres événements planifiés. Le bouton d'un match personnel ouvre directement son espace officiel après contrôle de l'UID participant.
+- Les points joueurs sont attribues uniquement apres publication officielle d'un championnat : participation confirmee +5 pts, victoire en 16e +10 pts, victoire en 8e +15 pts, victoire en quart +25 pts, victoire en demi-finale +40 pts, champion +75 pts, bonus sans abandon +5 pts.
+- L'entrainement libre Mopyon ou Domino ne donne aucun point officiel. Chaque joueur est compte une seule fois par championnat dans le classement.
+- Les niveaux sont automatiques selon les points officiels : Debutant 0-49 pts, Intermediaire 50-149 pts, Confirme 150-299 pts, Expert 300-599 pts, Elite 600 pts et plus.
+- Deux bulles flottantes sont visibles sur les pages publiques : la bulle message ouvre les salons communautaires pour les joueurs connectes, la bulle assistance ouvre directement la conversation avec le coordonnateur.
+- Un visiteur sans compte peut ecrire au coordonnateur via une session Firebase anonyme. Cette session ne remplace pas un compte joueur et ne confirme aucune inscription.
+- La page `live.html` affiche uniquement les matchs dont le statut est réellement en cours, sans résultat terminal et dans une fenêtre maximale de 1 h 30 après leur début. Les matchs terminés et replays restent dans les pages d’activité et de résultats.
+- Le format standard utilise un tableau a elimination directe de 32 joueurs : seiziemes de finale (16 matchs), huitiemes (8), quarts (4), demi-finales (2) et finale (1), soit 31 matchs au total.
+- Chaque confrontation du tableau standard constitue un seul match joue au meilleur de trois manches. Le premier joueur ou la premiere equipe qui gagne deux manches remporte le match. Une manche n'est jamais comptee comme un match independant.
+- Dans « Mes matchs », une confrontation au meilleur de trois occupe une seule ligne : ses manches enfants ne sont jamais listées séparément. L’action est « Rejoindre le match » tant que la confrontation est jouable, puis « Revoir le replay » après sa fin; toutes les lignes du championnat sont retirées lorsque celui-ci est terminé.
+- A la fin d'une manche, le resultat est enregistre une seule fois sur la serie par une transaction serveur idempotente. Si personne n'a encore deux victoires, le participant peut ouvrir la manche suivante depuis la modale de resultat.
+- Le bouton de replay ouvre `play.html` avec l'identifiant de la serie. Le lecteur regroupe toutes ses manches publiees et permet de selectionner celle a revoir. Pour une simulation sans historique autoritaire, le lecteur peut produire une sequence deterministe de demonstration, obligatoirement marquee `REPLAY SIMULE` afin de ne jamais la confondre avec les coups reels.
+- Les anciennes dotations de 5 000 HTG et capacites de 40 joueurs peuvent rester dans l'historique ou servir de format premium futur. Elles ne sont pas le modele quotidien par defaut.
+- Les paiements reels, comptes et logique serveur autoritaire restent hors perimetre de cette homepage.
+- Un partage de profil est autorisé uniquement lorsque le joueur a activé « Profil public ». Désactiver cette option supprime sa projection publique et interdit la création de nouveaux partages de profil.
+- Les liens de niveau, d'inscription, de victoire et de qualification sont générés seulement après vérification des données officielles par une fonction serveur. Un texte ou un identifiant envoyé par le navigateur ne constitue jamais une preuve.
+- Aucun partage ne doit exposer l'adresse e-mail, le téléphone, l'UID Firebase, une donnée de paiement ou une conversation privée.
+- Un visiteur recommandé est attribué au premier lien valide conservé dans son navigateur puis enregistré après la création ou la connexion à un vrai compte. Une auto-invitation et une deuxième attribution sont refusées.
+- La V1 de l'invitation n'accorde automatiquement ni argent, ni points, ni coupon. Elle prépare une mesure fiable avant toute campagne récompensée.
