@@ -14,4 +14,9 @@
 .bracket-watch-link:hover,.bracket-watch-link:focus-visible{background:#d94d58;color:#fff;outline:none}
 .bracket-watch-link svg{width:12px}
 
+.recap-participant.is-eliminated{border-color:#d8c6c8;background:#f7f4f4;color:#748797}
+.recap-participant.is-eliminated .recap-participant-avatar{filter:grayscale(1);opacity:.66}
+.recap-participant.is-eliminated strong{color:#748797;text-decoration-line:line-through;text-decoration-color:#a85058;text-decoration-thickness:2px;text-decoration-skip-ink:none}
+.recap-participant.is-eliminated small{color:#8999a5}
+
 @media(max-width:767px){.progress-register-cta{width:100%}}

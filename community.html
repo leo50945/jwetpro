@@ -9,7 +9,7 @@
     <link rel="canonical" href="https://jwetpro.com/community.html" />
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="./src/styles.css" />
-    <link rel="stylesheet" href="./src/community-page.css?v=20260906-no-simulation-label" />
+    <link rel="stylesheet" href="./src/community-page.css?v=20260907-fullscreen-chat-v2" />
     <title>JWETPRO — Communauté</title>
   </head>
   <body class="community-page-body">
@@ -24,17 +24,25 @@
         <aside class="community-sidebar">
           <div class="community-brand"><span class="community-brand-icon"><span class="community-jp-mark">JP</span></span><div><strong>COMMUNAUTÉ JWETPRO</strong><small>Espace d’échange des joueurs</small></div></div>
           <div class="community-label">SALONS</div>
-          <nav class="community-rooms"><button class="community-room is-active" type="button"><span>#</span><div><strong>Communauté JWETPRO</strong><small>Discussion générale entre tous les joueurs</small></div></button></nav>
+          <nav class="community-rooms"><button class="community-room is-active" data-community-view="group" type="button"><span>#</span><div><strong>Communauté JWETPRO</strong><small>Discussion générale entre tous les joueurs</small></div></button><button class="community-room" data-community-view="private" type="button"><span><i data-lucide="MessagesSquare"></i></span><div><strong>Messages privés</strong><small>Uniquement entre abonnements réciproques</small></div><b data-private-unread hidden>0</b></button></nav>
+          <section class="private-conversations" data-private-conversations hidden><label><i data-lucide="Search"></i><input type="search" data-private-search placeholder="Rechercher une conversation" aria-label="Rechercher une conversation"></label><div data-private-list><p>Chargement…</p></div></section>
         </aside>
         <section class="community-main">
           <header class="community-header">
+            <a class="community-chat-back" href="./index.html#top" aria-label="Retour à l’accueil"><i data-lucide="ArrowLeft"></i></a>
             <div class="community-mobile-brand"><span class="community-brand-icon"><span class="community-jp-mark">JP</span></span><div><strong id="community-title">Communauté JwetPro</strong><small>Espace d’échange des joueurs</small></div></div>
+            <div class="private-conversation-actions" data-private-actions hidden>
+              <a href="./player.html" data-private-profile aria-label="Voir le profil du joueur"><i data-lucide="UserRound"></i><span>Profil</span></a>
+              <button type="button" data-private-report aria-label="Signaler ce joueur"><i data-lucide="Flag"></i><span>Signaler</span></button>
+              <button type="button" data-private-block aria-label="Bloquer ce joueur"><i data-lucide="Ban"></i><span>Bloquer</span></button>
+            </div>
             <div class="community-online"><i data-lucide="UsersRound"></i><span>—</span><i></i></div>
           </header>
-          <div class="community-mobile-rooms"><button class="is-active" type="button"># &nbsp; Communauté JWETPRO</button></div>
+          <div class="community-mobile-rooms"><button class="is-active" data-community-view="group" type="button"># &nbsp; Groupe</button><button data-community-view="private" type="button"><i data-lucide="MessagesSquare"></i> Privé <b data-private-unread hidden>0</b></button></div>
           <div class="community-welcome" hidden></div>
           <div class="community-messages" role="log" aria-live="polite"><p class="community-data-state">Chargement des messages…</p></div>
           <form class="community-composer">
+            <div class="community-reply-preview" hidden><div><strong></strong><span></span></div><button type="button" aria-label="Annuler la réponse"><i data-lucide="X"></i></button></div>
             <input type="text" maxlength="2000" placeholder="Écrire un message…" aria-label="Écrire un message" />
             <button type="submit" aria-label="Envoyer le message"><i data-lucide="Send"></i></button>
           </form>
@@ -42,13 +50,12 @@
         </section>
       </div>
     </main>
-    <footer class="community-page-footer"><span>JWETPRO · Communauté</span><a href="./index.html#top">Accueil <i data-lucide="ArrowUpRight"></i></a></footer>
     <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
     <script src="./src/icons.js"></script>
-    <script src="./src/community-page.js?v=20260906-no-simulation-label"></script>
+    <script src="./src/community-page.js?v=20260909-social-v3"></script>
   </body>
 </html>

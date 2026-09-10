@@ -40,7 +40,7 @@
     <section id="demarrage" class="guide-section">
       <div class="container guide-layout">
         <aside class="guide-sidebar" aria-label="Sommaire du guide"><p>Dans ce guide</p><nav>
-          <a href="#demarrage"><span>01</span>Premiers pas</a><a href="#compte"><span>02</span>Compte et paiement</a><a href="#championnats"><span>03</span>Championnats</a><a href="#matchs"><span>04</span>Matchs et règles</a><a href="#suivi"><span>05</span>Live et progression</a><a href="#resultats"><span>06</span>Résultats et profil</a><a href="#aide"><span>07</span>Aide</a>
+          <a href="#demarrage"><span>01</span>Premiers pas</a><a href="#compte"><span>02</span>Compte et paiement</a><a href="#championnats"><span>03</span>Championnats</a><a href="#matchs"><span>04</span>Matchs et règles</a><a href="#suivi"><span>05</span>Live et progression</a><a href="#resultats"><span>06</span>Résultats et profil</a><a href="#communaute"><span>07</span>Communauté</a><a href="#aide"><span>08</span>Aide</a>
         </nav></aside>
         <div class="guide-content">
           <article class="guide-chapter">
@@ -90,8 +90,14 @@
             <div class="guide-result-grid"><div><i data-lucide="ListChecks"></i><h3>Résultats</h3><p>Les résultats validés alimentent le suivi public.</p></div><div><i data-lucide="ChartNoAxesColumnIncreasing"></i><h3>Classement</h3><p>Vos points indiquent votre progression.</p></div><div><i data-lucide="UserRound"></i><h3>Profil</h3><p>Cliquez sur votre avatar pour voir vos informations.</p></div><div><i data-lucide="Crown"></i><h3>Gains</h3><p>Chaque championnat a son prix et les gains sont cumulables.</p></div></div>
           </article>
 
+          <article id="communaute" class="guide-chapter">
+            <div class="guide-chapter-heading"><span class="guide-number">07</span><div><p>COMMUNAUTÉ ET PARTAGE</p><h2>Suivez ce qui compte pour vous</h2></div></div>
+            <div class="guide-two-columns"><div data-guide-knowledge="social-sharing"><h3><i data-lucide="Heart"></i> J’aime et favoris</h3><p>Chaque championnat publié et chaque match officiel possède des actions pour aimer, copier ou partager son lien. Un J’aime enregistre automatiquement l’élément dans Mes favoris.</p></div><div><h3><i data-lucide="UserPlus"></i> Abonnements</h3><p>Vous pouvez suivre un joueur réel ou simulé depuis sa fiche. Les joueurs simulés sont identifiés et ne suivent jamais en retour.</p></div><div><h3><i data-lucide="MessagesSquare"></i> Messages privés</h3><p>Deux vrais joueurs peuvent s’écrire lorsqu’ils se suivent mutuellement. Après un désabonnement, la conversation reste disponible en lecture seule.</p></div><div><h3><i data-lucide="Shield"></i> Contrôle et sécurité</h3><p>Vos listes d’abonnés et d’abonnements restent privées. Vous pouvez bloquer ou signaler un joueur depuis sa fiche ou une conversation.</p></div></div>
+            <div class="guide-note"><i data-lucide="Share2"></i><p><b>Partager sans exposer quelqu’un</b> Le nombre d’abonnés peut être partagé depuis le profil, mais JWETPRO ne révèle jamais l’identité d’un nouvel abonné dans cette publication.</p></div>
+          </article>
+
           <article id="aide" class="guide-chapter">
-            <div class="guide-chapter-heading"><span class="guide-number">07</span><div><p>AIDE</p><h2>Questions fréquentes</h2></div></div>
+            <div class="guide-chapter-heading"><span class="guide-number">08</span><div><p>AIDE</p><h2>Questions fréquentes</h2></div></div>
             <div class="guide-faq">
               <details><summary>Puis-je créer moi-même un compte ? <i data-lucide="Plus"></i></summary><p>Oui. Le formulaire de connexion permet aussi de créer un compte joueur simple, sans vérification e-mail.</p></details>
               <details><summary>Puis-je jouer plusieurs championnats le même jour ? <i data-lucide="Plus"></i></summary><p>Oui. Chaque participation doit toutefois être réservée et payée séparément.</p></details>
@@ -107,7 +113,7 @@
   <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-  <script src="./shared-shell.js?v=20260904-official-championship-rules"></script>
+  <script src="./shared-shell.js?v=20260909-social-v3"></script>
   <script src="./src/guide-data.js?v=20260904-official-knowledge"></script>
   <script>document.querySelectorAll('a[href="./guide.html"]').forEach(link=>link.setAttribute('aria-current','page'));window.renderIcons?.();</script>
 </body>

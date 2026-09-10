@@ -91,7 +91,9 @@
   };
 
   const participantId = player => String(firstValue(player?.id, player?.uid, player?.userId, player?.playerId, '') || '');
+  const participantSocialId = player => String(firstValue(player?.socialPlayerId, player?.socialId, participantId(player), '') || '');
   const playerName = player => String(firstValue(player?.displayName, player?.name, player?.username, player?.label, 'Joueur'));
+  const playerProfileLink = (player,markup) => /^[A-Za-z0-9_-]{1,150}$/.test(participantSocialId(player)) ? `<a class="player-social-link" href="./player.html?id=${encodeURIComponent(participantSocialId(player))}" aria-label="Voir le profil de ${escapeHTML(playerName(player))}">${markup}</a>` : markup;
   const normalizePlayer = (value, fallbackId = '') => {
     if (typeof value === 'string') return { id: value || fallbackId, displayName: '' };
     const player = asObject(value);
@@ -109,7 +111,8 @@
       const key = playerKey(player);
       if (key && !unique.has(key)) unique.set(key, player);
     });
-    return [...unique.values()].slice(0, EXPECTED_PLAYERS);
+    const socialIds=asObject(championship.participantSocialIds);
+    return [...unique.values()].slice(0, EXPECTED_PLAYERS).map(player=>({...player,socialPlayerId:firstValue(player.socialPlayerId,socialIds[participantId(player)])}));
   };
 
   const enrichParticipants = async participants => {
@@ -126,10 +129,11 @@
 
   const matchPlayers = match => {
     const arrays = [match.participants, match.players].find(Array.isArray);
-    if (arrays?.length) return arrays.slice(0, 2).map(normalizePlayer);
+    const socialIds=asObject(match.participantSocialIds);
+    if (arrays?.length) return arrays.slice(0, 2).map(normalizePlayer).map(player=>({...player,socialPlayerId:firstValue(player.socialPlayerId,socialIds[participantId(player)])}));
     const ids = asArray(match.participantIds).slice(0, 2);
     const values = [firstValue(match.player1, match.firstPlayer, ids[0]), firstValue(match.player2, match.secondPlayer, ids[1])];
-    return values.filter(value => value !== undefined).map(normalizePlayer);
+    return values.filter(value => value !== undefined).map(normalizePlayer).map(player=>({...player,socialPlayerId:firstValue(player.socialPlayerId,socialIds[participantId(player)])}));
   };
 
   const stageKey = match => {
@@ -147,6 +151,7 @@
   const stageIndex = match => Math.max(0, STAGES.findIndex(stage => stage.key === stageKey(match)));
   const matchPosition = match => Number(firstValue(match.position, match.bracketPosition, match.bracketSlot, match.matchNumber, match.number, 0)) || 0;
   const matchMoves = match => asArray(firstValue(match.moves, match.moveHistory, match.history, match.actions));
+  const matchSocialAttributes = match => match.kind === 'game' || (match.kind !== 'series' && firstValue(match.seriesId,match.parentSeriesId,match.matchSeriesId,'')) ? ' data-social-disabled="true"' : ` data-social-kind="match" data-social-id="${escapeHTML(match.id)}"`;
   const winnerIdentity = match => {
     const winner = firstValue(match.winner, match.winnerPlayer, {});
     return {
@@ -195,7 +200,7 @@
 
   const participantCard = player => {
     const name = playerName(player);
-    return `<article class="recap-participant"><span class="recap-participant-avatar"${avatarStyle(player)}>${playerAvatarImage(player) ? '' : escapeHTML(initials(name))}</span><div><strong>${escapeHTML(name)}</strong><small>${player.level ? `Niveau ${escapeHTML(player.level)}` : 'Participant'}</small></div></article>`;
+    return `<article class="recap-participant">${playerProfileLink(player,`<span class="recap-participant-avatar"${avatarStyle(player)}>${playerAvatarImage(player) ? '' : escapeHTML(initials(name))}</span>`)}<div>${playerProfileLink(player,`<strong>${escapeHTML(name)}</strong>`)}<small>${player.level ? `Niveau ${escapeHTML(player.level)}` : 'Participant'}</small></div></article>`;
   };
   const emptyState = (title, detail) => `<div class="recap-empty"><strong>${escapeHTML(title)}</strong><span>${escapeHTML(detail)}</span></div>`;
 
@@ -203,7 +208,7 @@
     if (!match) return '<div class="bracket-match-empty">Résultat non publié</div>';
     const players = matchPlayers(match);
     while (players.length < 2) players.push({ displayName: 'À déterminer' });
-    return `<article class="bracket-match${isFinal ? ' is-final' : ''}">${players.map((player, index) => `<div class="bracket-player${isWinner(player, match) ? ' is-winner' : ''}"><strong>${escapeHTML(playerName(player))}</strong><b>${escapeHTML(scoreFor(match, player, index))}</b></div>`).join('')}</article>`;
+    return `<article class="bracket-match${isFinal ? ' is-final' : ''}" data-social-kind="match" data-social-id="${escapeHTML(firstValue(match.seriesId,match.parentSeriesId,match.id,''))}">${players.map((player, index) => `<div class="bracket-player${isWinner(player, match) ? ' is-winner' : ''}">${playerProfileLink(player,`<strong>${escapeHTML(playerName(player))}</strong>`)}<b>${escapeHTML(scoreFor(match, player, index))}</b></div>`).join('')}</article>`;
   };
   const renderBracket = matches => {
     const seriesMatches = matches.some(match => match.kind === 'series') ? matches.filter(match => match.kind === 'series') : matches;
@@ -220,7 +225,7 @@
     while (players.length < 2) players.push({ displayName: 'À déterminer' });
     const moves = matchMoves(match);
     const hasAttendanceForfeit = match.forfeitReason === 'attendance-timeout' || (match.forfeit === true && match.completionReason === 'attendance-timeout');
-    return `<article class="recap-match"><div class="recap-match-phase"><span>${escapeHTML(stage?.label || 'Match')}</span><strong>${formatDate(firstValue(match.startedAt, match.completedAt, match.createdAt))}</strong></div><div class="recap-match-versus"><div class="recap-match-player"><strong>${escapeHTML(playerName(players[0]))}</strong><b>${escapeHTML(scoreFor(match, players[0], 0))}</b></div><span>VS</span><div class="recap-match-player"><b>${escapeHTML(scoreFor(match, players[1], 1))}</b><strong>${escapeHTML(playerName(players[1]))}</strong></div></div>${moves.length || hasAttendanceForfeit ? `<button class="recap-replay-button" type="button" data-replay-id="${escapeHTML(match.id)}">${hasAttendanceForfeit ? 'VOIR LE RÉSULTAT' : 'REVOIR LE MATCH'}</button>` : '<span class="recap-replay-unavailable">Replay non publié</span>'}</article>`;
+    return `<article class="recap-match"${matchSocialAttributes(match)}><div class="recap-match-phase"><span>${escapeHTML(stage?.label || 'Match')}</span><strong>${formatDate(firstValue(match.startedAt, match.completedAt, match.createdAt))}</strong></div><div class="recap-match-versus"><div class="recap-match-player">${playerProfileLink(players[0],`<strong>${escapeHTML(playerName(players[0]))}</strong>`)}<b>${escapeHTML(scoreFor(match, players[0], 0))}</b></div><span>VS</span><div class="recap-match-player"><b>${escapeHTML(scoreFor(match, players[1], 1))}</b>${playerProfileLink(players[1],`<strong>${escapeHTML(playerName(players[1]))}</strong>`)}</div></div>${moves.length || hasAttendanceForfeit ? `<button class="recap-replay-button" type="button" data-replay-id="${escapeHTML(match.id)}">${hasAttendanceForfeit ? 'VOIR LE RÉSULTAT' : 'REVOIR LE MATCH'}</button>` : '<span class="recap-replay-unavailable">Replay non publié</span>'}</article>`;
   };
 
   const renderReplay = () => {
@@ -282,6 +287,8 @@
   };
 
   const renderPage = (championship, participants, matches) => {
+    const hero=document.querySelector('.recap-hero');
+    if(hero){hero.dataset.socialKind='championship';hero.dataset.socialId=championship.id;window.JwetproSocial?.decorate?.(hero)}
     const game = String(firstValue(championship.game, championship.type, 'Mopyon'));
     const number = firstValue(championship.number, championship.code, championship.id);
     const title = `${game.charAt(0).toUpperCase()}${game.slice(1).toLowerCase()} #${number}`;
@@ -295,13 +302,14 @@
     byId('participants-count-badge').textContent = `${participants.length} / ${EXPECTED_PLAYERS}`;
     const champion = championFrom(championship, matches, participants);
     byId('recap-champion').innerHTML = champion
-      ? `<span class="recap-champion-avatar"${avatarStyle(champion)}>${playerAvatarImage(champion) ? '' : escapeHTML(initials(playerName(champion)))}</span><div><span>CHAMPION</span><strong>${escapeHTML(playerName(champion))}</strong></div>`
+      ? `${playerProfileLink(champion,`<span class="recap-champion-avatar"${avatarStyle(champion)}>${playerAvatarImage(champion) ? '' : escapeHTML(initials(playerName(champion)))}</span>`)}<div><span>CHAMPION</span>${playerProfileLink(champion,`<strong>${escapeHTML(playerName(champion))}</strong>`)}</div>`
       : '<span class="recap-champion-avatar">—</span><div><span>CHAMPION</span><strong>Non publié</strong></div>';
     byId('recap-participants').innerHTML = participants.length ? participants.map(participantCard).join('') : emptyState('Liste non publiée', 'Les participants de cet ancien championnat ne sont pas encore disponibles.');
     renderBracket(matches);
     const replayCount = gameMatches.filter(match => matchMoves(match).length).length;
     byId('replay-count').textContent = `${replayCount} REPLAY${replayCount > 1 ? 'S' : ''}`;
     byId('recap-matches').innerHTML = gameMatches.length ? gameMatches.map(matchCard).join('') : emptyState('Résultats non publiés', 'Le tableau existe, mais les matchs détaillés de ce championnat ne sont pas encore disponibles.');
+    window.JwetproSocial?.decorate?.(document.querySelector('#recap-content'));
     state.matches = matches;
     byId('recap-loading').hidden = true;
     byId('recap-content').hidden = false;

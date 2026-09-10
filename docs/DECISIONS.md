@@ -1,5 +1,13 @@
 # Decisions
 
+## 2026-09-08 — Couche sociale unifiée
+
+Les championnats et les séries officielles utilisent une identité sociale canonique partagée par toutes leurs cartes. Le partage reste public; aimer, suivre, bloquer, signaler et écrire en privé exigent un vrai compte actif. Le J’aime alimente à la fois un compteur public agrégé et le favori privé du joueur.
+
+Les profils sociaux exposent seulement une identité minimale, le type réel ou simulé et le nombre d’abonnés. Les listes de relations restent privées. Les messages privés sont autorisés uniquement entre deux vrais joueurs qui se suivent mutuellement; une rupture du lien conserve l’historique en lecture seule. Les personnages simulés ont une identité stable réutilisée entre les championnats mais ne suivent jamais en retour. Le dashboard déclare explicitement cette persona stable; une ancienne simulation sans identifiant déclaré reçoit un identifiant historique propre à son document afin que deux homonymes ne soient jamais fusionnés automatiquement.
+
+Les notifications sociales restent internes à JWETPRO. Le partage d’un palier d’abonnés ne contient jamais l’identité de la personne qui vient de suivre le profil.
+
 ## 2026-09-05 - Parité officielle des championnats Domino
 
 Une confrontation Domino suit désormais le même contrat que Mopyon : une série `kind: series` au meilleur de trois manches, une seule ligne dans « Mes matchs », deux manches gagnantes pour remporter le match, un replay regroupé et le retrait de la liste lorsque le championnat est terminé. Les CTA personnels de l'accueil et de `play.html` ouvrent la route joueur `play.html?join=<seriesId>`; la première manche est créée à la demande si nécessaire.
@@ -10,11 +18,11 @@ Entre deux joueurs réels, le premier arrivé déclenche le même délai de cinq
 
 L’interface d’une manche Domino officielle réutilise désormais exactement `dominocash/index.html` dans une iframe de même origine, comme l’entraînement. Un protocole `postMessage` limité à l’origine courante transmet uniquement l’état public, la main privée du joueur authentifié et les intentions de jeu validées; aucune règle ni donnée officielle n’est décidée dans l’iframe. Les Cloud Functions restent l’unique autorité pour les placements, la pioche, les tours et le résultat.
 
-## 2026-09-05 - Diversité et transparence de l’animation communautaire
+## 2026-09-07 - Rotation élargie de l’animation communautaire
 
-L’animation du salon `general` dispose désormais de 32 personnages simulés et d’un catalogue de 36 scénarios courts en français et en kreyòl, incluant des salutations, questions simples, encouragements et réponses par emoji. Le document serveur `communitySimulation/state` mémorise les scénarios et les couples personnage/message employés pendant la journée locale `America/Port-au-Prince`. Un scénario ne peut pas être rejoué le même jour et les scénarios de la veille sont évités en priorité.
+L’animation du salon `general` dispose de 32 personnages et d’un catalogue de 36 scénarios courts en français et en kreyòl, incluant des salutations, questions simples, encouragements et réponses par emoji. Chaque discussion fait intervenir quatre à six personnages. Le serveur choisit en priorité ceux qui n’ont pas encore parlé pendant la journée locale `America/Port-au-Prince`, puis autorise une nouvelle rotation seulement lorsque le catalogue quotidien a été utilisé.
 
-Les messages automatisés portent explicitement `authorRole: simulated`, `automated: true` et `simulation: true`. La page les identifie visuellement avec le badge `SIMULÉ`; ils ne doivent jamais être présentés comme des messages de personnes réelles. Le salon public charge uniquement les 15 messages les plus récents afin de garder une fenêtre de discussion courte.
+Le document serveur `communitySimulation/state` mémorise les personnages, scénarios et couples personnage/message déjà employés. Un scénario ne peut pas être rejoué le même jour et ceux de la veille sont évités en priorité. Après une animation, une page Community restée ouverte peut en demander une autre à l’expiration du délai serveur de trois minutes, tant qu’aucun vrai joueur n’a écrit. Les marqueurs techniques `authorRole: simulated`, `automated: true` et `simulation: true` restent enregistrés pour le contrôle serveur, sans libellé visible dans la carte. Le salon public charge uniquement les 15 messages les plus récents.
 
 ## 2026-09-05 - Plusieurs simulations de championnat en parallèle
 
@@ -32,7 +40,7 @@ Le format standard V2 comprend 32 joueurs, cinq tours, 125 HTG de participation 
 
 La suppression des réponses automatiques de Jean Estime dans `general` reste définitive : `autoReplyToGroupMessage` n’est pas réintroduite. En revanche, `startCommunitySimulation` est rétablie comme animation autonome. Après cinq secondes sans nouveau message humain depuis l’ouverture de `community.html`, un joueur authentifié présent peut demander une courte conversation simulée. Les publications simulées utilisent la structure visuelle et les champs ordinaires d’un message utilisateur; seul leur `authorId` technique préfixé `simulated_`, invisible dans l’interface, permet au moteur de les distinguer d’une conversation réelle.
 
-Le navigateur publie sa présence toutes les cinq secondes. Avant le démarrage et avant chaque ligne, le serveur exige au moins une présence datant de moins de douze secondes et vérifie qu’aucun message humain plus récent n’existe. Un message humain observé annule le lancement côté client et interrompt la suite côté serveur. Un verrou transactionnel récupérable après six minutes et un délai de dix minutes entre deux animations évitent les blocages, les doublons et le remplissage artificiel du salon.
+Le navigateur publie sa présence toutes les cinq secondes. Avant le démarrage et avant chaque ligne, le serveur exige au moins une présence datant de moins de douze secondes et vérifie qu’aucun message humain plus récent n’existe. Un message humain observé annule le lancement côté client et interrompt la suite côté serveur. Un verrou transactionnel récupérable après six minutes et un délai de trois minutes entre deux animations évitent les blocages et les doublons tout en permettant une rotation visible des discussions.
 
 ## 2026-09-03 - Salon communautaire réservé aux joueurs réels
 
@@ -215,3 +223,25 @@ L’assistant officiel de JWETPRO porte le nom public `Jean Estime`. Ce nom est 
 - Les profils publics sont projetés dans `publicProfiles` par des déclencheurs de confiance. Les clients peuvent lire cette projection mais ne peuvent pas l'écrire.
 - L'attribution d'une invitation est enregistrée une seule fois, après connexion d'un nouveau joueur, dans `shareReferrals`. Les auto-invitations et les remplacements d'un parrain existant sont refusés.
 - La V1 mesure l'attribution sans distribuer automatiquement une récompense financière ou un coupon. Toute récompense future devra disposer de règles antifraude et d'une validation métier distinctes.
+
+## 2026-09-07 — Programmation quotidienne de la communauté
+
+- Le dashboard enregistre une journée sous `communityDailyPrograms/{AAAA-MM-JJ}` et ses discussions dans des documents séparés, versionnés par révision. La révision active n'est basculée qu'après l'écriture complète des discussions.
+- Le moteur choisit d'abord la date locale exacte de Port-au-Prince. En son absence, il applique littéralement la règle produit « jour le plus éloigné » en sélectionnant la plus grande date enregistrée, y compris si elle est future.
+- Jusqu'à trois discussions non encore utilisées dans la journée sont jouées simultanément selon leurs décalages, avec des identifiants de messages déterministes pour rendre les reprises idempotentes.
+- Les liens `replyTo` ne peuvent viser qu'un message antérieur de la même discussion. Les réponses réelles passent par une fonction callable qui vérifie le parent et conserve un instantané de citation limité.
+## 2026-09-07 - Domino officiel, récompenses et coupons
+
+- Une action du bot est persistée par écriture autoritaire, avec un délai serveur de 2 à 3 secondes et un délai court entre les pioches.
+- Les points du tour sont crédités à la fin de la série officielle au moyen d'un événement idempotent.
+- L'élimination crée un coupon personnel unique : 25 HTG avant la finale, ou une inscription gratuite pour le finaliste.
+- Le coupon est réservé et consommé atomiquement lors du checkout de son propriétaire; il n'est jamais modifiable par le client.
+
+## 2026-09-08 — Orchestration serveur des championnats simulés
+
+- La 32e inscription déclenche la clôture et le tableau côté serveur. Les identifiants de séries sont déterministes afin qu'une nouvelle livraison d'événement ne crée jamais un second tableau.
+- Les confrontations bot contre bot utilisent `simulationBotJobs`; une transaction empêche les doubles mises en file et un bail protège la reprise d'une exécution interrompue. La concurrence du worker est limitée à six séries.
+- Le dashboard ne décide ni du vainqueur ni des points. Il demande l'automatisation, écoute les jobs et affiche leur progression. Une demande individuelle visant une série réelle est refusée; l'action globale ignore ces séries et lance seulement les confrontations 100 % bots.
+- Les moteurs produisent des parties complètes au meilleur de trois, avec graines et profils persistés. Les empreintes d'ouverture réduisent la répétition et les nulles sont rejouées au maximum huit fois avant de rendre le job réessayable.
+- Les manches sont calculées rapidement, mais leurs dates et leurs coups utilisent un rythme synthétique naturel pour rester cohérents dans les lecteurs de replay existants.
+- Les récompenses des joueurs simulés sont inscrites avant la validation terminale de la série; ainsi le tour suivant ne peut pas démarrer avec un total de points incomplet. Aucun coupon d'élimination n'est émis pour eux.

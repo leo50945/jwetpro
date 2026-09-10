@@ -1,5 +1,19 @@
 # Changelog
 
+- 2026-09-10 : publication ciblée des fonctions sociales, règles et index Firestore sur `mopyonlakay`. Face au quota CPU Cloud Run saturé en `us-central1`, les listes privées d’abonnés et d’abonnements utilisent désormais un endpoint authentifié unique `listSocialRelationships` en `us-east1`; son refus `401` hors connexion est vérifié en production. Aucune fonction de jeu, de paiement ou d’assistance n’a été redéployée.
+
+- 2026-09-10 : les contenus sociaux ajoutés après chargement Firestore dans le profil et la messagerie privée respectent désormais immédiatement la langue Français/Kreyòl. Un test de couverture protège la présence des actions sociales sur le hero, Calendrier/Live, Activité, Mes matchs, Progression, Champions et les archives, ainsi que l’exclusion des manches individuelles.
+
+- 2026-09-09 : validation locale complète de la couche sociale avec Auth/Firestore Emulator : confidentialité des favoris, notifications, compteurs privés et conversations; refus des écritures client sur toutes les projections serveur; likes idempotents, regroupement des manches sous leur série, abonnements réciproques, lecture seule après désabonnement, blocage, signalement lié à la conversation et exclusion des joueurs simulés comme acteurs. Le panneau de notifications expose son état, piège le focus, se ferme avec Échap ou au clic extérieur et reste contenu dans l’écran mobile. Les versions des ressources sociales sont renouvelées sur toutes les pages concernées.
+
+- 2026-09-08 : ajout de la couche sociale JWETPRO : partage public et J’aime/favoris sur les championnats et matchs officiels, fiches joueurs réels ou simulés, abonnements, compteurs, notifications internes, paliers d’abonnés partageables et messagerie privée réciproque avec lecture seule, blocage et signalement. Les identités simulées du dashboard sont désormais stables entre les simulations, tandis que les anciens homonymes sans identifiant déclaré restent distincts. Les actions sociales du hero restent visibles sous l’en-tête sur ordinateur et mobile; la reconstruction du répertoire supprime aussi les statistiques précédemment publiques lorsqu’un joueur rend son profil privé. Les longues listes de favoris, abonnés et abonnements sont paginées; la fenêtre de partage piège correctement le focus, se ferme avec Échap et restitue le focus au bouton d’origine. La lecture administrative d’un échange privé exige désormais un signalement lié à cette conversation. Les manches individuelles sont exclues des actions sociales et toutes les vues utilisent la série parente comme match canonique.
+
+- 2026-09-08 : dans `progress.html`, le nom d’un participant est désormais barré dès que le match officiel complet est terminé et confirme sa défaite, donc son élimination du championnat. Les manches enfant sont explicitement exclues du calcul et les ressources sont versionnées afin que cet état apparaisse immédiatement.
+
+- 2026-09-08 : la page `champions.html` respecte désormais le choix global Français/Kreyòl, y compris les textes chargés depuis JavaScript, les états vides et d’erreur, la recherche, les compteurs, les libellés accessibles, les dates et le titre de page. Les parcours autonomes d’inscription/paiement et la page publique de partage chargent maintenant aussi le moteur linguistique commun.
+
+- 2026-09-07 : correction de la faible variété dans Community. Chaque conversation animée utilise désormais quatre à six personnages choisis en priorité parmi ceux qui n’ont pas encore parlé dans la journée. Une page restée ouverte peut demander de nouvelles discussions après le délai serveur de trois minutes; les scénarios et les couples personnage/message restent non répétables pendant la journée, et seuls les 15 derniers messages sont chargés.
+- 2026-09-07 : lors de la première visite, le choix de langue reste prioritaire puis la discussion privée s'ouvre automatiquement après un délai de cinq secondes, avec l'accueil permanent de Jean Estime en français ou en kreyòl. Ce message système reste toujours en tête sans être dupliqué dans Firestore et fait aussi partie du contexte reçu par l'assistant.
 - 2026-09-06 : le plateau d’un match Domino officiel charge désormais exactement le moteur visuel `dominocash` déjà utilisé par l’entraînement, sur desktop et mobile. L’état officiel et la main privée sont synchronisés par un pont de même origine, tandis que chaque coup continue d’être validé par les Cloud Functions; l’ancien plateau HTML recréé et comprimé a été retiré du parcours actif.
 
 - 2026-09-05 : les championnats Domino disposent désormais du même parcours officiel que Mopyon sur le site et dans le dashboard : match personnel prioritaire dans le hero, une seule ligne par confrontation dans « Mes matchs », accès joueur, moteur serveur autoritaire, adversaire simulé Débutant, délai de présence de cinq minutes entre deux vrais joueurs, meilleur de trois manches et replay regroupé. Les mains et la pioche ont été retirées des documents publics et sont servies individuellement aux participants authentifiés.
@@ -192,3 +206,10 @@
 
 
 - Suppression de la colonne latérale droite de la messagerie (informations du salon, membres connectés et rappel des règles) ; la conversation utilise désormais tout l’espace libéré sur desktop.
+
+## 2026-09-07
+
+- Ajout de la programmation quotidienne des discussions Community dans le dashboard : import JSON, validation des 32 personnages, aperçu des volumes, édition et suppression par date.
+- Ajout d'un moteur serveur versionné qui entrelace jusqu'à trois discussions, évite de rejouer une discussion le même jour et choisit la plus grande date enregistrée lorsque la date exacte est absente.
+- Ajout des réponses ciblées dans Community, avec bouton « Répondre », aperçu avant envoi et citation persistante dans les 15 derniers messages chargés.
+- Refonte de la page Community en messagerie plein écran : document non défilable, historique seul défilable, en-tête mobile compact, composeur fixé dans le viewport et suppression du footer.

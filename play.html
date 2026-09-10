@@ -15,9 +15,9 @@
     <meta property="og:image" content="https://jwetpro.com/og-jwetpro.png">
     <meta name="twitter:card" content="summary_large_image">
     <link rel="icon" href="./favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="./src/play.css?v=20260906-domino-embed">
+    <link rel="stylesheet" href="./src/play.css?v=20260907-domino-rewards">
     <link rel="stylesheet" href="./src/play-empty-action.css?v=20260817">
-    <link rel="stylesheet" href="./src/play-replay.css?v=20260903-series-selector">
+    <link rel="stylesheet" href="./src/play-replay.css?v=20260908-domino-only">
     <title>Jouer au Mopyon et au Domino — JWETPRO</title>
   </head>
   <body class="play-page">
@@ -170,10 +170,11 @@
           <span class="match-end-kicker">MATCH TERMINÉ</span>
           <h3 id="match-end-title">Chargement du résultat...</h3>
           <p id="match-end-subtitle"></p>
+          <div id="match-end-reward" class="match-end-reward" hidden></div>
           <div class="match-end-actions">
             <button id="match-end-next" class="play-button play-button-primary" type="button" hidden><i data-lucide="arrow-right" aria-hidden="true"></i>Passer à la manche suivante</button>
             <a id="match-end-replay" class="play-button play-button-primary" href="#"><i data-lucide="play-circle" aria-hidden="true"></i>Voir le replay</a>
-            <button id="match-end-share" class="play-button play-button-primary" type="button" hidden><i data-lucide="share-2" aria-hidden="true"></i>Partager ma progression</button>
+            <button id="match-end-share" class="play-button play-button-primary" type="button" hidden><i data-lucide="share-2" aria-hidden="true"></i>Partager ma victoire</button>
             <button id="match-end-close" class="play-button play-button-quiet" type="button">Fermer</button>
           </div>
         </div>
@@ -223,9 +224,9 @@
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
-    <script src="./shared-shell.js?v=20260904-official-championship-rules"></script>
+    <script src="./shared-shell.js?v=20260909-social-v3"></script>
     <script src="./mopyonpam/script.js?v=20260816"></script>
-    <script src="./src/play.js?v=20260906-domino-embed"></script>
+    <script src="./src/play.js?v=20260908-full-domino-replay"></script>
     <script src="./src/share.js?v=20260905-sharing"></script>
   </body>
 </html>

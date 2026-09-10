@@ -16,11 +16,18 @@ async function startCheckout(user){
   loaderTitle.textContent='Redirection vers le paiement sécurisé';
   loaderCopy.textContent='Veuillez patienter pendant que nous préparons votre inscription. Vous allez être redirigé vers Smart Cut pour finaliser votre paiement en toute sécurité.';
   try{
+    await functions.httpsCallable('releaseExpiredCouponReservations')({}).catch(()=>null);
     const callable=functions.httpsCallable('createChampionshipRegistrationCheckout');
     const localHost=['localhost','127.0.0.1'].includes(location.hostname);
     const response=await callable({championshipId,returnBaseUrl:localHost?location.origin:''});
     const data=response.data||{};
     sessionStorage.setItem('jwetpro_last_ticket_intent',data.intentId||'');
+    if(Number(data.discountAmount)>0){
+      const format=value=>new Intl.NumberFormat('fr-HT').format(Number(value)||0);
+      loaderTitle.textContent=data.amount===0?'Coupon appliqué — inscription couverte':'Coupon appliqué automatiquement';
+      loaderCopy.textContent=`Prix : ${format(data.ticketPrice)} HTG · Réduction : ${format(data.discountAmount)} HTG · Reste à payer : ${format(data.amount)} HTG.`;
+      await new Promise(resolve=>setTimeout(resolve,900));
+    }
     if(data.paidWithCredit){location.assign(data.returnUrl||`./registration-return.html?intent=${encodeURIComponent(data.intentId)}`);return;}
     if(!data.checkoutUrl)throw new Error('URL de paiement indisponible.');
     loaderCopy.textContent='Connexion sécurisée établie. Redirection vers Smart Cut et MonCash en cours...';

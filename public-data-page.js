@@ -1,7 +1,7 @@
 const runPublicPage = () => initPublicPage();
 window.addEventListener('shared-shell-ready', runPublicPage, {once:true});
 const sharedShellScript = document.createElement('script');
-sharedShellScript.src = './shared-shell.js?v=20260903-auth-match-action';
+sharedShellScript.src = './shared-shell.js?v=20260909-social-v3';
 document.head.append(sharedShellScript);
 
 const FIREBASE_CONFIG = {apiKey:'AIzaSyD_Hbkc00HfJDmtw-2KSR4b9AbsThFt8vg',authDomain:'mopyonlakay.firebaseapp.com',projectId:'mopyonlakay',storageBucket:'mopyonlakay.firebasestorage.app',messagingSenderId:'307157893690',appId:'1:307157893690:web:4e5a033d13d54ce86feb03'};
@@ -17,7 +17,8 @@ const players = data => {
   if (data.player1 || data.player2 || data.firstPlayer || data.secondPlayer) return [data.player1 || data.firstPlayer, data.player2 || data.secondPlayer].filter(Boolean).map(player => typeof player === 'string' ? {name:player} : player);
   const ids = Array.isArray(data.participantIds) ? data.participantIds : [];
   const names = data.participantNames || data.playerNames || {};
-  return ids.map(uid => ({uid, name: names[uid] || ''}));
+  const socialIds = data.participantSocialIds || {};
+  return ids.map(uid => ({uid, socialPlayerId:socialIds[uid] || uid, name: names[uid] || ''}));
 };
 const name = player => player?.name || player?.displayName || player?.username || 'Joueur';
 const PLAYER_LEVELS = [
@@ -51,6 +52,8 @@ const uniqueRankingAvatars = rows => {
 const avatarPhotoURL = player => { const value = String(player?.photoURL || '').trim(); return /^https:\/\//.test(value) ? value.replace(/'/g, '%27') : ''; };
 const avatarImageName = player => { const value = String(player?.imageName || ''); return /^[A-Za-z0-9._-]+$/.test(value) ? value : ''; };
 const initialsFrom = value => String(value || '').trim().split(/\s+/).filter(Boolean).map(part => part[0]).slice(0, 2).join('').toUpperCase() || '?';
+const socialPlayerId = player => String(player?.socialPlayerId || player?.uid || player?.userId || player?.playerId || player?.id || '').trim();
+const socialAvatarLink = (player, markup) => /^[A-Za-z0-9_-]{1,150}$/.test(socialPlayerId(player)) ? `<a class="player-social-link" href="./player.html?id=${encodeURIComponent(socialPlayerId(player))}" aria-label="Voir le profil de ${esc(name(player))}">${markup}</a>` : markup;
 const rankingAvatar = (player, fallbackIndex = 0) => {
   const label = name(player);
   const photoURL = avatarPhotoURL(player);
@@ -72,9 +75,9 @@ const matchAvatar = player => {
   const image = avatarImageName(player);
   if (photoURL || image) {
     const background = photoURL ? `center/cover no-repeat url('${photoURL}')` : `center/cover no-repeat url('./src/profilimage/${encodeURIComponent(image)}')`;
-    return `<span class="avatar" style="background:${background}" role="img" aria-label="Avatar de ${esc(label)}"></span>`;
+    return socialAvatarLink(player,`<span class="avatar" style="background:${background}" role="img" aria-label="Avatar de ${esc(label)}"></span>`);
   }
-  return `<span class="avatar" style="display:grid;place-items:center;background:#172738;color:#c9d6e2;font-size:14px;font-weight:800" role="img" aria-label="Avatar de ${esc(label)}">${initialsFrom(label)}</span>`;
+  return socialAvatarLink(player,`<span class="avatar" style="display:grid;place-items:center;background:#172738;color:#c9d6e2;font-size:14px;font-weight:800" role="img" aria-label="Avatar de ${esc(label)}">${initialsFrom(label)}</span>`);
 };
 const rankingIdentity = (value, profilesById, profilesByName) => {
   if (value === null || value === undefined) return null;
@@ -90,6 +93,11 @@ const rankingIdentity = (value, profilesById, profilesByName) => {
 };
 const rankingValues = value => Array.isArray(value) ? value : value && typeof value === 'object' ? Object.values(value) : [];
 const rankingStage = data => String(data.stage || data.phase || data.roundName || data.roundLabel || data.bracketStage || data.matchType || '').toLocaleLowerCase('fr');
+const isSemifinalOrFinalStage = data => {
+  const stage=rankingStage(data).normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  if(/16|seiz|8e|huit|quart|quarter/.test(stage)) return false;
+  return /(^|\b)(demi|semi)(\b|-)|^(finale?|championship)$/.test(stage.trim());
+};
 const playedChampionship = data => /completed|complete|finished|ended|termine|terminé|ongoing|live|en cours/.test(String(data.status || data.state || '').toLocaleLowerCase('fr')) || Boolean(data.completedAt || data.endedAt || data.winner || data.winnerId || data.champion || data.championId);
 const stableRankingAvatarIndex = value => PROFILE_AVATAR_INDEX[normalizedRankingName(value)] ?? Array.from(normalizedRankingName(value)).reduce((total,character) => total + character.codePointAt(0),0) % 12;
 const buildPerformanceRankings = (matches, championships, leaderboardDocs) => {
@@ -119,7 +127,7 @@ const buildPerformanceRankings = (matches, championships, leaderboardDocs) => {
     if (!competitionId) return;
     const matchParticipants = participantFields.flatMap(field => rankingValues(match[field]));
     matchParticipants.forEach(player => add(player,competitionId,'participations'));
-    if (/semi|demi|final/.test(rankingStage(match))) matchParticipants.forEach(player => add(player,competitionId,'semifinals'));
+    if (isSemifinalOrFinalStage(match)) matchParticipants.forEach(player => add(player,competitionId,'semifinals'));
   });
   return [...stats.values()]
     .map(stat => {
@@ -152,10 +160,10 @@ const RANKING_COLUMNS = [
   {field:'points', label:'PTS'},
   {field:'points', label:'NIVEAU'}
 ];
-const performanceRows = (rows, sortField, sortDir) => rows.length ? `<div class="performance-table-scroll"><table class="public-table performance-table"><thead><tr><th>#</th>${RANKING_COLUMNS.map(column => `<th class="ranking-sortable${column.field === sortField ? ' active' : ''}" data-field="${column.field}" role="button" tabindex="0" aria-sort="${column.field === sortField ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}">${column.label}${column.field === sortField ? `<i class="ranking-sort-arrow" aria-hidden="true">${sortDir === 'asc' ? '▲' : '▼'}</i>` : ''}</th>`).join('')}</tr></thead><tbody>${uniqueRankingAvatars(rows).map((row,index) => `<tr><td><span class="ranking-rank">${index+1}</span></td><td>${rankingAvatar({...row.profile,displayName:row.displayName,avatarIndex:row.avatarIndex},row.avatarIndex)}<b>${esc(row.displayName)}</b></td><td><strong>${row.participationCount}</strong></td><td>${row.semifinalCount}</td><td>${row.points}</td><td><span class="level-badge">${esc(row.level)}</span></td></tr>`).join('')}</tbody></table></div>` : '<div class="ranking-stat-empty"><strong>Aucune donnée officielle</strong><span>Ce classement apparaîtra dès que les participations, les points et les phases atteintes seront publiés.</span></div>';
+const performanceRows = (rows, sortField, sortDir) => rows.length ? `<div class="performance-table-scroll"><table class="public-table performance-table"><thead><tr><th>#</th>${RANKING_COLUMNS.map(column => `<th class="ranking-sortable${column.field === sortField ? ' active' : ''}" data-field="${column.field}" role="button" tabindex="0" aria-sort="${column.field === sortField ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}">${column.label}${column.field === sortField ? `<i class="ranking-sort-arrow" aria-hidden="true">${sortDir === 'asc' ? '▲' : '▼'}</i>` : ''}</th>`).join('')}</tr></thead><tbody>${uniqueRankingAvatars(rows).map((row,index) => {const identity={...row.profile,socialPlayerId:row.id||row.profile?.socialPlayerId,displayName:row.displayName,avatarIndex:row.avatarIndex};return `<tr><td><span class="ranking-rank">${index+1}</span></td><td>${socialAvatarLink(identity,rankingAvatar(identity,row.avatarIndex))}${socialAvatarLink(identity,`<b>${esc(row.displayName)}</b>`)}</td><td><strong>${row.participationCount}</strong></td><td>${row.semifinalCount}</td><td>${row.points}</td><td><span class="level-badge">${esc(row.level)}</span></td></tr>`}).join('')}</tbody></table></div>` : '<div class="ranking-stat-empty"><strong>Aucune donnée officielle</strong><span>Ce classement apparaîtra dès que les participations, les points et les phases atteintes seront publiés.</span></div>';
 const scoreChip = (label, value) => `<span class="score-chip"><span>${esc(label)}</span><b>+${esc(value)}</b></span>`;
 const levelChip = (label, value) => `<span class="score-chip level-chip"><span>${esc(label)}</span><b>${esc(value)}</b></span>`;
-const performanceRankingMarkup = (realRows, sortField, sortDir) => `<section class="ranking-table-card" aria-labelledby="performance-ranking-title"><div class="ranking-stat-head"><span class="ranking-stat-icon">#</span><div><p id="performance-ranking-title">CLASSEMENT</p></div></div><details class="ranking-guide-menu"><summary><span><i data-lucide="CircleHelp" aria-hidden="true"></i>Barème des points et niveaux</span><i class="ranking-guide-chevron" data-lucide="ChevronDown" aria-hidden="true"></i></summary><div class="ranking-score-guide"><div class="ranking-guide-row"><span class="ranking-guide-label">POINTS</span><div class="ranking-chip-list">${[['Participation',5],['16e',10],['8e',15],['Quart',25],['Demi',40],['Champion',75],['Sans abandon',5]].map(([label,value]) => scoreChip(label,value)).join('')}</div></div><div class="ranking-guide-row"><span class="ranking-guide-label">NIVEAUX</span><div class="ranking-chip-list">${[['Débutant','0'],['Intermédiaire','50'],['Confirmé','150'],['Expert','300'],['Élite','600+']].map(([label,value]) => levelChip(label,value)).join('')}</div></div><p class="ranking-guide-hint"><i data-lucide="MousePointerClick" aria-hidden="true"></i>Cliquez sur une colonne du tableau pour voir qui est premier dans ce domaine.</p></div></details>${performanceRows(realRows.slice(0,12), sortField, sortDir)}</section>`;
+const performanceRankingMarkup = (realRows, sortField, sortDir) => `<section class="ranking-table-card" aria-labelledby="performance-ranking-title"><div class="ranking-stat-head"><span class="ranking-stat-icon">#</span><div><p id="performance-ranking-title">CLASSEMENT</p></div></div><details class="ranking-guide-menu"><summary><span><i data-lucide="CircleHelp" aria-hidden="true"></i>Barème des points et niveaux</span><i class="ranking-guide-chevron" data-lucide="ChevronDown" aria-hidden="true"></i></summary><div class="ranking-score-guide"><div class="ranking-guide-row"><span class="ranking-guide-label">POINTS</span><div class="ranking-chip-list">${[['Participation',5],['16e',10],['8e',15],['Quart',25],['Demi',40],['Champion',75],['Sans abandon',5]].map(([label,value]) => scoreChip(label,value)).join('')}</div></div><div class="ranking-guide-row"><span class="ranking-guide-label">NIVEAUX</span><div class="ranking-chip-list">${[['Débutant','0'],['Intermédiaire','50'],['Confirmé','150'],['Expert','300'],['Élite','600+']].map(([label,value]) => levelChip(label,value)).join('')}</div></div><p class="ranking-guide-hint"><i data-lucide="MousePointerClick" aria-hidden="true"></i>Cliquez sur une colonne du tableau pour voir qui est premier dans ce domaine.</p></div></details>${performanceRows(realRows, sortField, sortDir)}</section>`;
 const status = data => String(data.status || data.state || data.liveStatus || '').toLowerCase();
 const LIVE_MATCH_DURATION_MS = 90 * 60 * 1000;
 const LIVE_MATCH_STATUSES = new Set(['live','direct','en direct','en cours','ongoing','in-progress','active']);
@@ -173,6 +181,7 @@ const done = data => /complete|completed|finished|ended|termine|terminé|replay/
 const dateText = value => { const date = dt(value); return date ? date.toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'}) : 'Date non publiée'; };
 const publicCurrentUserId = () => window.JwetproCurrentUserId || window.firebase?.auth?.().currentUser?.uid || '';
 const publicIsParticipant = data => Boolean(publicCurrentUserId()) && Array.isArray(data.participantIds) && data.participantIds.includes(publicCurrentUserId());
+const publicMatchSocialAttributes = data => data.kind === 'game' || (data.kind !== 'series' && (data.seriesId || data.parentSeriesId || data.matchSeriesId)) ? ' data-social-disabled="true"' : ` data-social-kind="match" data-social-id="${esc(data.id)}"`;
 const matchCard = (data, isReplay = false) => {
   const matchPlayers = players(data);
   const number = data.number || data.championshipNumber || '';
@@ -184,7 +193,7 @@ const matchCard = (data, isReplay = false) => {
   const action = isReplay
     ? `<a href="./play.html?replay=${encodeURIComponent(data.id)}">VOIR LE REPLAY <i data-lucide="ArrowRight"></i></a>`
     : destinationId ? `<a href="./play.html?${participant ? 'join' : 'match'}=${encodeURIComponent(destinationId)}">${participant ? 'REJOINDRE LE MATCH' : 'REGARDER LE MATCH'} <i data-lucide="ArrowRight"></i></a>` : '';
-  return `<article class="public-card match-card"><div class="public-top"><b class="public-status ${isReplay ? 'replay' : 'live'}"><i></i>${isReplay ? 'REPLAY' : 'EN DIRECT'}</b><time>${esc(dateText(data.startedAt || data.createdAt || data.startAt))}</time></div><h2>${game(data.game || data.type)} ${number ? `<span>#${esc(number)}</span>` : ''}</h2><div class="match-players"><div>${matchAvatar(matchPlayers[0])}<b>${esc(name(matchPlayers[0]))}</b></div><strong>${esc(seriesScore)}</strong><div>${matchAvatar(matchPlayers[1])}<b>${esc(name(matchPlayers[1]))}</b></div></div><div class="public-bottom"><span>${isReplay ? `Match terminé${isSeries ? ' · 2 manches gagnantes' : ''}` : `${esc(data.viewers || 0)} spectateurs`}</span>${action}</div></article>`;
+  return `<article class="public-card match-card"${publicMatchSocialAttributes(data)}><div class="public-top"><b class="public-status ${isReplay ? 'replay' : 'live'}"><i></i>${isReplay ? 'REPLAY' : 'EN DIRECT'}</b><time>${esc(dateText(data.startedAt || data.createdAt || data.startAt))}</time></div><h2>${game(data.game || data.type)} ${number ? `<span>#${esc(number)}</span>` : ''}</h2><div class="match-players"><div>${matchAvatar(matchPlayers[0])}${socialAvatarLink(matchPlayers[0],`<b>${esc(name(matchPlayers[0]))}</b>`)}</div><strong>${esc(seriesScore)}</strong><div>${matchAvatar(matchPlayers[1])}${socialAvatarLink(matchPlayers[1],`<b>${esc(name(matchPlayers[1]))}</b>`)}</div></div><div class="public-bottom"><span>${isReplay ? `Match terminé${isSeries ? ' · 2 manches gagnantes' : ''}` : `${esc(data.viewers || 0)} spectateurs`}</span>${action}</div></article>`;
 };
 const normalizedReplaySearch = value => String(value || '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase('fr').replace(/\s+/g, ' ').trim();
 const replayChampionshipId = match => String(match.championshipId || match.tournamentId || match.competitionId || '').trim();
@@ -213,6 +222,36 @@ const replayMatchSearchText = (match, championship, championshipLabel) => normal
   championship?.id,
   ...players(match).map(name)
 ].filter(Boolean).join(' '));
+const REPLAY_ROUNDS = Object.freeze([
+  {key:'16e', label:'16ÈMES DE FINALE', shortLabel:'16èmes', order:1},
+  {key:'8e', label:'8ÈMES DE FINALE', shortLabel:'8èmes', order:2},
+  {key:'quart', label:'QUARTS DE FINALE', shortLabel:'Quarts', order:3},
+  {key:'demi', label:'DEMI-FINALES', shortLabel:'Demies', order:4},
+  {key:'finale', label:'GRANDE FINALE', shortLabel:'Finale', order:5},
+  {key:'autre', label:'AUTRES MATCHS', shortLabel:'Autres', order:6}
+]);
+const replayRoundKey = match => {
+  const value = normalizedReplaySearch([match.round,match.stage,match.phase,match.roundName,match.roundLabel,match.bracketStage,match.matchType].filter(Boolean).join(' '));
+  if (/(^|\s|[-_])(16e|16eme|seizieme|round[\s_-]*(of[\s_-]*)?32|round32|1\/16)(\s|$|[-_])/.test(value)) return '16e';
+  if (/(^|\s|[-_])(8e|8eme|huitieme|round[\s_-]*(of[\s_-]*)?16|round16|1\/8)(\s|$|[-_])/.test(value)) return '8e';
+  if (/quart|quarter|round[\s_-]*(of[\s_-]*)?8|round8|1\/4/.test(value)) return 'quart';
+  if (/demi|semi|round[\s_-]*(of[\s_-]*)?4|round4|1\/2/.test(value)) return 'demi';
+  if (/grande?[\s_-]*finale?|(^|\s|[-_])finale?(\s|$|[-_])|championship/.test(value)) return 'finale';
+  return 'autre';
+};
+const replayMatchPosition = match => {
+  const slot = Math.max(0,Number(match.bracketSlot ?? match.slot ?? match.matchIndex) || 0);
+  const gameNumber = Math.max(0,Number(match.gameNumber ?? match.roundGameNumber) || 0);
+  return slot * 100 + gameNumber;
+};
+const replayRoundsMarkup = matches => {
+  const rounds = new Map(REPLAY_ROUNDS.map(round => [round.key, {...round,matches:[]} ]));
+  matches.forEach(match => rounds.get(replayRoundKey(match)).matches.push(match));
+  return [...rounds.values()].filter(round => round.matches.length).map(round => {
+    round.matches.sort((a,b) => replayMatchPosition(a) - replayMatchPosition(b) || (matchActivityDate(a)?.getTime() || 0) - (matchActivityDate(b)?.getTime() || 0));
+    return `<section class="replay-round replay-round-${round.key}" data-replay-round><header class="replay-round-heading"><span class="replay-round-step">${String(round.order).padStart(2,'0')}</span><div><small>TOUR DU CHAMPIONNAT</small><h3>${round.label}</h3></div><span class="replay-round-line" aria-hidden="true"></span><b class="replay-round-count"><span data-visible-round-count>${round.matches.length}</span> <span data-visible-round-label>match${round.matches.length === 1 ? '' : 's'}</span></b></header><div class="replay-match-grid">${round.matches.map(match => `<div class="replay-match-item" data-replay-match data-search="${esc(match.replaySearchText)}">${matchCard(match, true)}</div>`).join('')}</div></section>`;
+  }).join('');
+};
 const replayBrowserMarkup = (replayMatches, championships) => {
   const championshipsById = new Map(championships.map(record => [String(record.id), record]));
   const championshipsByNumber = new Map();
@@ -241,9 +280,8 @@ const replayBrowserMarkup = (replayMatches, championships) => {
     const championshipMarkup = championshipGroups.map(group => {
       const isOpen = firstChampionship;
       firstChampionship = false;
-      group.matches.sort((a, b) => (matchActivityDate(b)?.getTime() || 0) - (matchActivityDate(a)?.getTime() || 0));
       const gameLabel = game(group.championship?.game || group.matches[0]?.game || group.matches[0]?.type);
-      return `<details class="replay-championship" data-replay-championship${isOpen ? ' open' : ''}><summary><span class="replay-championship-icon">${gameLabel === 'DOMINO' ? '<i data-lucide="Dice5"></i>' : '<i data-lucide="Grid3X3"></i>'}</span><span class="replay-championship-copy"><small>CHAMPIONNAT</small><strong>${esc(group.label)}</strong></span><span class="replay-championship-count"><b data-visible-count>${group.matches.length}</b><span data-visible-match-label> match${group.matches.length === 1 ? '' : 's'}</span></span><i class="replay-championship-chevron" data-lucide="ChevronDown"></i></summary><div class="replay-match-grid">${group.matches.map(match => `<div class="replay-match-item" data-replay-match data-search="${esc(match.replaySearchText)}">${matchCard(match, true)}</div>`).join('')}</div></details>`;
+      return `<details class="replay-championship" data-replay-championship${isOpen ? ' open' : ''}><summary><span class="replay-championship-icon">${gameLabel === 'DOMINO' ? '<i data-lucide="Dice5"></i>' : '<i data-lucide="Grid3X3"></i>'}</span><span class="replay-championship-copy"><small>CHAMPIONNAT</small><strong>${esc(group.label)}</strong></span><span class="replay-championship-count"><b data-visible-count>${group.matches.length}</b><span data-visible-match-label> match${group.matches.length === 1 ? '' : 's'}</span></span><i class="replay-championship-chevron" data-lucide="ChevronDown"></i></summary><div class="replay-rounds">${replayRoundsMarkup(group.matches)}</div></details>`;
     }).join('');
     return `<section class="replay-date-group" data-replay-date><header class="replay-date-heading"><span></span><time datetime="${dateGroup.date ? dateGroup.date.toISOString() : ''}">${esc(replayDateLabel(dateGroup.date))}</time><b data-visible-championships>${championshipGroups.length} championnat${championshipGroups.length === 1 ? '' : 's'}</b></header>${championshipMarkup}</section>`;
   }).join('');
@@ -268,6 +306,14 @@ const bindReplayBrowser = () => {
         item.hidden = !visible;
         if (visible) visibleInChampionship += 1;
       });
+      championship.querySelectorAll('[data-replay-round]').forEach(round => {
+        const visibleInRound = round.querySelectorAll('[data-replay-match]:not([hidden])').length;
+        round.hidden = visibleInRound === 0;
+        const roundCount = round.querySelector('[data-visible-round-count]');
+        const roundLabel = round.querySelector('[data-visible-round-label]');
+        if (roundCount) roundCount.textContent = visibleInRound;
+        if (roundLabel) roundLabel.textContent = `match${visibleInRound === 1 ? '' : 's'}`;
+      });
       championship.hidden = visibleInChampionship === 0;
       const visibleCount = championship.querySelector('[data-visible-count]');
       if (visibleCount) visibleCount.textContent = visibleInChampionship;
@@ -291,7 +337,7 @@ const bindReplayBrowser = () => {
   input.addEventListener('input', filter);
   clear.addEventListener('click', () => { input.value = ''; filter(); input.focus(); });
 };
-const champCard = data => `<article class="public-card champ-card"><i data-lucide="${game(data.game) === 'DOMINO' ? 'Dice5' : 'Grid3X3'}"></i><div><b class="public-status ${data.status === 'registration-open' ? 'open' : 'soon'}">${data.status === 'registration-open' ? 'INSCRIPTIONS OUVERTES' : 'À VENIR'}</b><h2>${game(data.game)} <span>#${esc(data.number || data.id)}</span></h2><p>${esc(dateText(data.startAt || data.startDate))}${data.time ? ` · ${esc(data.time)}` : ''}</p></div><dl><div><dt>Participation</dt><dd>${Number(data.entryFee || 0).toLocaleString('fr-FR')} HTG</dd></div><div><dt>Gain</dt><dd>${Number(data.prize || 0).toLocaleString('fr-FR')} HTG</dd></div><div><dt>Tours</dt><dd>${Number(data.rounds || 5)}</dd></div></dl></article>`;
+const champCard = data => `<article class="public-card champ-card" data-social-kind="championship" data-social-id="${esc(data.id)}"><i data-lucide="${game(data.game) === 'DOMINO' ? 'Dice5' : 'Grid3X3'}"></i><div><b class="public-status ${data.status === 'registration-open' ? 'open' : 'soon'}">${data.status === 'registration-open' ? 'INSCRIPTIONS OUVERTES' : 'À VENIR'}</b><h2>${game(data.game)} <span>#${esc(data.number || data.id)}</span></h2><p>${esc(dateText(data.startAt || data.startDate))}${data.time ? ` · ${esc(data.time)}` : ''}</p></div><dl><div><dt>Participation</dt><dd>${Number(data.entryFee || 0).toLocaleString('fr-FR')} HTG</dd></div><div><dt>Gain</dt><dd>${Number(data.prize || 0).toLocaleString('fr-FR')} HTG</dd></div><div><dt>Tours</dt><dd>${Number(data.rounds || 5)}</dd></div></dl></article>`;
 const empty = (title, text) => `<div class="data-empty"><i data-lucide="Inbox"></i><strong>${title}</strong><span>${text}</span></div>`;
 const liveEmpty = nextChampionship => {
   const nextStart = matchStartDate(nextChampionship || {});
@@ -314,9 +360,14 @@ const loadPublicMatches = async db => {
     }
     result.value.docs.forEach(doc => unique.set(doc.id,{id:doc.id,...doc.data()}));
   });
+  const missingSeriesIds = [...new Set([...unique.values()].map(match => String(match.seriesId || match.parentSeriesId || match.matchSeriesId || '')).filter(id => /^[A-Za-z0-9_-]{1,150}$/.test(id) && !unique.has(id)))].slice(0,50);
+  if (missingSeriesIds.length) {
+    const parents = await Promise.all(missingSeriesIds.map(id => db.collection('matches').doc(id).get().catch(() => null)));
+    parents.filter(document => document?.exists).forEach(document => unique.set(document.id,{id:document.id,...document.data()}));
+  }
   const matches = [...unique.values()];
   const seriesIds = new Set(matches.filter(match => match.kind === 'series').map(match => match.id));
-  return matches.filter(match => match.kind === 'series' || !match.seriesId || !seriesIds.has(match.seriesId));
+  return matches.filter(match => match.kind === 'series' || !(match.seriesId || match.parentSeriesId || match.matchSeriesId) || !seriesIds.has(String(match.seriesId || match.parentSeriesId || match.matchSeriesId)));
 };
 
 async function initPublicPage() {
@@ -334,7 +385,7 @@ async function initPublicPage() {
     const [matches, championshipsSnapshot, leaderboardSnapshot] = await Promise.all([
       loadPublicMatches(db),
       db.collection('championships').limit(200).get(),
-      db.collection('leaderboard').limit(200).get()
+      db.collection('leaderboard').get()
     ]);
     const championships = championshipsSnapshot.docs.map(doc => ({id:doc.id,...doc.data()})).filter(record => record.status !== 'cancelled');
     if (mode === 'live') {
@@ -345,7 +396,7 @@ async function initPublicPage() {
         document.querySelector('[data-page-title]').textContent = 'Matchs terminés et replays';
         document.title = 'Matchs terminés et replays — JWETPRO';
         const heroCopy = document.querySelector('.public-hero > p:last-child');
-        if (heroCopy) heroCopy.textContent = 'Recherchez un match, puis explorez les replays classés par date et par championnat.';
+        if (heroCopy) heroCopy.textContent = 'Recherchez un match, puis explorez les replays classés par date, championnat et tour.';
         const footerLabel = document.querySelector('.public-foot span');
         if (footerLabel) footerLabel.textContent = 'JWETPRO · Replays';
         bindReplayBrowser();

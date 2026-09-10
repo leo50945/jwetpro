@@ -1,19 +1,22 @@
-﻿const I=(name)=>`<i data-lucide="${name}" aria-hidden="true"></i>`;
+const I=(name)=>`<i data-lucide="${name}" aria-hidden="true"></i>`;
 const d=window.homeData;
 const standard=d.standard;
 const PROFILE_AVATAR_INDEX={'ricardo p.':0,'jean m.':1,'michel d.':2,'david t.':3,'nadia l.':4,'alex r.':5,'ruth joseph':6,'mikaël louis':7,'sarah charles':8,'esther paul':9,'lovely michel':10,'wesley auguste':11};
 const initialsOf=(name)=>String(name||'').trim().split(/\s+/).filter(Boolean).map(part=>part[0]).slice(0,2).join('').toUpperCase()||'?';
+const mainSocialPlayerId=player=>String(player?.socialPlayerId||player?.uid||player?.userId||player?.playerId||player?.id||'').trim();
+const mainAvatarLink=(player,name,markup)=>/^[A-Za-z0-9_-]{1,150}$/.test(mainSocialPlayerId(player))?`<a class="player-social-link" href="./player.html?id=${encodeURIComponent(mainSocialPlayerId(player))}" aria-label="Voir le profil de ${publicEscape(name)}">${markup}</a>`:markup;
 const playerAvatarMarkup=(player,name,className='avatar')=>{
   const photoURL=String(player?.photoURL||'').trim();
   const imageName=String(player?.imageName||'').trim();
-  if(/^https:\/\//.test(photoURL))return `<span class="${className} has-image" style="background-image:url('${photoURL.replace(/'/g,'%27')}');background-size:cover;background-position:center;background-color:#172738" role="img" aria-label="Photo de ${publicEscape(name)}"></span>`;
-  if(/^[A-Za-z0-9._-]+$/.test(imageName))return `<span class="${className} has-image" style="background-image:url('./src/profilimage/${encodeURIComponent(imageName)}');background-size:cover;background-position:center;background-color:#172738" role="img" aria-label="Photo de ${publicEscape(name)}"></span>`;
-  return `<span class="${className} has-initials" style="background-image:none;background-color:#172738;display:grid;place-items:center;color:#c9d6e2;font-size:14px;font-weight:800;letter-spacing:.02em" role="img" aria-label="Avatar de ${publicEscape(name)}">${initialsOf(name)}</span>`;
+  if(/^https:\/\//.test(photoURL))return mainAvatarLink(player,name,`<span class="${className} has-image" style="background-image:url('${photoURL.replace(/'/g,'%27')}');background-size:cover;background-position:center;background-color:#172738" role="img" aria-label="Photo de ${publicEscape(name)}"></span>`);
+  if(/^[A-Za-z0-9._-]+$/.test(imageName))return mainAvatarLink(player,name,`<span class="${className} has-image" style="background-image:url('./src/profilimage/${encodeURIComponent(imageName)}');background-size:cover;background-position:center;background-color:#172738" role="img" aria-label="Photo de ${publicEscape(name)}"></span>`);
+  return mainAvatarLink(player,name,`<span class="${className} has-initials" style="background-image:none;background-color:#172738;display:grid;place-items:center;color:#c9d6e2;font-size:14px;font-weight:800;letter-spacing:.02em" role="img" aria-label="Avatar de ${publicEscape(name)}">${initialsOf(name)}</span>`);
 };
 Object.assign(d.next,{entry:`${standard.entryFee} HTG`,prize:`${standard.prize.toLocaleString('fr-FR')} HTG`,max:String(standard.maxPlayers),format:standard.format});
 const activity=(x)=>{const isDomino=x.game==='DOMINO'; const activityImage=isDomino?'./src/images/iconedomino.png':'./src/images/logogomoku.png'; const activityAlt=isDomino?'Icône Domino':'Icône Mopyon'; const value=x.value || `${standard.entryFee} HTG`; const amount=x.amount || `${standard.maxPlayers} joueurs max`; const action=x.action || (x.tone==='open'?{label:'S’INSCRIRE',href:'./calendar.html'}:x.tone==='live'?{label:'SUIVRE LE CHAMPIONNAT',href:'./progress.html'}:x.tone==='done'?{label:'REVOIR LE CHAMPIONNAT',href:'./activity.html'}:{label:'VOIR LE CHAMPIONNAT',href:'./progress.html'}); return `<article class="activity-card" data-reveal><div class="activity-icon"><img src="${activityImage}" alt="${activityAlt}"></div><div class="activity-content"><div class="card-top"><b class="card-title">${x.game} ${x.id}</b><span class="status ${x.tone}">${x.status}</span></div><div class="card-date">${x.date}</div><div class="card-footer"><div class="card-detail">${x.detail}<strong>${value}</strong></div><div class="card-detail">${x.tone==='done'?'Gain':'Capacité'}<strong>${amount}</strong></div></div><a class="activity-action ${x.tone}" href="${action.href}">${action.label} ${I('ArrowRight')}</a></div></article>`};
 const live=(x)=>{const players=x.players.split('/').map((player)=>player.trim()); return `<article class="live-card" data-reveal><div><span class="status ${x.tone}">${x.badge}</span><div class="live-game">${x.game}</div><div class="live-players"><span class="player">${playerAvatarMarkup({},players[0])}<b>${players[0]}</b></span><span class="versus">VS</span><span class="player">${playerAvatarMarkup({},players[1])}<b>${players[1]}</b></span></div></div><div><div class="viewer">${I('Eye')}${x.viewers} spectateurs</div><div class="live-cta"><span>${x.action}</span></div></div></article>`};
 const publicEscape = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+const mainMatchSocialId = data => String(data?.kind === 'series' ? data.id : data?.seriesId || data?.parentSeriesId || data?.matchSeriesId || data?.id || '');
 const matchToDate = value => { if (!value) return null; const date = value?.toDate ? value.toDate() : new Date(value); return Number.isNaN(date.getTime()) ? null : date; };
 let homepageStartedMatches = [];
 let homepageFeaturedChampionship = null;
@@ -22,6 +25,8 @@ let homepageMatchRecords = [];
 let homepagePersonalMatches = [];
 let homepagePersonalMatchesRequest = 0;
 let homepageCurrentProfile = null;
+let homepageCoupons = [];
+let homepageCouponsUnsubscribe = null;
 let homepageHeroTimer = null;
 const homepageLeaderboardByName = new Map();
 const normalizedPublicId = value => String(value ?? '').trim().replace(/^#+/, '').toLowerCase();
@@ -45,7 +50,26 @@ const matchPlayers = data => {
   if (data.player1 || data.player2 || data.firstPlayer || data.secondPlayer) return [data.player1 || data.firstPlayer, data.player2 || data.secondPlayer].filter(Boolean).map(player => typeof player === 'string' ? {name:player} : player);
   const ids = Array.isArray(data.participantIds) ? data.participantIds : [];
   const names = data.participantNames || data.playerNames || {};
-  return ids.map(uid => ({uid, name: names[uid] || ''}));
+  const socialIds = data.participantSocialIds || {};
+  return ids.map(uid => ({uid, socialPlayerId:socialIds[uid] || uid, name: names[uid] || ''}));
+};
+const matchFinalScore = (data,players=[]) => {
+  const ids = Array.isArray(data.participantIds) ? data.participantIds : players.map(mainSocialPlayerId);
+  const candidates = [
+    [data.seriesScore?.p1,data.seriesScore?.p2],
+    [data.seriesScore?.player1,data.seriesScore?.player2],
+    [data.score?.p1,data.score?.p2],
+    [data.score?.player1,data.score?.player2],
+    [data.player1Score,data.player2Score],
+    [data.homeScore,data.awayScore],
+    [data.scores?.[ids[0]],data.scores?.[ids[1]]],
+    [data.playerScores?.[ids[0]],data.playerScores?.[ids[1]]]
+  ];
+  const explicit = candidates.find(([first,second]) => Number.isFinite(Number(first)) && Number.isFinite(Number(second)));
+  if (explicit) return {p1:Math.max(0,Number(explicit[0])||0),p2:Math.max(0,Number(explicit[1])||0)};
+  const finished = /complete|completed|finished|ended|termine|terminé|replay/.test(publicMatchStatus(data));
+  if (!finished || !data.winnerId || ids.length < 2) return null;
+  return data.winnerId === ids[0] ? {p1:1,p2:0} : data.winnerId === ids[1] ? {p1:0,p2:1} : null;
 };
 const renderMatchRecord = (data, kind = 'replay') => {
   const players = matchPlayers(data);
@@ -54,7 +78,7 @@ const renderMatchRecord = (data, kind = 'replay') => {
   const number = data.number || data.championshipNumber || '';
   if (kind === 'upcoming') {
     const href = data.championshipId ? `./progress.html?id=${encodeURIComponent(data.championshipId)}` : './progress.html';
-    return `<article class="live-card upcoming-card" data-reveal><div><span class="status soon">À VENIR</span><div class="live-game">${publicEscape(game)} ${number ? `#${publicEscape(number)}` : ''}</div><div class="live-players"><span class="player">${playerAvatarMarkup(players[0],names[0])}<b>${publicEscape(names[0])}</b></span><span class="versus">VS</span><span class="player">${playerAvatarMarkup(players[1],names[1])}<b>${publicEscape(names[1])}</b></span></div></div><div><div class="viewer">Match à venir</div><div class="live-cta"><a href="${href}">VOIR LE CHAMPIONNAT</a></div></div></article>`;
+    return `<article class="live-card upcoming-card" data-reveal data-social-kind="match" data-social-id="${publicEscape(mainMatchSocialId(data))}"><div><span class="status soon">À VENIR</span><div class="live-game">${publicEscape(game)} ${number ? `#${publicEscape(number)}` : ''}</div><div class="live-players"><span class="player">${playerAvatarMarkup(players[0],names[0])}${mainAvatarLink(players[0],names[0],`<b>${publicEscape(names[0])}</b>`)}</span><span class="versus">VS</span><span class="player">${playerAvatarMarkup(players[1],names[1])}${mainAvatarLink(players[1],names[1],`<b>${publicEscape(names[1])}</b>`)}</span></div></div><div><div class="viewer">Match à venir</div><div class="live-cta"><a href="${href}">VOIR LE CHAMPIONNAT</a></div></div></article>`;
   }
   const isReplay = kind === 'replay';
   const isParticipant = !isReplay && Boolean(currentAuthUser?.uid) && heroMatchParticipantIds(data).includes(currentAuthUser.uid);
@@ -63,8 +87,11 @@ const renderMatchRecord = (data, kind = 'replay') => {
   const destinationId = isParticipant && isSeries ? data.id : watchId;
   const href = data.id ? (isReplay ? `./play.html?replay=${encodeURIComponent(data.id)}` : destinationId ? `./play.html?${isParticipant ? 'join' : 'match'}=${encodeURIComponent(destinationId)}` : './live.html') : './live.html';
   const actionLabel = isReplay ? 'REGARDER LE REPLAY' : isParticipant ? 'REJOINDRE LE MATCH' : 'REGARDER LE MATCH';
-  const seriesScore = isSeries && data.seriesScore ? `${Number(data.seriesScore.p1) || 0}–${Number(data.seriesScore.p2) || 0}` : 'VS';
-  return `<article class="live-card${isReplay ? ' replay-card' : ''}" data-reveal><div><span class="status ${isReplay ? 'replay' : 'live'}">${isReplay ? 'REPLAY' : 'EN DIRECT'}</span><div class="live-game">${publicEscape(game)} ${number ? `#${publicEscape(number)}` : ''}</div><div class="live-players"><span class="player">${playerAvatarMarkup(players[0],names[0])}<b>${publicEscape(names[0])}</b></span><span class="versus">${publicEscape(seriesScore)}</span><span class="player">${playerAvatarMarkup(players[1],names[1])}<b>${publicEscape(names[1])}</b></span></div></div><div><div class="viewer">${isReplay ? `Match terminé${isSeries ? ' · 2 manches gagnantes' : ''}` : `${I('Eye')}${publicEscape(data.viewers || 0)} spectateurs`}</div><div class="live-cta"><a href="${href}">${actionLabel}</a></div></div></article>`;
+  const score = isReplay ? matchFinalScore(data,players) : null;
+  const center = score
+    ? `<span class="versus match-final-score" aria-label="Score final ${score.p1} à ${score.p2}"><small>SCORE FINAL</small><strong>${score.p1}–${score.p2}</strong></span>`
+    : '<span class="versus">VS</span>';
+  return `<article class="live-card${isReplay ? ' replay-card' : ''}" data-reveal data-social-kind="match" data-social-id="${publicEscape(mainMatchSocialId(data))}"><div><span class="status ${isReplay ? 'replay' : 'live'}">${isReplay ? 'REPLAY' : 'EN DIRECT'}</span><div class="live-game">${publicEscape(game)} ${number ? `#${publicEscape(number)}` : ''}</div><div class="live-players"><span class="player">${playerAvatarMarkup(players[0],names[0])}${mainAvatarLink(players[0],names[0],`<b>${publicEscape(names[0])}</b>`)}</span>${center}<span class="player">${playerAvatarMarkup(players[1],names[1])}${mainAvatarLink(players[1],names[1],`<b>${publicEscape(names[1])}</b>`)}</span></div></div><div><div class="viewer">${isReplay ? `Match terminé${isSeries ? ' · 2 manches gagnantes' : ''}` : `${I('Eye')}${publicEscape(data.viewers || 0)} spectateurs`}</div><div class="live-cta"><a href="${href}">${actionLabel}</a></div></div></article>`;
 };
 const renderMatchesEmptyState = (
   title = 'Aucun match publié',
@@ -82,7 +109,7 @@ document.querySelector('#app').innerHTML=`
 <section class="section dark-section" id="live"><div class="container"><div class="section-head"><h2 class="section-title"><span class="live-title-live">MATCHS EN DIRECT</span><span class="live-title-replay">REVOIR LES MATCHS</span> <span class="status live">LIVE</span><span class="status replay">REPLAY</span></h2><a class="arrow-link" href="#live">VOIR TOUS LES MATCHS ${I('ChevronRight')}</a></div><div class="live-grid">${d.live.map(live).join('')}</div></div></section>
 <section class="section" id="progress"><div class="container"><div class="section-head"><h2 class="section-title">PROGRESSION DU CHAMPIONNAT</h2><a class="arrow-link" href="#progress">VOIR LE CHAMPIONNAT EN DIRECT <i data-lucide="ChevronRight" aria-hidden="true"></i></a></div><div class="progress-panel" data-reveal aria-live="polite"><div class="progress-summary"><div><div class="progress-heading"><b class="progress-name">Chargement…</b><span class="status soon">À VENIR</span></div><p class="progress-date">Données du prochain championnat</p></div><div class="progress-main"><div><div class="metric-label">JOUEURS MAX</div><div class="metric-value">—</div></div><div><div class="metric-label">MATCHS JOUÉS</div><div class="metric-value">—</div></div><div><div class="metric-label">TOUR ACTUEL</div><div class="metric-value">—</div></div><div><div class="metric-label">MATCHS EN COURS</div><div class="metric-value">—</div></div><div><div class="metric-label">HEURE DE DÉBUT</div><div class="metric-value">—</div></div></div><div class="progress-label"><span>Progression globale</span><b>0%</b></div><div class="meter"><div class="meter-fill" style="width:0%"></div></div></div><div class="round-bracket"><div class="bracket-head"><span>HUITIÈMES</span><span>QUARTS</span><span>DEMI-FINALES</span><span>FINALE</span><span>CHAMPION</span></div><div class="bracket-flow"><div class="bracket-col"><i>●</i><i>●</i><i>●</i><i>●</i><i>●</i><i>●</i><i>●</i><i>●</i></div><div class="bracket-col"><i>●</i><i>●</i><i>●</i><i>●</i></div><div class="bracket-col"><i>●</i><i>●</i></div><div class="bracket-col"><i>●</i></div><div class="bracket-winner">♛</div></div></div></div></div></section>
 <section class="section dark-section" id="games"><div class="container"><div class="section-head"><h2 class="section-title">CHOISIS TON JEU</h2></div><div class="game-grid">${game('Mopyon','Jeu de stratégie et de concentration','Mopyon','')} ${game('DOMINO','Rapidité, tactique et anticipation','domino','<div class="domino-art"><img src="./src/images/imagedomino.png" alt="Dominos prêts pour une partie"></div>')}</div></div></section>
-<section class="section" id="champions"><div class="container split-grid"><div><div class="section-head"><h2 class="section-title">DERNIERS CHAMPIONS</h2></div><div class="champion-list">${d.champions.map(c=>`<article class="champion-card ${c.rank==='#1'?'first':''}" data-reveal><div class="champion-rank">${c.rank}</div>${I(c.rank==='#1'?'Crown':'Medal')}<div class="champion-name">${c.name}</div><div class="champion-game">${c.game}</div><div class="champion-prize">5 000 HTG</div><div class="champion-date">${c.date}</div></article>`).join('')}</div></div><div class="ranking-panel" id="ranking"><div class="ranking-header">${I('ChartNoAxesColumnIncreasing')}<h2 class="section-title">CLASSEMENT GÉNÉRAL</h2></div><table class="ranking-table"><thead><tr><th>#</th><th>JOUEUR</th><th>NIVEAU</th><th>POINTS</th></tr></thead><tbody></tbody></table><a class="ranking-all-link" id="ranking-all-link" href="./ranking.html">VOIR TOUT LE CLASSEMENT ${I('ArrowRight')}</a></div></div></section>
+<section class="section" id="champions"><div class="container split-grid"><div><div class="section-head"><h2 class="section-title">DERNIERS CHAMPIONS</h2></div><div class="champion-list">${d.champions.map(c=>`<article class="champion-card ${c.rank==='#1'?'first':''}" data-reveal><div class="champion-rank">${c.rank}</div>${playerAvatarMarkup(c,c.name,'champion-avatar')}${I(c.rank==='#1'?'Crown':'Medal')}<div class="champion-name">${c.name}</div><div class="champion-game">${c.game}</div><div class="champion-prize">5 000 HTG</div><div class="champion-date">${c.date}</div></article>`).join('')}</div></div><div class="ranking-panel" id="ranking"><div class="ranking-header">${I('ChartNoAxesColumnIncreasing')}<h2 class="section-title">CLASSEMENT GÉNÉRAL</h2></div><table class="ranking-table"><thead><tr><th>#</th><th>JOUEUR</th><th>NIVEAU</th><th>POINTS</th></tr></thead><tbody></tbody></table><a class="ranking-all-link" id="ranking-all-link" href="./ranking.html">VOIR TOUT LE CLASSEMENT ${I('ArrowRight')}</a></div></div></section>
 <section class="section dark-section" id="process"><div class="container"><div class="section-head"><h2 class="section-title">TOUT SE PASSE SUR JWETPRO</h2></div><div class="process-list">${[['Wallet','INSCRIPTION RAPIDE','Réservez le championnat et payez votre participation.'],['Gamepad2','JOUEZ SUR LA PLATEFORME','Tous les matchs se jouent directement sur JWETPRO.'],['Radio','REGARDEZ LES MATCHS','Suivez chaque partie en direct ou en replay.'],['','SUIVEZ LA PROGRESSION','Voyez l’avancement du championnat et les résultats.'],['Shield','RÉSULTATS TRANSPARENTS','Les parties et résultats sont enregistrés.']].map((p,i)=>`<article class="process-item process-item-${i+1}" data-reveal><div class="process-visual" aria-hidden="true"></div>${i===3?'<span class="process-progress-icon" aria-hidden="true">↗</span>':I(p[0])}<h3>${p[1]}</h3><p>${p[2]}</p></article>`).join('')}</div></div></section>
 <section class="section" id="calendar"><div class="container"><div class="section-head"><h2 class="section-title">CALENDRIER DES CHAMPIONNATS</h2></div><div class="calendar-strip" data-reveal>${d.calendar.map(c=>`<article class="calendar-card"><div class="calendar-day">${c[0]}</div><div class="calendar-game">${c[1]}</div><div class="calendar-date">${c[2]}</div><span class="status ${c[4]}">${c[3]}</span></article>`).join('')}</div></div></section><section class="trust-bar"><div class="container trust-list"><div class="trust-item">${I('Lock')}<div><strong>PAIEMENTS SÉCURISÉS</strong><span>Vos transactions sont protégées</span></div></div><div class="trust-item">${I('CircleCheck')}<div><strong>RÉSULTATS VALIDÉS</strong><span>Résultats contrôlés par le système</span></div></div><div class="trust-item">${I('Wallet')}<div><strong>GAINS VERSÉS</strong><span>Paiement selon les règles du championnat</span></div></div><div class="trust-item">${I('Headphones')}<div><strong>SUPPORT RÉACTIF</strong><span>Aide disponible en cas de problème</span></div></div></div></section></main><footer><div class="container footer-grid"><div><a class="brand" href="#top"><span class="brand-mark serif">JP</span><span>JWET<span class="brand-pro">PRO</span></span></a><p class="footer-copy">Le hub des championnats<br>de jeux de table en Haïti.</p></div><div><div class="footer-title">LIENS RAPIDES</div><div class="footer-links"><a href="./calendar.html">Championnats</a><a href="./live.html">En direct</a><a href="./ranking.html">Classement</a><a href="./champions.html">Champions</a></div></div><div><div class="footer-title">SUPPORT</div><div class="footer-links"><a href="./faq.html">FAQ</a><a href="#rules">Règlement</a><a href="./privacy.html">Confidentialité</a></div></div><div><div class="footer-title">SUIVEZ-NOUS</div><div class="footer-links"><a href="./social.html#facebook">Facebook</a><a href="./social.html#instagram">Instagram</a><a href="./social.html#whatsapp">WhatsApp</a></div></div></div></footer>`;
 document.querySelector('footer')?.insertAdjacentHTML('beforeend', '<div class="container footer-bottom"><span>© 2026 JWETPRO. Tous droits réservés.</span><span>Championnats de jeux de table en Haïti.</span></div>');
@@ -122,7 +149,7 @@ const rulesContent = {
       ['Jeu équitable', ['Utiliser un bot ou un programme pour choisir ses coups est interdit.', 'Les multi-comptes et le partage de compte sont interdits.', 'Il est interdit de recevoir une aide extérieure pendant un match officiel.', 'Il est interdit d’organiser volontairement une victoire ou une défaite.', 'L’exploitation d’un bug ou d’une faille est interdite.', 'JwetPro peut examiner les parties suspectes et suspendre un résultat lorsqu’une vérification est nécessaire.']],
       ['Spectateurs et matchs en direct', ['Les matchs officiels peuvent être suivis directement sur JwetPro.', 'Les spectateurs peuvent voir le plateau, les coups joués, l’état du match, la progression du championnat et les résultats.', 'Un spectateur ne doit jamais pouvoir intervenir dans une partie ou transmettre une aide à un joueur pendant son match.']],
       ['Récompenses et coupons', ['Le champion remporte 2 000 HTG après validation définitive des résultats.', 'Le deuxième reçoit un coupon couvrant gratuitement une inscription.', 'Chacun des autres participants reçoit un coupon de réduction de 25 HTG.', 'Chaque coupon est personnel, non transférable, non cumulable et utilisable une seule fois uniquement pour le prochain championnat publié, qu’il soit Mopyon ou Domino. Il expire ensuite.']],
-      ['Points et niveaux', ['Les points sont attribués uniquement après publication officielle d’un championnat.', 'Barème : participation confirmée +5 pts, victoire en 16e +10 pts, victoire en 8e +15 pts, victoire en quart +25 pts, victoire en demi-finale +40 pts, champion +75 pts, bonus sans abandon +5 pts.', 'L’entraînement libre ne donne aucun point officiel.', 'Chaque joueur est compté une seule fois par championnat.', 'Les niveaux sont automatiques : Débutant 0-49 pts, Intermédiaire 50-149 pts, Confirmé 150-299 pts, Expert 300-599 pts, Élite 600 pts et plus.']],
+      ['Points et niveaux', ['Les points de victoire sont crédités dès la validation serveur de chaque série officielle; les bonus globaux sont réglés à la clôture du championnat.', 'Barème : participation confirmée +5 pts, victoire en 16e +10 pts, victoire en 8e +15 pts, victoire en quart +25 pts, victoire en demi-finale +40 pts, champion +75 pts, bonus sans abandon +5 pts.', 'L’entraînement libre ne donne aucun point officiel.', 'Chaque joueur est compté une seule fois par championnat.', 'Les niveaux sont automatiques : Débutant 0-49 pts, Intermédiaire 50-149 pts, Confirmé 150-299 pts, Expert 300-599 pts, Élite 600 pts et plus.']],
       ['Respect des règles', ['En participant au championnat, le joueur accepte le présent règlement, les décisions techniques automatiques de JwetPro et les contrôles nécessaires en cas de fraude ou de litige.', 'Toute tentative de fraude peut entraîner l’annulation du résultat et la suspension du compte.']]
     ]
   },
@@ -139,7 +166,7 @@ const rulesContent = {
       ['Qualification', ['L’équipe gagnante est qualifiée pour le tour suivant.', 'Lorsqu’un match ne produit pas de gagnant direct, le départage publié avant le championnat est appliqué.', 'Le champion n’est jamais désigné par tirage au sort.']],
       ['Communication entre coéquipiers', ['Il est interdit de montrer volontairement ses dominos à une personne extérieure.', 'Il est interdit de recevoir des informations sur les dominos adverses.', 'Il est interdit de communiquer secrètement avec un adversaire.', 'L’utilisation d’un deuxième appareil ou compte pour observer une partie est interdite.', 'Toute collusion peut entraîner l’annulation immédiate du résultat.']],
       ['Déconnexion, absence et spectateurs', ['Tous les joueurs doivent être présents au début du match.', 'Une courte période peut être accordée pour rejoindre ou reprendre une partie après une déconnexion.', 'Une équipe absente après le délai prévu peut perdre par forfait.', 'Les spectateurs ne peuvent pas voir les pièces privées ni intervenir dans la partie.', 'JwetPro peut appliquer un léger délai au mode spectateur pour empêcher toute assistance extérieure.']],
-      ['Points et niveaux', ['Les points sont attribués uniquement après publication officielle d’un championnat.', 'Barème par joueur : participation confirmée +5 pts, victoire en 16e +10 pts, victoire en 8e +15 pts, victoire en quart +25 pts, victoire en demi-finale +40 pts, champion +75 pts, bonus sans abandon +5 pts.', 'L’entraînement libre Domino ne donne aucun point officiel.', 'Chaque joueur est compté une seule fois par championnat.', 'Les niveaux sont automatiques : Débutant 0-49 pts, Intermédiaire 50-149 pts, Confirmé 150-299 pts, Expert 300-599 pts, Élite 600 pts et plus.']],
+      ['Points et niveaux', ['Les points de victoire sont crédités dès la validation serveur de chaque série officielle; les bonus globaux sont réglés à la clôture du championnat.', 'Barème par joueur : participation confirmée +5 pts, victoire en 16e +10 pts, victoire en 8e +15 pts, victoire en quart +25 pts, victoire en demi-finale +40 pts, champion +75 pts, bonus sans abandon +5 pts.', 'L’entraînement libre Domino ne donne aucun point officiel.', 'Chaque joueur est compté une seule fois par championnat.', 'Les niveaux sont automatiques : Débutant 0-49 pts, Intermédiaire 50-149 pts, Confirmé 150-299 pts, Expert 300-599 pts, Élite 600 pts et plus.']],
       ['Récompenses et jeu équitable', ['Le champion remporte 2 000 HTG après validation des résultats et vérification de l’absence d’irrégularité.', 'Le deuxième reçoit un coupon couvrant gratuitement une inscription; chacun des autres participants reçoit un coupon de réduction de 25 HTG.', 'Chaque coupon est personnel, non transférable, non cumulable et utilisable une seule fois uniquement pour le prochain championnat publié, Domino ou Mopyon. Il expire ensuite.', 'Les multi-comptes, le partage de compte, les bots, l’exploitation de bugs, la collusion et les arrangements de match sont interdits.', 'JwetPro peut suspendre un match, examiner son historique et annuler un résultat lorsqu’une fraude est constatée.']]
     ]
   }
@@ -322,11 +349,17 @@ bindAssistantFeedback(assistMessageContainer);
 let activeAssistRoom = null;
 let assistLoadToken = 0;
 let assistMessagesUnsubscribe = null;
-const assistState = message => { assistMessageContainer.innerHTML = `<p class="assist-empty">${escapeCommunity(message)}</p>`; };
+const ASSISTANT_FIRST_VISIT_KEY = 'jwetpro-assistant-first-visit-opened-v1';
+const ASSISTANT_FIRST_VISIT_DELAY_MS = 5000;
+const assistantWelcomeText = () => communityLanguage() === 'ht'
+  ? 'Bonjou, mwen se asistan JWETPRO. Non mwen se Jean Estime. Mwen la pou m ede w. Kijan mwen ka ede w jodi a?'
+  : 'Bonjour, je suis l’assistant JWETPRO. Je m’appelle Jean Estime. Je suis là pour vous aider. Comment puis-je vous aider aujourd’hui ?';
+const assistantWelcomeMarkup = () => `<article class="community-message is-assistant is-assistant-welcome" data-message-id="assistant-welcome"><span class="community-assistant-mark" aria-label="Jean Estime, assistant officiel JWETPRO">JE</span><div><div class="community-message-meta"><strong>Jean Estime</strong></div><p>${escapeCommunity(assistantWelcomeText())}</p></div></article>`;
+const assistState = message => { assistMessageContainer.innerHTML = `${assistantWelcomeMarkup()}<p class="assist-empty">${escapeCommunity(message)}</p>`; };
 const renderAssistMessages = async snapshot => {
   const user = window.firebase?.auth?.().currentUser;
   const sortedDocs = [...snapshot.docs].sort(communityMessageCompare);
-  if (!snapshot.size) { assistMessageContainer.innerHTML = '<p class="assist-empty">Écrivez votre premier message à Jean Estime.</p>'; return; }
+  if (!snapshot.size) { assistMessageContainer.innerHTML = assistantWelcomeMarkup(); return; }
   const hasOwnMessages = Boolean(user && sortedDocs.some(doc => doc.data().authorId === user.uid));
   const profile = hasOwnMessages ? await currentCommunityProfile() : null;
   const currentName = profile ? `${profile.firstName||''} ${profile.lastName||''}`.trim()||profile.username||user?.displayName||user?.email : '';
@@ -344,7 +377,7 @@ const renderAssistMessages = async snapshot => {
   const assistantIsGenerating = Boolean(user && lastMessage?.authorId === user.uid && lastMessage?.authorRole !== 'assistant' && lastMessage?.assistantState !== 'human');
   const typingLabel = communityLanguage()==='ht' ? 'Jean Estime ap prepare yon repons' : 'Jean Estime prépare une réponse';
   const typing = assistantIsGenerating ? `<div class="community-assistant-typing" role="status" aria-live="polite" aria-label="${escapeCommunity(typingLabel)}"><span class="community-assistant-mark" aria-hidden="true">JE</span><i></i><i></i><i></i></div>` : '';
-  assistMessageContainer.innerHTML = renderedMessages + typing;
+  assistMessageContainer.innerHTML = assistantWelcomeMarkup() + renderedMessages + typing;
   renderIcons();
   requestAnimationFrame(() => { assistMessageContainer.scrollTop = assistMessageContainer.scrollHeight; });
 };
@@ -370,6 +403,11 @@ const openAssistance = async () => {
     assistState('Impossible d’ouvrir l’assistance pour le moment.');
     console.error('Coordinator assistance failed:', error);
   }
+};
+const openFirstVisitAssistance = () => {
+  if (localStorage.getItem(ASSISTANT_FIRST_VISIT_KEY) === '1') return;
+  localStorage.setItem(ASSISTANT_FIRST_VISIT_KEY, '1');
+  setTimeout(() => openAssistance(), ASSISTANT_FIRST_VISIT_DELAY_MS);
 };
 const closeAssistance = () => { assistMessagesUnsubscribe?.(); assistMessagesUnsubscribe = null; assistModal.hidden = true; document.body.classList.remove('assist-open'); assistanceBubble.focus(); };
 assistanceBubble.addEventListener('click', openAssistance);
@@ -469,12 +507,14 @@ const showLanguageModal = () => {
     translatePage(language);
     modal.remove();
     document.body.classList.remove('language-lock');
+    openFirstVisitAssistance();
   }));
 };
 
 const savedLanguage = localStorage.getItem(LANGUAGE_KEY);
 if (savedLanguage === 'ht') translatePage('ht');
 if (savedLanguage !== 'fr' && savedLanguage !== 'ht') showLanguageModal();
+else window.addEventListener('load', openFirstVisitAssistance, {once:true});
 
 const siteHeader = document.querySelector('.site-header');
 let previousScrollY = window.scrollY;
@@ -605,8 +645,11 @@ profilePage.id = 'profile-page';
 profilePage.className = 'profile-page';
 profilePage.hidden = true;
 profilePage.setAttribute('aria-labelledby', 'profile-title');
-profilePage.innerHTML = `<div class="profile-shell"><header class="profile-header"><button class="profile-back" type="button" aria-label="Fermer le profil et retourner à l’accueil">${I('X')}</button><h1 id="profile-title">Mon Profil</h1></header><div class="profile-identity"><div class="profile-picture-wrap"><span class="profile-picture"></span><i class="profile-online" aria-label="Statut en ligne"></i><label class="profile-picture-edit" for="profile-picture-input" aria-label="Changer la photo de profil">${I('Camera')}</label><input type="file" id="profile-picture-input" class="profile-picture-input" accept="image/png,image/jpeg,image/webp" hidden><p class="profile-picture-status" role="status" aria-live="polite" hidden></p></div><div class="profile-identity-copy"><h2 class="profile-name">Utilisateur</h2><span class="profile-role">${I('ShieldCheck')} Joueur JWETPRO</span><p class="profile-id">ID JWETPRO : <b class="profile-user-id">—</b><button class="profile-copy-id" type="button" aria-label="Copier l’identifiant">${I('Copy')}</button></p></div></div><section class="profile-level"><div class="profile-level-icon">${I('Star')}</div><div><h3>Niveau <b class="profile-level-value">—</b></h3><strong class="profile-level-name">Niveau non renseigné</strong></div><div class="profile-xp"><b class="profile-xp-value">—</b><div class="profile-xp-track"><span></span></div></div></section><section class="profile-stats" aria-label="Statistiques du joueur"><div>${I('Trophy')}<b data-profile-stat="matches">—</b><span>Matchs joués</span></div><div>${I('Medal')}<b data-profile-stat="wins">—</b><span>Victoires</span></div><div>${I('ChartNoAxesColumnIncreasing')}<b data-profile-stat="winRate">—</b><span>Taux de victoire</span></div><div>${I('Star')}<b data-profile-stat="points">—</b><span>Points</span></div></section><section class="profile-share-actions" aria-label="Partager mon parcours"><button class="jwetpro-share-trigger" type="button" data-profile-share="profile">${I('Share2')} Partager mon profil</button><button class="jwetpro-share-trigger" type="button" data-profile-share="level">${I('Star')} Partager mon niveau</button><button class="jwetpro-share-trigger" type="button" data-profile-share="invite">${I('UserPlus')} Inviter mes amis</button></section><p class="profile-share-note">Votre avatar et votre nom sont partagés uniquement si votre profil est public.</p><section class="profile-activities"><div class="profile-section-heading"><h2>Activités récentes</h2><button type="button" class="profile-see-all">Voir tout</button></div><div class="profile-activity-list"><p class="profile-empty-state">Aucune activité enregistrée.</p></div></section><nav class="profile-options" aria-label="Options du profil"><button type="button" data-profile-section="personal">${I('User')}<span>Informations personnelles</span>${I('ChevronRight')}</button><button type="button" data-profile-section="security">${I('Shield')}<span>Sécurité &amp; Confidentialité</span>${I('ChevronRight')}</button><button type="button" data-profile-section="notifications">${I('Bell')}<span>Notifications</span>${I('ChevronRight')}</button><button type="button" data-profile-section="favorites">${I('Star')}<span>Mes favoris</span>${I('ChevronRight')}</button></nav><section class="profile-detail" aria-live="polite" hidden></section><button class="profile-logout-action" type="button">${I('LogOut')}<span>Déconnexion</span></button></div>`;
+profilePage.innerHTML = `<div class="profile-shell"><header class="profile-header"><button class="profile-back" type="button" aria-label="Fermer le profil et retourner à l’accueil">${I('X')}</button><h1 id="profile-title">Mon Profil</h1></header><div class="profile-identity"><div class="profile-picture-wrap"><span class="profile-picture"></span><i class="profile-online" aria-label="Statut en ligne"></i><label class="profile-picture-edit" for="profile-picture-input" aria-label="Changer la photo de profil">${I('Camera')}</label><input type="file" id="profile-picture-input" class="profile-picture-input" accept="image/png,image/jpeg,image/webp" hidden><p class="profile-picture-status" role="status" aria-live="polite" hidden></p></div><div class="profile-identity-copy"><h2 class="profile-name">Utilisateur</h2><span class="profile-role">${I('ShieldCheck')} Joueur JWETPRO</span><p class="profile-id">ID JWETPRO : <b class="profile-user-id">—</b><button class="profile-copy-id" type="button" aria-label="Copier l’identifiant">${I('Copy')}</button></p></div></div><section class="profile-level"><div class="profile-level-icon">${I('Star')}</div><div><h3>Niveau <b class="profile-level-value">—</b></h3><strong class="profile-level-name">Niveau non renseigné</strong></div><div class="profile-xp"><b class="profile-xp-value">—</b><div class="profile-xp-track"><span></span></div></div></section><section class="profile-stats" aria-label="Statistiques du joueur"><div>${I('Trophy')}<b data-profile-stat="matches">—</b><span>Matchs joués</span></div><div>${I('Medal')}<b data-profile-stat="wins">—</b><span>Victoires</span></div><div>${I('ChartNoAxesColumnIncreasing')}<b data-profile-stat="winRate">—</b><span>Taux de victoire</span></div><div>${I('Star')}<b data-profile-stat="points">—</b><span>Points</span></div></section><section class="profile-share-actions" aria-label="Partager mon parcours"><button class="jwetpro-share-trigger" type="button" data-profile-share="profile">${I('Share2')} Partager mon profil</button><button class="jwetpro-share-trigger" type="button" data-profile-share="level">${I('Star')} Partager mon niveau</button><button class="jwetpro-share-trigger" type="button" data-profile-share="invite">${I('UserPlus')} Inviter mes amis</button></section><p class="profile-share-note">Votre avatar et votre nom sont partagés uniquement si votre profil est public.</p><section class="profile-coupons" aria-labelledby="profile-coupons-title"><div class="profile-section-heading"><h2 id="profile-coupons-title">Mes coupons</h2></div><div class="profile-coupon-list"><p class="profile-empty-state">Aucun coupon disponible.</p></div></section><section class="profile-activities"><div class="profile-section-heading"><h2>Activités récentes</h2><button type="button" class="profile-see-all">Voir tout</button></div><div class="profile-activity-list"><p class="profile-empty-state">Aucune activité enregistrée.</p></div></section><nav class="profile-options" aria-label="Options du profil"><button type="button" data-profile-section="personal">${I('User')}<span>Informations personnelles</span>${I('ChevronRight')}</button><button type="button" data-profile-section="security">${I('Shield')}<span>Sécurité &amp; Confidentialité</span>${I('ChevronRight')}</button><button type="button" data-profile-section="notifications">${I('Bell')}<span>Notifications</span>${I('ChevronRight')}</button><button type="button" data-profile-section="favorites">${I('Star')}<span>Mes favoris</span>${I('ChevronRight')}</button></nav><section class="profile-detail" aria-live="polite" hidden></section><button class="profile-logout-action" type="button">${I('LogOut')}<span>Déconnexion</span></button></div>`;
 document.body.append(profilePage);
+profilePage.querySelector('.profile-stats')?.insertAdjacentHTML('afterend', `<section class="profile-social-summary" aria-label="Réseau JWETPRO"><button type="button" data-profile-section="followers"><b data-profile-social="followers">0</b><span>Abonnés</span></button><button type="button" data-profile-section="following"><b data-profile-social="following">0</b><span>Abonnements</span></button></section>`);
+profilePage.querySelector('.profile-share-actions')?.insertAdjacentHTML('beforeend', `<button class="jwetpro-share-trigger" type="button" data-profile-share="followers">${I('UsersRound')} Partager mes abonnés</button>`);
+profilePage.querySelector('.profile-options')?.insertAdjacentHTML('beforeend', `<button type="button" data-profile-section="followers">${I('UsersRound')}<span>Mes abonnés</span>${I('ChevronRight')}</button><button type="button" data-profile-section="following">${I('UserPlus')}<span>Mes abonnements</span>${I('ChevronRight')}</button>`);
 const passwordProfileOption = profilePage.querySelector('[data-profile-section="security"]');
 passwordProfileOption?.querySelector('span')?.replaceChildren('Changer le mot de passe');
 passwordProfileOption?.insertAdjacentHTML('afterend', `<a href="./privacy.html" class="profile-privacy-link">${I('ShieldCheck')}<span>Sécurité et confidentialité</span>${I('ChevronRight')}</a>`);
@@ -651,8 +694,16 @@ const profileDetail = profilePage.querySelector('.profile-detail');
 const profileEscape = value => String(value ?? '').replace(/[&<>'"]/g, character => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[character]));
 let currentProfileData = {};
 let currentProfileSection = '';
+const PROFILE_SOCIAL_PAGE_SIZE = 25;
+let profileSocialFavoriteDocs = [];
+let profileSocialFavoriteCursor = null;
+const profileSocialRelationItems = {followers:[],following:[]};
+const profileSocialRelationCursors = {followers:null,following:null};
+const applyProfileLanguage = () => window.JwetproI18n?.apply?.(window.JwetproI18n.language());
 const profileList = value => Array.isArray(value) ? value : [];
 const profileItemLabel = item => typeof item === 'string' ? item : item?.name || item?.title || item?.label || item?.displayName || '';
+const profileSocialFavoriteMarkup = document => { const item=document.data||{};const itemStatus=String(item.status||'').toLowerCase();const complete=/completed|finished|ended|termine|terminé|replay/.test(itemStatus);const open=/registration-open|open/.test(itemStatus);const href=item.kind==='match'?`./play.html?${complete?'replay':'match'}=${encodeURIComponent(item.entityId)}`:open?`./registration-checkout.html?id=${encodeURIComponent(item.entityId)}`:`./progress.html?id=${encodeURIComponent(item.entityId)}`;return `<article>${I('Heart')}<div><strong>${profileEscape(item.title||'Favori JWETPRO')}</strong><span>${item.kind==='match'?'Match':'Championnat'} · ${profileEscape(item.game||'JWETPRO')}</span></div><a href="${href}" aria-label="Ouvrir">${I('ArrowUpRight')}</a><button type="button" data-remove-social-favorite="${profileEscape(document.id)}" data-favorite-kind="${profileEscape(item.kind)}" data-favorite-id="${profileEscape(item.entityId)}" aria-label="Retirer des favoris">${I('Trash2')}</button></article>`};
+const profileSocialRelationMarkup = (item,section) => {const followBack=section==='followers'&&!item.mutual;const simulated=item.profile.playerType==='simulated';return `<article><span class="profile-social-avatar">${profileEscape(String(item.profile.displayName||'JW').split(/\s+/).map(part=>part[0]).join('').slice(0,2))}</span><div><strong>${profileEscape(item.profile.displayName||'Joueur JWETPRO')}</strong><span>${item.mutual?'Vous vous suivez':'Joueur JWETPRO'}${simulated?' · Simulé':''}</span></div><div class="profile-social-row-actions"><button type="button" data-profile-relation="${profileEscape(item.socialId)}" data-relation-followed="${followBack?'true':'false'}">${followBack?'Suivre en retour':'Ne plus suivre'}</button><a href="./player.html?id=${encodeURIComponent(item.socialId)}" aria-label="Voir le profil">${I('ChevronRight')}</a><details class="profile-social-more"><summary aria-label="Plus d’actions">•••</summary><div><button type="button" data-profile-report="${profileEscape(item.socialId)}">Signaler</button>${simulated?'':`<button class="is-danger" type="button" data-profile-block="${profileEscape(item.socialId)}">Bloquer</button>`}</div></details></div></article>`};
 const profileMessage = (text, tone = '') => `<p class="profile-detail-message ${tone ? `is-${tone}` : ''}" role="status">${profileEscape(text)}</p>`;
 const updateOwnProfile = async patch => {
   const firestoreInstance = window.firebase?.firestore?.();
@@ -674,10 +725,12 @@ const renderProfileDetail = section => {
   const notifications = data.notificationPreferences || {};
   const favorites = profileList(Object.prototype.hasOwnProperty.call(data,'favoriteGames') ? data.favoriteGames : data.favorites);
   const sections = {
-    personal: () => `${profileDetailHeader('Informations personnelles','Consultez et mettez à jour les informations non sensibles de votre compte.')}<form class="profile-detail-form" data-profile-form="personal"><label>Prénom<input name="firstName" maxlength="60" autocomplete="given-name" value="${profileEscape(data.firstName)}"></label><label>Nom<input name="lastName" maxlength="60" autocomplete="family-name" value="${profileEscape(data.lastName)}"></label><label>Nom d’utilisateur<input value="${profileEscape(data.username)}" readonly aria-describedby="profile-username-help"></label><small id="profile-username-help">Le nom d’utilisateur est géré par JWETPRO pour protéger votre connexion.</small><label>Téléphone<input name="phone" maxlength="30" inputmode="tel" autocomplete="tel" value="${profileEscape(data.phone)}"></label><label>Adresse e-mail<input value="${profileEscape(currentAuthUser?.email || data.email)}" readonly></label><div class="profile-public-setting"><div><strong>Profil public</strong><span>Autoriser le partage de votre nom, avatar, niveau et points sur une carte publique. Votre téléphone et votre adresse e-mail restent toujours privés.</span></div><label class="profile-switch" aria-label="Rendre mon profil public"><input name="profilePublic" type="checkbox" ${data.profilePublic === false ? '' : 'checked'}><span></span></label></div><button class="profile-detail-submit" type="submit">${I('Save')} Enregistrer les modifications</button></form>`,
+    personal: () => `${profileDetailHeader('Informations personnelles','Consultez et mettez à jour les informations non sensibles de votre compte.')}<form class="profile-detail-form" data-profile-form="personal"><label>Prénom<input name="firstName" maxlength="60" autocomplete="given-name" value="${profileEscape(data.firstName)}"></label><label>Nom<input name="lastName" maxlength="60" autocomplete="family-name" value="${profileEscape(data.lastName)}"></label><label>Nom d’utilisateur<input value="${profileEscape(data.username)}" readonly aria-describedby="profile-username-help"></label><small id="profile-username-help">Le nom d’utilisateur est géré par JWETPRO pour protéger votre connexion.</small><label>Téléphone<input name="phone" maxlength="30" inputmode="tel" autocomplete="tel" value="${profileEscape(data.phone)}"></label><label>Adresse e-mail<input value="${profileEscape(currentAuthUser?.email || data.email)}" readonly></label><div class="profile-public-setting"><div><strong>Profil public</strong><span>Autoriser le partage de votre nom, avatar, niveau et points sur une carte publique. Votre téléphone et votre adresse e-mail restent toujours privés.</span></div><label class="profile-switch" aria-label="Rendre mon profil public"><input name="profilePublic" type="checkbox" ${data.profilePublic === true ? 'checked' : ''}><span></span></label></div><button class="profile-detail-submit" type="submit">${I('Save')} Enregistrer les modifications</button></form>`,
     security: () => `${profileDetailHeader('Changer le mot de passe','Modifiez le mot de passe de votre compte.')}<form class="profile-detail-form" data-profile-form="password"><label>Mot de passe actuel<input name="currentPassword" type="password" minlength="6" autocomplete="current-password" required></label><label>Nouveau mot de passe<input name="newPassword" type="password" minlength="8" autocomplete="new-password" required></label><label>Confirmer le nouveau mot de passe<input name="confirmPassword" type="password" minlength="8" autocomplete="new-password" required></label><button class="profile-detail-submit" type="submit">${I('KeyRound')} Modifier le mot de passe</button></form>`,
     notifications: () => `${profileDetailHeader('Notifications','Choisissez les alertes que vous souhaitez recevoir.')}<div class="profile-preferences"><div class="profile-preference-card"><div><strong>Rappels de matchs</strong><span>Recevoir une alerte avant le début de vos matchs.</span></div><label class="profile-switch"><input type="checkbox" data-notification="matchReminders" ${notifications.matchReminders === false ? '' : 'checked'}><span></span></label></div><div class="profile-preference-card"><div><strong>Résultats et classement</strong><span>Être informé après la validation d’un résultat.</span></div><label class="profile-switch"><input type="checkbox" data-notification="results" ${notifications.results === false ? '' : 'checked'}><span></span></label></div><div class="profile-preference-card"><div><strong>Nouveaux championnats</strong><span>Recevoir les annonces des prochaines compétitions.</span></div><label class="profile-switch"><input type="checkbox" data-notification="championships" ${notifications.championships === false ? '' : 'checked'}><span></span></label></div></div>`,
-    favorites: () => `${profileDetailHeader('Mes favoris','Gérez les jeux et éléments que vous avez enregistrés.')}<div class="profile-detail-list">${favorites.length ? favorites.map((item,index) => `<article>${I('Star')}<div><strong>${profileEscape(profileItemLabel(item) || 'Favori')}</strong><span>${profileEscape(typeof item === 'object' ? item.type || 'JWETPRO' : 'JWETPRO')}</span></div><button type="button" data-remove-favorite="${index}" aria-label="Retirer des favoris">${I('Trash2')}</button></article>`).join('') : '<div class="profile-detail-empty">'+I('Star')+'<strong>Aucun favori enregistré</strong><p>Les éléments ajoutés à vos favoris apparaîtront ici.</p></div>'}</div>`
+    favorites: () => `${profileDetailHeader('Mes favoris','Retrouvez les championnats et matchs que vous aimez.')}<div class="profile-detail-list" data-profile-social-list>${favorites.length ? favorites.map((item,index) => `<article>${I('Star')}<div><strong>${profileEscape(profileItemLabel(item) || 'Favori')}</strong><span>${profileEscape(typeof item === 'object' ? item.type || 'JWETPRO' : 'JWETPRO')}</span></div><button type="button" data-remove-favorite="${index}" aria-label="Retirer des favoris">${I('Trash2')}</button></article>`).join('') : '<div class="profile-detail-empty">'+I('Star')+'<strong>Chargement des favoris…</strong></div>'}</div>`,
+    followers: () => `${profileDetailHeader('Mes abonnés','Cette liste est privée. Les relations réciproques sont identifiées.')}<div class="profile-detail-list" data-profile-social-list><div class="profile-detail-empty">${I('UsersRound')}<strong>Chargement des abonnés…</strong></div></div>`,
+    following: () => `${profileDetailHeader('Mes abonnements','Les joueurs que vous avez choisi de suivre.')}<div class="profile-detail-list" data-profile-social-list><div class="profile-detail-empty">${I('UserPlus')}<strong>Chargement des abonnements…</strong></div></div>`
   };
   if (!sections[section]) return;
   currentProfileSection = section;
@@ -685,8 +738,38 @@ const renderProfileDetail = section => {
   profileDetail.hidden = false;
   profilePage.classList.add('profile-detail-open');
   profilePage.scrollTo({top:0,behavior:'smooth'});
+  if(section==='notifications') profileDetail.querySelector('.profile-preferences')?.insertAdjacentHTML('beforeend', `<div class="profile-preference-card"><div><strong>Nouveaux abonnés et messages privés</strong><span>Recevoir les alertes de votre réseau JWETPRO.</span></div><label class="profile-switch"><input type="checkbox" data-notification="social" ${notifications.social === false ? '' : 'checked'}><span></span></label></div>`);
   renderIcons();
   window.JwetproI18n?.apply?.(window.JwetproI18n.language());
+  loadProfileSocialDetail(section);
+};
+const loadProfileSocialDetail = async (section,{append=false}={}) => {
+  const container=profileDetail.querySelector('[data-profile-social-list]');
+  if(!container||!currentAuthUser||!window.firebase?.firestore)return;
+  try{
+    if(section==='favorites'){
+      if(!append){profileSocialFavoriteDocs=[];profileSocialFavoriteCursor=null}
+      let query=firebase.firestore().collection('users').doc(currentAuthUser.uid).collection('favorites').orderBy('createdAt','desc').limit(PROFILE_SOCIAL_PAGE_SIZE);
+      if(append&&profileSocialFavoriteCursor)query=query.startAfter(profileSocialFavoriteCursor);
+      const snapshot=await query.get();
+      profileSocialFavoriteDocs.push(...snapshot.docs.map(doc=>({id:doc.id,data:doc.data()||{}})));
+      profileSocialFavoriteCursor=snapshot.docs.at(-1)||profileSocialFavoriteCursor;
+      if(profileSocialFavoriteDocs.length){container.innerHTML=profileSocialFavoriteDocs.map(profileSocialFavoriteMarkup).join('')+(snapshot.size===PROFILE_SOCIAL_PAGE_SIZE?`<button class="profile-social-load-more" type="button" data-load-social-favorites>Charger plus</button>`:'');renderIcons();applyProfileLanguage();return}
+      const legacyFavorites=profileList(Object.prototype.hasOwnProperty.call(currentProfileData,'favoriteGames')?currentProfileData.favoriteGames:currentProfileData.favorites);
+      if(!legacyFavorites.length){container.innerHTML=`<div class="profile-detail-empty">${I('Heart')}<strong>Aucun favori enregistré</strong><p>Aimez un match ou un championnat pour le retrouver ici.</p></div>`;applyProfileLanguage()}
+      return;
+    }
+    if(section==='followers'||section==='following'){
+      if(!append){profileSocialRelationItems[section]=[];profileSocialRelationCursors[section]=null}
+      const response=await firebase.app().functions('us-east1').httpsCallable('listSocialRelationships')({direction:section,limit:PROFILE_SOCIAL_PAGE_SIZE,cursor:append?profileSocialRelationCursors[section]:null});
+      profileSocialRelationItems[section].push(...(response.data?.items||[]));
+      profileSocialRelationCursors[section]=response.data?.nextCursor||null;
+      const items=profileSocialRelationItems[section];
+      container.innerHTML=items.length?items.map(item=>profileSocialRelationMarkup(item,section)).join('')+(profileSocialRelationCursors[section]?`<button class="profile-social-load-more" type="button" data-load-social-relations="${section}">Charger plus</button>`:''):`<div class="profile-detail-empty">${I('UsersRound')}<strong>${section==='followers'?'Aucun abonné':'Aucun abonnement'}</strong></div>`;
+      renderIcons();
+      applyProfileLanguage();
+    }
+  }catch(error){console.error('Profile social detail failed:',error);container.innerHTML=`<div class="profile-detail-empty"><strong>Données indisponibles</strong><p>Réessayez dans quelques instants.</p></div>`;applyProfileLanguage()}
 };
 const renderProfile = (data = {}, user = currentAuthUser) => {
   currentProfileData = {...data};
@@ -712,6 +795,7 @@ const renderProfile = (data = {}, user = currentAuthUser) => {
 const showProfileDetailMessage = (text,tone) => {
   profileDetail.querySelector('.profile-detail-message')?.remove();
   profileDetail.insertAdjacentHTML('beforeend',profileMessage(text,tone));
+  applyProfileLanguage();
 };
 profilePage.querySelector('.profile-options')?.addEventListener('click',event => {
   const button = event.target.closest('[data-profile-section]');
@@ -719,6 +803,18 @@ profilePage.querySelector('.profile-options')?.addEventListener('click',event =>
 });
 profileDetail.addEventListener('click',async event => {
   if (event.target.closest('[data-profile-detail-back]')) { closeProfileDetail(); return; }
+  const relationButton=event.target.closest('[data-profile-relation]');
+  if(relationButton){relationButton.disabled=true;try{await firebase.app().functions('us-central1').httpsCallable('setFollow')({targetSocialId:relationButton.dataset.profileRelation,followed:relationButton.dataset.relationFollowed==='true'});await loadProfileSocialDetail(currentProfileSection)}catch(error){relationButton.disabled=false;showProfileDetailMessage('Impossible de modifier cet abonnement.','error')}return}
+  const reportButton=event.target.closest('[data-profile-report]');
+  if(reportButton){const details=window.prompt('Décrivez brièvement le problème :');if(details===null)return;reportButton.disabled=true;try{await firebase.app().functions('us-central1').httpsCallable('createSocialReport')({targetSocialId:reportButton.dataset.profileReport,reason:'other',details});showProfileDetailMessage('Signalement transmis à JWETPRO.','success')}catch(error){reportButton.disabled=false;showProfileDetailMessage('Impossible de transmettre ce signalement.','error')}return}
+  const blockButton=event.target.closest('[data-profile-block]');
+  if(blockButton){if(!window.confirm('Bloquer ce joueur supprimera vos abonnements réciproques et empêchera les nouveaux messages. Continuer ?'))return;blockButton.disabled=true;try{await firebase.app().functions('us-central1').httpsCallable('setSocialBlock')({targetSocialId:blockButton.dataset.profileBlock,blocked:true});await loadProfileSocialDetail(currentProfileSection);showProfileDetailMessage('Joueur bloqué.','success')}catch(error){blockButton.disabled=false;showProfileDetailMessage('Impossible de bloquer ce joueur.','error')}return}
+  const socialRemove = event.target.closest('[data-remove-social-favorite]');
+  if(socialRemove){socialRemove.disabled=true;try{await firebase.app().functions('us-central1').httpsCallable('setEntityLike')({kind:socialRemove.dataset.favoriteKind,entityId:socialRemove.dataset.favoriteId,liked:false});await loadProfileSocialDetail('favorites');window.JwetproSocial?.refresh?.()}catch(error){socialRemove.disabled=false;showProfileDetailMessage('Impossible de retirer ce favori.','error')}return}
+  const loadMoreFavorites=event.target.closest('[data-load-social-favorites]');
+  if(loadMoreFavorites){loadMoreFavorites.disabled=true;await loadProfileSocialDetail('favorites',{append:true});return}
+  const loadMoreRelations=event.target.closest('[data-load-social-relations]');
+  if(loadMoreRelations){loadMoreRelations.disabled=true;await loadProfileSocialDetail(loadMoreRelations.dataset.loadSocialRelations,{append:true});return}
   const removeButton = event.target.closest('[data-remove-favorite]');
   if (!removeButton) return;
   const favorites = profileList(Object.prototype.hasOwnProperty.call(currentProfileData,'favoriteGames') ? currentProfileData.favoriteGames : currentProfileData.favorites);
@@ -770,8 +866,28 @@ profileDetail.addEventListener('submit',async event => {
     showProfileDetailMessage(messages[error.code || error.message] || 'Impossible d’enregistrer les modifications.','error');
   } finally { submit.disabled = false; }
 });
-const openProfilePage = async () => { if (!currentAuthUser) { showLoginPage(); return; } profilePage.hidden = false; document.body.classList.add('profile-open'); window.scrollTo({top:0,behavior:'instant'}); renderProfile({}, currentAuthUser); const firestoreInstance = window.firebase?.firestore?.(); if (!firestoreInstance) return; try { const snapshot = await firestoreInstance.collection('users').doc(currentAuthUser.uid).get(); if (snapshot.exists) renderProfile(snapshot.data(), currentAuthUser); } catch (error) { console.warn('Profil indisponible:', error); } };
-const closeProfilePage = () => { closeProfileDetail(); profilePage.hidden = true; document.body.classList.remove('profile-open'); history.replaceState(null, '', '#top'); };
+let profileLiveUnsubscribe=null,profileCouponsUnsubscribe=null;
+let profileSocialStatsUnsubscribe=null,profileSocialPublicUnsubscribe=null;
+const listenProfileSocialStats=()=>{
+  profileSocialStatsUnsubscribe?.();profileSocialPublicUnsubscribe?.();
+  if(!currentAuthUser||!window.firebase?.firestore)return;
+  profileSocialStatsUnsubscribe=firebase.firestore().collection('socialPrivateStats').doc(currentAuthUser.uid).onSnapshot(snapshot=>{
+    const data=snapshot.data()||{};const following=profilePage.querySelector('[data-profile-social="following"]');if(following)following.textContent=String(Math.max(0,Number(data.followingCount)||0));
+  },()=>{});
+  profileSocialPublicUnsubscribe=firebase.firestore().collection('socialProfiles').doc(currentAuthUser.uid).onSnapshot(snapshot=>{
+    const data=snapshot.data()||{};const followers=profilePage.querySelector('[data-profile-social="followers"]');if(followers)followers.textContent=String(Math.max(0,Number(data.followerCount)||0));
+  },()=>{});
+};
+const renderProfileCoupons = documents => {
+  const container=profilePage.querySelector('.profile-coupon-list');
+  if(!container)return;
+  const statusLabels={pending:'En attente du prochain championnat',available:'Disponible',reserved:'Réservé pour votre paiement',used:'Utilisé',expired:'Expiré'};
+  const coupons=documents.map(document=>({id:document.id,...document.data()})).sort((a,b)=>(b.createdAt?.toMillis?.()||0)-(a.createdAt?.toMillis?.()||0));
+  container.innerHTML=coupons.length?coupons.map(coupon=>`<article class="profile-coupon is-${profileEscape(coupon.status||'pending')}">${I(coupon.type==='free_entry'?'TicketCheck':'BadgePercent')}<div><strong>${coupon.type==='free_entry'?'Inscription gratuite':`Réduction de ${Number(coupon.value)||25} HTG`}</strong><span>${profileEscape(coupon.targetChampionshipName||'Prochain championnat publié')}</span><small>${profileEscape(statusLabels[coupon.status]||coupon.status||'En attente')}</small></div></article>`).join(''):'<p class="profile-empty-state">Aucun coupon disponible.</p>';
+  window.renderIcons?.();
+};
+const openProfilePage = async () => { if (!currentAuthUser) { showLoginPage(); return; } profilePage.hidden = false; document.body.classList.add('profile-open'); window.scrollTo({top:0,behavior:'instant'}); renderProfile({}, currentAuthUser); const firestoreInstance = window.firebase?.firestore?.(); if (!firestoreInstance) return; window.firebase?.app?.().functions('us-central1').httpsCallable('releaseExpiredCouponReservations')({}).catch(()=>null); profileLiveUnsubscribe?.(); profileCouponsUnsubscribe?.(); profileLiveUnsubscribe=firestoreInstance.collection('users').doc(currentAuthUser.uid).onSnapshot(snapshot=>{if(snapshot.exists)renderProfile(snapshot.data(),currentAuthUser);},error=>console.warn('Profil indisponible:',error)); profileCouponsUnsubscribe=firestoreInstance.collection('jwetproCoupons').where('playerUid','==',currentAuthUser.uid).onSnapshot(snapshot=>renderProfileCoupons(snapshot.docs),error=>console.warn('Coupons indisponibles:',error)); };
+const closeProfilePage = () => { profileLiveUnsubscribe?.(); profileCouponsUnsubscribe?.(); profileLiveUnsubscribe=null; profileCouponsUnsubscribe=null; closeProfileDetail(); profilePage.hidden = true; document.body.classList.remove('profile-open'); history.replaceState(null, '', '#top'); };
 profilePage.querySelector('.profile-logout-action')?.addEventListener('click', async () => { try { if (window.firebase?.auth) await window.firebase.auth().signOut(); closeProfilePage(); showAppToast('Vous avez été déconnecté en toute sécurité.'); } catch (error) { console.error('Déconnexion Firebase impossible:', error); } });
 profilePage.querySelector('.profile-back').addEventListener('click', closeProfilePage);
 profilePage.querySelector('.profile-copy-id').addEventListener('click', async () => { const value = profilePage.querySelector('.profile-user-id').textContent; if (value !== '—') { try { await navigator.clipboard.writeText(value); } catch {} } });
@@ -808,7 +924,6 @@ if (window.firebase) {
         createdAt: firebase.firestore.FieldValue.serverTimestamp(),
         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
       });
-      await firestore.collection('leaderboard').doc(user.uid).set({displayName:username,level:'Débutant',points:0,imageName:'',photoURL:''});
     } catch (error) {
       error.code = error.code || 'auth/profile-create-failed';
       throw error;
@@ -831,6 +946,9 @@ if (window.firebase) {
     };
   };
   const setHeaderAccount = async (user) => {
+    homepageCouponsUnsubscribe?.();
+    homepageCouponsUnsubscribe = null;
+    homepageCoupons = [];
     currentAuthUser = user && !user.isAnonymous ? user : null;
     homepageCurrentProfile = null;
     if (!headerAccount) return;
@@ -849,8 +967,6 @@ if (window.firebase) {
     let avatarUrl = '';
     let profileImageName = '';
     let displayName = user.email || 'Utilisateur JWETPRO';
-    let publicProfile = null;
-    let profileRole = '';
     try {
       const profile = await firestore.collection('users').doc(user.uid).get();
       if (profile.exists) {
@@ -858,33 +974,23 @@ if (window.firebase) {
         avatarUrl = profileAvatarUrl(data);
         profileImageName = String(data.imageName || '').trim();
         displayName = `${data.firstName || ''} ${data.lastName || ''}`.trim() || data.username || data.displayName || displayName;
-        publicProfile = leaderboardProjection(data);
-        profileRole = String(data.role || '').toLowerCase();
       }
     } catch (error) { console.warn('Profil utilisateur indisponible:', error); }
     homepageCurrentProfile = {uid:user.uid,name:displayName,photoURL:/^https:\/\//.test(avatarUrl) ? avatarUrl : '',imageName:/^[A-Za-z0-9._-]+$/.test(profileImageName) ? profileImageName : ''};
+    window.firebase?.app?.().functions('us-central1').httpsCallable('releaseExpiredCouponReservations')({}).catch(()=>null);
+    homepageCouponsUnsubscribe=firestore.collection('jwetproCoupons').where('playerUid','==',user.uid).onSnapshot(snapshot=>{
+      if(currentAuthUser?.uid!==user.uid)return;
+      homepageCoupons=snapshot.docs.map(document=>({id:document.id,...document.data()}));
+      renderHomepageHeroCarousel();
+    },error=>{
+      console.warn('Réduction du coupon indisponible dans le héros:',error);
+      homepageCoupons=[];
+      renderHomepageHeroCarousel();
+    });
     renderHomepageHeroCarousel();
     loadHomepagePersonalMatches(user);
     loadPublicMatches();
-    if (publicProfile) {
-      try {
-        await firestore.collection('leaderboard').doc(user.uid).set(publicProfile);
-      } catch (error) { console.warn('Publication du profil dans le classement impossible:', error); }
-    }
-    if (profileRole === 'admin') {
-      try {
-        const users = await firestore.collection('users').limit(500).get();
-        const batch = firestore.batch();
-        let projectedUsers = 0;
-        users.docs.forEach(doc => {
-          const projection = leaderboardProjection(doc.data());
-          if (!projection) return;
-          batch.set(firestore.collection('leaderboard').doc(doc.id), projection);
-          projectedUsers += 1;
-        });
-        if (projectedUsers) await batch.commit();
-      } catch (error) { console.warn('Synchronisation administrateur du classement impossible:', error); }
-    }
+    listenProfileSocialStats();
     setTimeout(() => loadPublicRanking(), 0);
     const initials = displayName.split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase() || 'JW';
     headerAccount.classList.add('is-authenticated');
@@ -1045,9 +1151,20 @@ const heroMatchSlide = (match, position, total) => {
   const isSeries = match.kind === 'series';
   const primaryHref = `./play.html?join=${encodeURIComponent(match.id)}`;
   const primaryLabel = 'ANTRE NAN MATCH LA';
-  return `<article class="hero-slide hero-match-slide" role="group" aria-roledescription="diapositive" aria-label="${position} sur ${total} — ${active ? 'Votre match en cours' : 'Votre prochain match'}"><div class="hero-grid"><div class="hero-copy"><div class="eyebrow">${active ? 'VOTRE MATCH EN COURS' : 'VOTRE PROCHAIN MATCH'}</div><h1 class="hero-title">${publicEscape(gameName)}</h1>${number ? `<span class="hero-id">#${publicEscape(number)}</span>` : ''}<div class="hero-date">${I('CalendarDays')}<span>${publicEscape(start ? start.toLocaleString('fr-FR',{weekday:'long',day:'numeric',month:'long',hour:'2-digit',minute:'2-digit'}) : 'Horaire à confirmer')}</span></div><div class="hero-match-status ${active ? 'is-live' : ''}"><span>${active ? 'MATCH EN COURS' : 'MATCH PLANIFIÉ'}</span><strong ${start && !active ? `data-hero-target="${start.getTime()}" data-hero-label="Début dans"` : ''}>${active ? 'Le plateau est ouvert' : start ? `Début dans ${heroDuration(start.getTime()-Date.now())}` : 'Horaire à confirmer'}</strong></div><div class="hero-actions"><a class="primary-button" href="${primaryHref}">${primaryLabel} ${I(isSeries ? 'ArrowUpRight' : 'LogIn')}</a><a class="subtle-link" href="${secondaryHref}">VOIR LE CHAMPIONNAT ${I('ArrowRight')}</a></div></div><div class="hero-matchup" aria-label="${publicEscape(self.name)} contre ${publicEscape(opponent.name)}"><div class="hero-player">${playerAvatarMarkup(self,self.name,'hero-player-avatar')}<span>VOUS</span><strong>${publicEscape(self.name)}</strong></div><div class="hero-versus"><span>VS</span><i></i></div><div class="hero-player">${playerAvatarMarkup(opponent,opponent.name,'hero-player-avatar')}<span>ADVERSAIRE</span><strong>${publicEscape(opponent.name)}</strong></div></div></div></article>`;
+  return `<article class="hero-slide hero-match-slide" data-social-kind="match" data-social-id="${publicEscape(mainMatchSocialId(match))}" role="group" aria-roledescription="diapositive" aria-label="${position} sur ${total} — ${active ? 'Votre match en cours' : 'Votre prochain match'}"><div class="hero-grid"><div class="hero-copy"><div class="eyebrow">${active ? 'VOTRE MATCH EN COURS' : 'VOTRE PROCHAIN MATCH'}</div><h1 class="hero-title">${publicEscape(gameName)}</h1>${number ? `<span class="hero-id">#${publicEscape(number)}</span>` : ''}<div class="hero-date">${I('CalendarDays')}<span>${publicEscape(start ? start.toLocaleString('fr-FR',{weekday:'long',day:'numeric',month:'long',hour:'2-digit',minute:'2-digit'}) : 'Horaire à confirmer')}</span></div><div class="hero-match-status ${active ? 'is-live' : ''}"><span>${active ? 'MATCH EN COURS' : 'MATCH PLANIFIÉ'}</span><strong ${start && !active ? `data-hero-target="${start.getTime()}" data-hero-label="Début dans"` : ''}>${active ? 'Le plateau est ouvert' : start ? `Début dans ${heroDuration(start.getTime()-Date.now())}` : 'Horaire à confirmer'}</strong></div><div class="hero-actions"><a class="primary-button" href="${primaryHref}">${primaryLabel} ${I(isSeries ? 'ArrowUpRight' : 'LogIn')}</a><a class="subtle-link" href="${secondaryHref}">VOIR LE CHAMPIONNAT ${I('ArrowRight')}</a></div></div><div class="hero-matchup" aria-label="${publicEscape(self.name)} contre ${publicEscape(opponent.name)}"><div class="hero-player">${playerAvatarMarkup(self,self.name,'hero-player-avatar')}<span>VOUS</span>${mainAvatarLink(self,self.name,`<strong>${publicEscape(self.name)}</strong>`)}</div><div class="hero-versus"><span>VS</span><i></i></div><div class="hero-player">${playerAvatarMarkup(opponent,opponent.name,'hero-player-avatar')}<span>ADVERSAIRE</span>${mainAvatarLink(opponent,opponent.name,`<strong>${publicEscape(opponent.name)}</strong>`)}</div></div></div></article>`;
 };
-const heroChampionshipSlide = (record, position, total) => {
+const homepageCouponForChampionship = (record, orderedChampionships) => {
+  if(!currentAuthUser||record.status!=='registration-open')return null;
+  const usable=homepageCoupons
+    .filter(coupon=>['pending','available'].includes(String(coupon.status||'pending').toLowerCase()))
+    .sort((left,right)=>(left.createdAt?.toMillis?.()||0)-(right.createdAt?.toMillis?.()||0));
+  const targeted=usable.find(coupon=>String(coupon.targetChampionshipId||'')===record.id);
+  if(targeted)return targeted;
+  const firstOpen=orderedChampionships.find(championship=>championship.status==='registration-open');
+  if(firstOpen?.id!==record.id)return null;
+  return usable.find(coupon=>!String(coupon.targetChampionshipId||''))||null;
+};
+const heroChampionshipSlide = (record, position, total, coupon = null) => {
   const isOpen = record.status === 'registration-open';
   const inProgress = championshipIsInProgress(record);
   const action = championshipAction(inProgress ? 'ongoing' : record.status,record.id);
@@ -1055,7 +1172,15 @@ const heroChampionshipSlide = (record, position, total) => {
   const imageAlt = record.game === 'DOMINO' ? 'Dominos du championnat' : 'Plateau de Mopyon avec pierres noires et blanches';
   const kicker = isOpen ? 'INSCRIPTIONS OUVERTES' : inProgress ? 'CHAMPIONNAT EN COURS' : 'ÉVÉNEMENT PLANIFIÉ';
   const countdown = isOpen && record.date ? `<div class="hero-countdown"><span>COMPTE À REBOURS</span><strong data-hero-target="${record.date.getTime()}" data-hero-label="">${heroDuration(record.date.getTime()-Date.now())}</strong></div>` : inProgress ? '<div class="hero-countdown is-live"><span>CHAMPIONNAT DÉJÀ COMMENCÉ</span><strong>EN COURS</strong></div>' : record.status === 'registration-closed' ? '<div class="hero-countdown is-complete"><span>STATUT DES INSCRIPTIONS</span><strong>INSCRIPTIONS COMPLÈTES</strong></div>' : '';
-  return `<article class="hero-slide hero-championship-slide" role="group" aria-roledescription="diapositive" aria-label="${position} sur ${total} — ${publicEscape(championshipDisplayName(record))}"><div class="hero-grid"><div class="hero-copy"><div class="eyebrow">${kicker}</div><h1 class="hero-title">${publicEscape(record.game)}</h1><span class="hero-id">#${publicEscape(record.number)}</span><div class="hero-date">${I('CalendarDays')}<span>${publicEscape(record.dateLabel)} • ${publicEscape(record.time)}</span></div>${countdown}<div class="prize-label">GAIN PRINCIPAL</div><p class="prize">${publicEscape(moneyLabel(record.prize))}</p><div class="hero-stats"><div class="stat">${I('Coins')}<div><span class="stat-label">ENTRÉE</span><span class="stat-value">${publicEscape(moneyLabel(record.entryFee))}</span></div></div><div class="stat">${I('UsersRound')}<div><span class="stat-label">JOUEURS MAX</span><span class="stat-value">${publicEscape(record.maxPlayers)}</span></div></div><div class="stat">${I('Swords')}<div><span class="stat-label">FORMAT</span><span class="stat-value">ÉLIMINATION DIRECTE</span></div></div></div><div class="hero-actions"><a class="primary-button" href="${action.href}">${isOpen ? `PARTICIPER — ${publicEscape(moneyLabel(record.entryFee))}` : action.label} ${I('ArrowUpRight')}</a><a class="subtle-link rules-link" href="#rules">VOIR LES RÈGLES ${I('ArrowRight')}</a></div></div><div class="hero-board"><img class="hero-image" src="${image}" alt="${imageAlt}"></div></div></article>`;
+  const originalFee=Math.max(0,Number(record.entryFee)||0);
+  const couponIsFree=coupon?.type==='free_entry';
+  const couponValue=couponIsFree?originalFee:Math.min(originalFee,Math.max(0,Number(coupon?.value)||25));
+  const discountedFee=Math.max(0,originalFee-couponValue);
+  const hasCoupon=Boolean(isOpen&&coupon&&couponValue>0);
+  const discountedLabel=discountedFee===0?'GRATUIT':moneyLabel(discountedFee);
+  const entryMarkup=hasCoupon?`<span class="hero-coupon-price"><s>${publicEscape(moneyLabel(originalFee))}</s><strong>${publicEscape(discountedLabel)}</strong></span><span class="hero-coupon-badge">${I(couponIsFree?'TicketCheck':'BadgePercent')} ${couponIsFree?'INSCRIPTION GRATUITE AVEC VOTRE COUPON':`COUPON −${publicEscape(moneyLabel(couponValue))} APPLIQUÉ`}</span>`:publicEscape(moneyLabel(originalFee));
+  const participationPrice=hasCoupon?discountedLabel:moneyLabel(originalFee);
+  return `<article class="hero-slide hero-championship-slide${hasCoupon?' has-coupon':''}" data-social-kind="championship" data-social-id="${publicEscape(record.id)}" role="group" aria-roledescription="diapositive" aria-label="${position} sur ${total} — ${publicEscape(championshipDisplayName(record))}"><div class="hero-grid"><div class="hero-copy"><div class="eyebrow">${kicker}</div><h1 class="hero-title">${publicEscape(record.game)}</h1><span class="hero-id">#${publicEscape(record.number)}</span><div class="hero-date">${I('CalendarDays')}<span>${publicEscape(record.dateLabel)} • ${publicEscape(record.time)}</span></div>${countdown}<div class="prize-label">GAIN PRINCIPAL</div><p class="prize">${publicEscape(moneyLabel(record.prize))}</p><div class="hero-stats"><div class="stat hero-entry-stat">${I('Coins')}<div><span class="stat-label">ENTRÉE</span><span class="stat-value">${entryMarkup}</span></div></div><div class="stat">${I('UsersRound')}<div><span class="stat-label">JOUEURS MAX</span><span class="stat-value">${publicEscape(record.maxPlayers)}</span></div></div><div class="stat">${I('Swords')}<div><span class="stat-label">FORMAT</span><span class="stat-value">ÉLIMINATION DIRECTE</span></div></div></div><div class="hero-actions"><a class="primary-button" href="${action.href}">${isOpen ? `PARTICIPER — ${publicEscape(participationPrice)}` : action.label} ${I('ArrowUpRight')}</a><a class="subtle-link rules-link" href="#rules">VOIR LES RÈGLES ${I('ArrowRight')}</a></div></div><div class="hero-board"><img class="hero-image" src="${image}" alt="${imageAlt}"></div></div></article>`;
 };
 const updateHeroTimes = () => {
   document.querySelectorAll('[data-hero-target]').forEach(element => {
@@ -1092,7 +1217,7 @@ const renderHomepageHeroCarousel = () => {
     renderIcons();
     return;
   }
-  track.innerHTML = slides.map((slide,index) => slide.type === 'match' ? heroMatchSlide(slide.data,index+1,slides.length) : heroChampionshipSlide(slide.data,index+1,slides.length)).join('');
+  track.innerHTML = slides.map((slide,index) => slide.type === 'match' ? heroMatchSlide(slide.data,index+1,slides.length) : heroChampionshipSlide(slide.data,index+1,slides.length,homepageCouponForChampionship(slide.data,championships))).join('');
   dots.innerHTML = slides.map((_,index) => `<button type="button" data-hero-dot="${index}" aria-label="Afficher l’événement ${index+1}"${index ? '' : ' aria-current="true"'}></button>`).join('');
   nav.hidden = slides.length < 2;
   let activeIndex = 0;
@@ -1181,31 +1306,64 @@ const renderEmptyPublicSections = () => {
   renderMatchesEmptyState();
   renderIcons();
 };
-const championMarkup = champion => `<article class="champion-card ${champion.rank === '#1' ? 'first' : ''}" data-reveal><div class="champion-rank">${publicEscape(champion.rank)}</div>${I(champion.rank === '#1' ? 'Crown' : 'Medal')}<div class="champion-name">${publicEscape(champion.name)}</div><div class="champion-game">${publicEscape(champion.game)}</div><div class="champion-prize">${publicEscape(champion.prize)}</div></article>`;
+const championMarkup = champion => `<article class="champion-card ${champion.rank === '#1' ? 'first' : ''}" data-reveal><div class="champion-rank">${publicEscape(champion.rank)}</div>${playerAvatarMarkup(champion,champion.name,'champion-avatar')}${I(champion.rank === '#1' ? 'Crown' : 'Medal')}<div class="champion-name">${publicEscape(champion.name)}</div><div class="champion-game">${publicEscape(champion.game)}</div><div class="champion-prize">${publicEscape(champion.prize)}</div><div class="champion-date">${publicEscape(champion.date)}</div></article>`;
 const renderChampions = records => {
   const list = document.querySelector('#champions .champion-list');
   if (!list) return;
+  list.classList.remove('is-single','is-pair');
   if (!records.length) {
     list.innerHTML = `<div class="data-empty"><span class="data-empty-icon">${I('Trophy')}</span><strong>Aucun champion publié</strong><p>Les champions apparaîtront ici dès la fin d’un championnat officiel.</p></div>`;
     renderIcons();
     return;
   }
-  list.innerHTML = records.slice(0, 3).map(championMarkup).join('');
+  const visibleRecords = records.slice(0, 3);
+  if (visibleRecords.length === 1) list.classList.add('is-single');
+  if (visibleRecords.length === 2) list.classList.add('is-pair');
+  list.innerHTML = visibleRecords.map(championMarkup).join('');
   renderIcons();
 };
 const loadPublicChampions = async () => {
   if (!window.firebase || typeof firebase.firestore !== 'function') return;
   try {
     if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-    const snapshot = await firebase.firestore().collection('championships').limit(100).get();
+    const db = firebase.firestore();
+    const snapshot = await db.collection('championships').limit(100).get();
     const records = snapshot.docs.map(doc => {
       const data = doc.data();
       const winner = data.winner || data.champion || {};
       const name = data.winnerName || data.championName || winner.name || winner.displayName;
-      const date = championshipDate(data.completedAt || data.endAt || data.startAt);
-      return name && date ? {rank:data.rank || '#1',name,game:`${data.game === 'domino' ? 'DOMINO' : 'Mopyon'} #${data.number || doc.id}`,prize:moneyLabel(data.prize),date:date.toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'})} : null;
-    }).filter(Boolean).sort((a,b) => new Date(b.date) - new Date(a.date));
-    renderChampions(records);
+      const completedDate = championshipDate(data.completedAt || data.endAt || data.startAt);
+      const uid = String(data.winnerUid || data.championUid || winner.uid || winner.userId || winner.id || '').trim();
+      const participant = Array.isArray(data.participants) ? data.participants.find(item => String(item?.uid || item?.userId || '') === uid) || {} : {};
+      const socialPlayerId = String(data.winnerSocialPlayerId || data.championSocialPlayerId || winner.socialPlayerId || participant.socialPlayerId || uid).trim();
+      return name && completedDate ? {
+        rank:data.rank || '#1', name, uid, socialPlayerId,
+        photoURL:data.winnerPhotoURL || data.championPhotoURL || winner.photoURL || winner.avatarUrl || participant.photoURL || participant.avatarUrl || '',
+        imageName:data.winnerImageName || data.championImageName || winner.imageName || participant.imageName || '',
+        game:`${data.game === 'domino' ? 'DOMINO' : 'Mopyon'} #${data.number || doc.id}`,
+        prize:moneyLabel(data.prize), date:completedDate.toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'}),
+        completedAt:completedDate.getTime()
+      } : null;
+    }).filter(Boolean).sort((a,b) => b.completedAt - a.completedAt).slice(0,3);
+    const enriched = await Promise.all(records.map(async record => {
+      const profileIds = [...new Set([record.socialPlayerId,record.uid].filter(id => /^[A-Za-z0-9_-]{1,150}$/.test(id)))];
+      const lookups = profileIds.flatMap(id => [
+        db.collection('socialProfiles').doc(id).get().catch(() => null),
+        db.collection('publicProfiles').doc(id).get().catch(() => null),
+        db.collection('leaderboard').doc(id).get().catch(() => null)
+      ]);
+      const profiles = await Promise.all(lookups);
+      const profile = profiles.find(item => item?.exists && /^https:\/\//.test(String(item.data()?.avatarUrl || item.data()?.photoURL || '')))?.data()
+        || profiles.find(item => item?.exists && /^[A-Za-z0-9._-]+$/.test(String(item.data()?.imageName || '')))?.data()
+        || {};
+      return {
+        ...record,
+        socialPlayerId:record.socialPlayerId || record.uid,
+        photoURL:record.photoURL || profile.avatarUrl || profile.photoURL || '',
+        imageName:record.imageName || profile.imageName || ''
+      };
+    }));
+    renderChampions(enriched);
   } catch (error) { console.error('Public champions read failed:', error); renderChampions([]); }
 };
 const normalizedRankingName = value => String(value || '').trim().toLocaleLowerCase('fr').replace(/\s+/g,' ');
@@ -1239,7 +1397,7 @@ const rankingRows = users => {
   const realUsers = users.map(user => {
     const name = `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.username || user.displayName || 'Joueur';
     const points = Math.max(0, Number(user.points ?? user.totalPoints ?? user.score) || 0);
-    return {name, level:playerLevelFromPoints(points).name, points:points.toLocaleString('fr-FR'), imageName:user.imageName || '', photoURL:user.photoURL || '',isDemo:false};
+    return {name, socialPlayerId:user.socialPlayerId||user.uid||user.userId||user.id||'', level:playerLevelFromPoints(points).name, points:points.toLocaleString('fr-FR'), imageName:user.imageName || '', photoURL:user.photoURL || '',isDemo:false};
   });
   const sortedRows = realUsers.sort((a,b) => (Number(String(b.points).replace(/\s/g,'')) || 0) - (Number(String(a.points).replace(/\s/g,'')) || 0)).slice(0, 12);
   return uniqueRankingAvatars(sortedRows);
@@ -1261,7 +1419,7 @@ const rankingRowMarkup = (row, index) => {
         : `<span class="ranking-avatar" style="background-image:none" role="img" aria-label="Avatar de ${publicEscape(row.name)}">${initialsOf(row.name)}</span>`;
   const numericPoints = Math.max(0, Number(String(row.points).replace(/\s/g,'')) || 0);
   const level = playerLevelFromPoints(numericPoints).name;
-  return `<tr class="${row.isDemo ? 'ranking-demo-row' : ''}"><td>${index + 1}</td><td>${avatar}<b>${publicEscape(row.name)}</b></td><td><span class="level-badge">${publicEscape(level)}</span></td><td>${publicEscape(row.points)}${row.points !== '—' ? ' PTS' : ''}</td></tr>`;
+  return `<tr class="${row.isDemo ? 'ranking-demo-row' : ''}"><td>${index + 1}</td><td>${mainAvatarLink(row,row.name,avatar)}${mainAvatarLink(row,row.name,`<b>${publicEscape(row.name)}</b>`)}</td><td><span class="level-badge">${publicEscape(level)}</span></td><td>${publicEscape(row.points)}${row.points !== '—' ? ' PTS' : ''}</td></tr>`;
 };
 const renderRanking = users => {
   const rows = rankingRows(users);
@@ -1283,7 +1441,7 @@ const loadPublicRanking = async () => {
   try {
     if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
     const snapshot = await firebase.firestore().collection('leaderboard').limit(200).get();
-    renderRanking(snapshot.docs.map(doc => doc.data()));
+    renderRanking(snapshot.docs.map(doc => ({id:doc.id,...doc.data()})));
   } catch (error) { console.error('Public ranking read failed:', error); renderRanking([]); }
 };
 const loadHomepagePersonalMatches = async user => {
@@ -1340,6 +1498,14 @@ const loadPublicMatches = async () => {
       }
       result.value.docs.forEach(doc => unique.set(doc.id, {id: doc.id, ...doc.data()}));
     });
+    const missingSeriesIds = [...new Set([...unique.values()]
+      .map(data => String(data.seriesId || ''))
+      .filter(seriesId => /^[A-Za-z0-9_-]{1,160}$/.test(seriesId) && !unique.has(seriesId)))]
+      .slice(0,30);
+    if (missingSeriesIds.length) {
+      const parentSnapshots = await Promise.all(missingSeriesIds.map(seriesId => db.collection('matches').doc(seriesId).get().catch(() => null)));
+      parentSnapshots.filter(snapshot => snapshot?.exists).forEach(snapshot => unique.set(snapshot.id,{id:snapshot.id,...snapshot.data()}));
+    }
     const records = [...unique.values()].map(data => ({
       ...data,
       players: Array.isArray(data.players) ? data.players.map(attachPlayerPhoto) : data.players,
@@ -1389,6 +1555,7 @@ const renderChampionshipActivity = records => {
     .slice(0, 3)
     .sort((a,b) => Number(a.status === 'completed') - Number(b.status === 'completed'));
   activityGrid.innerHTML = recent.length ? recent.map(record => activity({
+    socialId: record.id,
     game: record.game,
     id: `#${record.number}`,
     tone: championshipTone(record.status),

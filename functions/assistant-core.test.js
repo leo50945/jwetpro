@@ -335,7 +335,9 @@ test('transmet le contexte recent et repond a une relance naturelle', async () =
   });
   const result = await service.answerUserMessage({messageId: 'current', message: 'kombyen kob?', userId: 'u1', preferredLanguage: 'ht'});
   assert.equal(result.answer, 'Frè enskripsyon an se 125 HTG.');
-  assert.equal(receivedPayload.RECENT_CONVERSATION.length, 2);
+  assert.equal(receivedPayload.RECENT_CONVERSATION.length, 3);
+  assert.equal(receivedPayload.RECENT_CONVERSATION[0].role, 'assistant');
+  assert.match(receivedPayload.RECENT_CONVERSATION[0].body, /Jean Estime/);
   assert.equal(receivedPayload.conversationTopic, 'championships');
   assert.equal(receivedPayload.DYNAMIC_CONTEXT.upcomingChampionships[0].entryFee, 125);
   assert.deepEqual(result.suggestedActions, ['register_championship']);

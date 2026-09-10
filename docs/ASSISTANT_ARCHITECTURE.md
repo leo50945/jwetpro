@@ -6,6 +6,8 @@ L'assistant répond uniquement dans la conversation privée `coordinator_<uid>` 
 
 ## Flux
 
+À la première visite sur un navigateur, la sélection de langue reste prioritaire. Cinq secondes après la fermeture de cette modale, le widget privé s'ouvre automatiquement et place toujours en tête un accueil constant de Jean Estime, dans la langue sélectionnée. Pour un navigateur qui possédait déjà une préférence de langue avant l'ajout de ce parcours, le même délai commence après le chargement de la page. Cet accueil est un élément système local et non un document Firestore : il ne peut donc être ni dupliqué ni supprimé. Le serveur ajoute le même accueil au début de `RECENT_CONVERSATION`, afin que l'assistant sache qu'il s'est déjà présenté et réponde directement au premier besoin du visiteur.
+
 1. Le joueur authentifié écrit un message privé dans `communityMessages`.
 2. La règle Firestore impose son UID, `authorRole: user`, la langue, un texte de 1 à 2 000 caractères et un horodatage serveur.
 3. `autoReplyToCoordinatorMessage` traite uniquement le dernier message créé dans la conversation de ce joueur.

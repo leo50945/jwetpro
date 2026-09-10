@@ -1,7 +1,7 @@
 const runActivityPage = () => initActivityPage();
 window.addEventListener('shared-shell-ready', runActivityPage, { once: true });
 const sharedShellScript = document.createElement('script');
-sharedShellScript.src = './shared-shell.js?v=20260903-auth-match-action';
+sharedShellScript.src = './shared-shell.js?v=20260909-social-v3';
 document.head.append(sharedShellScript);
 
 const firebaseConfig = {
@@ -61,6 +61,7 @@ const activityProfilesByName = new Map();
 const matchPlayers = data => {
   const ids = Array.isArray(data.participantIds) ? data.participantIds.filter(id => typeof id === 'string') : [];
   const names = data.participantNames || data.playerNames || {};
+  const socialIds = data.participantSocialIds || {};
   const embeddedProfiles = data.participantProfiles || data.playerProfiles || {};
   let rawPlayers = [];
   if (Array.isArray(data.players)) rawPlayers = data.players;
@@ -73,21 +74,24 @@ const matchPlayers = data => {
     const explicitName = player.name || player.displayName || player.username || names[uid] || '';
     const embedded = uid && embeddedProfiles[uid] && typeof embeddedProfiles[uid] === 'object' ? embeddedProfiles[uid] : {};
     const profile = (uid && activityProfilesById.get(uid)) || activityProfilesByName.get(normalizedActivityName(explicitName)) || {};
-    return {...profile,...embedded,...player,uid,name:explicitName || embedded.displayName || embedded.name || profile.displayName || profile.name || ''};
+    return {...profile,...embedded,...player,uid,socialPlayerId:player.socialPlayerId||socialIds[uid]||profile.socialPlayerId||uid,name:explicitName || embedded.displayName || embedded.name || profile.displayName || profile.name || ''};
   });
 };
 const playerName = player => player?.name || player?.displayName || player?.username || 'Joueur';
 const initialsFrom = value => String(value || '').trim().split(/\s+/).filter(Boolean).map(part => part[0]).slice(0, 2).join('').toUpperCase() || '?';
+const activitySocialId = player => String(player?.socialPlayerId || player?.uid || player?.userId || player?.playerId || player?.id || '').trim();
+const activityAvatarLink = (player, markup) => /^[A-Za-z0-9_-]{1,150}$/.test(activitySocialId(player)) ? `<a class="player-social-link" href="./player.html?id=${encodeURIComponent(activitySocialId(player))}" aria-label="Voir le profil de ${escapeHTML(playerName(player))}">${markup}</a>` : markup;
 const playerAvatar = player => {
   const label = playerName(player);
   const photoURL = String(player?.photoURL || '').trim().replace(/'/g, '%27');
   const image = String(player?.imageName || '');
-  if (/^https:\/\//.test(photoURL)) return `<span class="public-avatar" style="background-image:url('${photoURL}');background-size:cover;background-position:center" role="img" aria-label="Avatar de ${escapeHTML(label)}"></span>`;
-  if (/^[A-Za-z0-9._-]+$/.test(image)) return `<span class="public-avatar" style="background-image:url('./src/profilimage/${encodeURIComponent(image)}');background-size:cover;background-position:center" role="img" aria-label="Avatar de ${escapeHTML(label)}"></span>`;
-  return `<span class="public-avatar" style="display:grid;place-items:center;background-image:none;background-color:#172738;color:#c9d6e2;font-size:14px;font-weight:800" role="img" aria-label="Avatar de ${escapeHTML(label)}">${initialsFrom(label)}</span>`;
+  if (/^https:\/\//.test(photoURL)) return activityAvatarLink(player,`<span class="public-avatar" style="background-image:url('${photoURL}');background-size:cover;background-position:center" role="img" aria-label="Avatar de ${escapeHTML(label)}"></span>`);
+  if (/^[A-Za-z0-9._-]+$/.test(image)) return activityAvatarLink(player,`<span class="public-avatar" style="background-image:url('./src/profilimage/${encodeURIComponent(image)}');background-size:cover;background-position:center" role="img" aria-label="Avatar de ${escapeHTML(label)}"></span>`);
+  return activityAvatarLink(player,`<span class="public-avatar" style="display:grid;place-items:center;background-image:none;background-color:#172738;color:#c9d6e2;font-size:14px;font-weight:800" role="img" aria-label="Avatar de ${escapeHTML(label)}">${initialsFrom(label)}</span>`);
 };
 const activityCurrentUserId = () => window.JwetproCurrentUserId || window.firebase?.auth?.().currentUser?.uid || '';
 const activityIsParticipant = data => Boolean(activityCurrentUserId()) && Array.isArray(data.participantIds) && data.participantIds.includes(activityCurrentUserId());
+const activityMatchSocialAttributes = data => data.kind === 'game' || (data.kind !== 'series' && (data.seriesId || data.parentSeriesId || data.matchSeriesId)) ? ' data-social-disabled="true"' : ` data-social-kind="match" data-social-id="${escapeHTML(data.id)}"`;
 const matchCard = (data, replay = false) => {
   const players = matchPlayers(data);
   const game = gameLabel(data.game || data.type);
@@ -99,10 +103,10 @@ const matchCard = (data, replay = false) => {
   const action = replay
     ? `<a href="./play.html?replay=${encodeURIComponent(data.id)}">VOIR LE REPLAY <i data-lucide="ArrowRight"></i></a>`
     : watchId ? `<a href="./play.html?${participant ? 'join' : 'match'}=${encodeURIComponent(participant ? data.id : watchId)}">${participant ? 'REJOINDRE LE MATCH' : 'REGARDER LE MATCH'} <i data-lucide="ArrowRight"></i></a>` : '';
-  return `<article class="activity-public-card match-public-card ${replay ? 'is-replay' : 'is-live'}"><div class="public-card-top"><span class="public-status ${replay ? 'replay' : 'live'}"><i></i>${replay ? 'REPLAY' : 'EN DIRECT'}</span><time>${escapeHTML(dateLabel(data.createdAt || data.startedAt || data.startAt))}</time></div><h3>${game}${number ? ` <span>#${escapeHTML(number)}</span>` : ''}</h3><div class="public-versus"><div>${playerAvatar(players[0])}<b>${escapeHTML(playerName(players[0]))}</b></div><strong>${score ? escapeHTML(score) : 'VS'}</strong><div>${playerAvatar(players[1])}<b>${escapeHTML(playerName(players[1]))}</b></div></div><div class="public-card-bottom"><span>${replay ? `${isSeries ? 'Match' : 'Manche'} terminé${isSeries ? ' · 2 manches gagnantes' : ''}` : `${escapeHTML(data.viewers || 0)} spectateurs`}</span>${action}</div></article>`;
+  return `<article class="activity-public-card match-public-card ${replay ? 'is-replay' : 'is-live'}"${activityMatchSocialAttributes(data)}><div class="public-card-top"><span class="public-status ${replay ? 'replay' : 'live'}"><i></i>${replay ? 'REPLAY' : 'EN DIRECT'}</span><time>${escapeHTML(dateLabel(data.createdAt || data.startedAt || data.startAt))}</time></div><h3>${game}${number ? ` <span>#${escapeHTML(number)}</span>` : ''}</h3><div class="public-versus"><div>${playerAvatar(players[0])}${activityAvatarLink(players[0],`<b>${escapeHTML(playerName(players[0]))}</b>`)}</div><strong>${score ? escapeHTML(score) : 'VS'}</strong><div>${playerAvatar(players[1])}${activityAvatarLink(players[1],`<b>${escapeHTML(playerName(players[1]))}</b>`)}</div></div><div class="public-card-bottom"><span>${replay ? `${isSeries ? 'Match' : 'Manche'} terminé${isSeries ? ' · 2 manches gagnantes' : ''}` : `${escapeHTML(data.viewers || 0)} spectateurs`}</span>${action}</div></article>`;
 };
-const championshipCard = data => { const action = championshipAction(data.status, data.id); return `<article class="activity-public-card championship-public-card"><div class="championship-public-icon"><i data-lucide="${gameLabel(data.game) === 'DOMINO' ? 'Dice5' : 'Grid3X3'}"></i></div><div><p class="public-card-kicker">${escapeHTML(statusText(data.status))}</p><h3>${gameLabel(data.game)} <span>#${escapeHTML(data.number || data.id || '')}</span></h3><p>${escapeHTML(dateLabel(data.startAt || data.startDate))}${data.time ? ` · ${escapeHTML(data.time)}` : ''}</p></div><dl><div><dt>Participation</dt><dd>${Number(data.entryFee || 0).toLocaleString('fr-FR')} HTG</dd></div><div><dt>Gain</dt><dd>${Number(data.prize || 0).toLocaleString('fr-FR')} HTG</dd></div></dl><a class="championship-public-action ${action.tone}" href="${action.href}">${action.label} <i data-lucide="ArrowRight"></i></a></article>`; };
-const winnerCard = data => `<article class="activity-public-card winner-public-card"><span class="winner-medal"><i data-lucide="Crown"></i></span><div><p class="public-card-kicker">CHAMPION PUBLIÉ</p><h3>${escapeHTML(data.name)}</h3><p>${escapeHTML(data.game)}${data.number ? ` #${escapeHTML(data.number)}` : ''}</p></div><strong>${Number(data.prize || 0).toLocaleString('fr-FR')} HTG</strong></article>`;
+const championshipCard = data => { const action = championshipAction(data.status, data.id); return `<article class="activity-public-card championship-public-card" data-social-kind="championship" data-social-id="${escapeHTML(data.id)}"><div class="championship-public-icon"><i data-lucide="${gameLabel(data.game) === 'DOMINO' ? 'Dice5' : 'Grid3X3'}"></i></div><div><p class="public-card-kicker">${escapeHTML(statusText(data.status))}</p><h3>${gameLabel(data.game)} <span>#${escapeHTML(data.number || data.id || '')}</span></h3><p>${escapeHTML(dateLabel(data.startAt || data.startDate))}${data.time ? ` · ${escapeHTML(data.time)}` : ''}</p></div><dl><div><dt>Participation</dt><dd>${Number(data.entryFee || 0).toLocaleString('fr-FR')} HTG</dd></div><div><dt>Gain</dt><dd>${Number(data.prize || 0).toLocaleString('fr-FR')} HTG</dd></div></dl><a class="championship-public-action ${action.tone}" href="${action.href}">${action.label} <i data-lucide="ArrowRight"></i></a></article>`; };
+const winnerCard = data => `<article class="activity-public-card winner-public-card" data-social-kind="championship" data-social-id="${escapeHTML(data.id)}"><span class="winner-medal"><i data-lucide="Crown"></i></span><div><p class="public-card-kicker">CHAMPION PUBLIÉ</p><h3>${escapeHTML(data.name)}</h3><p>${escapeHTML(data.game)}${data.number ? ` #${escapeHTML(data.number)}` : ''}</p></div><strong>${Number(data.prize || 0).toLocaleString('fr-FR')} HTG</strong></article>`;
 const emptyCard = (title, detail) => `<div class="activity-public-empty"><i data-lucide="Inbox"></i><strong>${title}</strong><span>${detail}</span></div>`;
 const renderList = (name, html, count, emptyTitle, emptyDetail) => { const list = document.querySelector(`[data-list="${name}"]`); if (list) list.innerHTML = html || emptyCard(emptyTitle, emptyDetail); const badge = document.querySelector(`[data-count="${name}"]`); if (badge) badge.textContent = count; };
 const loadReadableMatches = async db => {
@@ -117,11 +121,16 @@ const loadReadableMatches = async db => {
     }
     result.value.docs.forEach(doc => unique.set(doc.id, {id: doc.id, ...doc.data()}));
   });
+  const missingSeriesIds = [...new Set([...unique.values()].map(match => String(match.seriesId || match.parentSeriesId || match.matchSeriesId || '')).filter(id => /^[A-Za-z0-9_-]{1,150}$/.test(id) && !unique.has(id)))].slice(0,50);
+  if (missingSeriesIds.length) {
+    const parents = await Promise.all(missingSeriesIds.map(id => db.collection('matches').doc(id).get().catch(() => null)));
+    parents.filter(document => document?.exists).forEach(document => unique.set(document.id,{id:document.id,...document.data()}));
+  }
   const matches = [...unique.values()];
   const seriesIds = new Set(matches.filter(match => match.kind === 'series').map(match => match.id));
   // The series is the match shown to the public. Child game documents are its manches and must not
   // inflate activity counts or appear as separate matches when their parent is available.
-  return matches.filter(match => match.kind === 'series' || !match.seriesId || !seriesIds.has(match.seriesId));
+  return matches.filter(match => match.kind === 'series' || !(match.seriesId || match.parentSeriesId || match.matchSeriesId) || !seriesIds.has(String(match.seriesId || match.parentSeriesId || match.matchSeriesId)));
 };
 const initActivityPage = async () => {
   window.renderIcons?.();
@@ -146,7 +155,7 @@ const initActivityPage = async () => {
       const completionOrder = Number(a.status === 'completed') - Number(b.status === 'completed');
       return completionOrder || activityScore(b) - activityScore(a);
     });
-    const winners = publishedChampionships.map(item => { const winner = item.winner || item.champion || {}; const name = item.winnerName || item.championName || winner.name || winner.displayName; return name ? {name,game:gameLabel(item.game),number:item.number,prize:item.prize} : null; }).filter(Boolean);
+    const winners = publishedChampionships.map(item => { const winner = item.winner || item.champion || {}; const name = item.winnerName || item.championName || winner.name || winner.displayName; return name ? {id:item.id,name,game:gameLabel(item.game),number:item.number,prize:item.prize} : null; }).filter(Boolean);
     renderList('live', liveMatches.slice(0, ACTIVITY_PREVIEW_LIMIT).map(match => matchCard(match)).join(''), liveMatches.length, 'Aucun match en direct', 'Les matchs en direct seront affichés ici dès qu’une compétition commencera.');
     renderList('replays', replayMatches.slice(0, ACTIVITY_PREVIEW_LIMIT).map(match => matchCard(match, true)).join(''), replayMatches.length, 'Aucun replay publié', 'Les matchs terminés apparaîtront ici lorsqu’un replay sera disponible.');
     renderList('champions', winners.slice(0, ACTIVITY_PREVIEW_LIMIT).map(winnerCard).join(''), winners.length, 'Aucun vainqueur publié', 'Les résultats officiels apparaîtront ici après validation.');

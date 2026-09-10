@@ -1188,8 +1188,6 @@
 
     body.official-mode #resultModal,
     body.official-mode #botLevelModal,
-    body.official-mode #drawModal,
-    body.official-mode #forcedDrawModal,
     body.official-mode #boardReplayBtn {
       display: none !important;
     }
@@ -1341,7 +1339,9 @@
     const BOT_LEVEL_WEAK = "weak";
     const BOT_LEVEL_STRONG = "strong";
     const DEFAULT_BOT_LEVEL = BOT_LEVEL_STRONG;
-    const OFFICIAL_MODE = new URLSearchParams(window.location.search).get("official") === "1";
+    const pageParams = new URLSearchParams(window.location.search);
+    const OFFICIAL_MODE = pageParams.get("official") === "1";
+    const REPLAY_MODE = pageParams.get("replay") === "1";
     const TARGET_SCORE = 100;
     const BOARD_MARGIN = 8;
     const BOARD_CONNECTED_GAP = 2;
@@ -1492,30 +1492,89 @@
     let officialMatchId = "";
     let officialInteractive = false;
     let officialAutoPassKey = "";
+    let officialOpeningMatchId = "";
+    let officialOpeningFinished = false;
+    let officialOpeningInProgress = false;
+    let officialPendingPayload = null;
+    let officialOpeningCallback = null;
+    let officialHumanTimerKey = "";
 
     function validOfficialTile(tile) {
       return tile && Number.isInteger(tile.a) && Number.isInteger(tile.b) && tile.a >= 0 && tile.a <= 6 && tile.b >= 0 && tile.b <= 6 && typeof tile.id === "string";
     }
 
-    function sendOfficialAction(action, tileId = "", side = "") {
+    function sendOfficialAction(action, tileId = "", side = "", drawIndex = null) {
       if (!OFFICIAL_MODE || !officialInteractive || !officialMatchId || gameState.isBusy) return;
-      if (!['play', 'draw', 'pass'].includes(action)) return;
+      if (!['play', 'draw', 'pass', 'timeout'].includes(action)) return;
       gameState.isBusy = true;
       officialInteractive = false;
       closeSideModal();
-      renderGame();
-      window.parent.postMessage({type: 'jwetpro-domino-action', matchId: officialMatchId, action, tileId, side}, window.location.origin);
+      stopHumanTurnTimer();
+      if (action === 'play') {
+        const tile = gameState.players[HUMAN].find(item => item.id === tileId);
+        const sourceRect = tile ? getHandTileRect(HUMAN, tile.id) : null;
+        if (tile) {
+          gameState.players[HUMAN] = gameState.players[HUMAN].filter(item => item.id !== tile.id);
+          placeTileOnBoard(tile, side);
+          gameState.firstMove = false;
+          playSoundEffect(tile.a === tile.b ? "doubleDomino" : "playDomino");
+          setMessage(`Ou jwe ${tile.a}-${tile.b}. L’adversaire ap reflechi...`);
+          renderGame();
+          animatePlayedTile(tile.id, sourceRect);
+        } else renderGame();
+      } else renderGame();
+      window.parent.postMessage({type: 'jwetpro-domino-action', matchId: officialMatchId, action, tileId, side, drawIndex}, window.location.origin);
     }
 
     function applyOfficialState(payload) {
       if (!OFFICIAL_MODE || !payload || typeof payload !== 'object') return;
       const hand = Array.isArray(payload.hand) ? payload.hand.filter(validOfficialTile).map(tile => ({id:tile.id,a:tile.a,b:tile.b})) : [];
       const boardTiles = Array.isArray(payload.boardTiles) ? payload.boardTiles.filter(validOfficialTile).map(tile => ({id:tile.id,a:tile.a,b:tile.b})) : [];
+      const selfCount = Math.min(28, Math.max(0, Number(payload.selfCount) || hand.length));
       const opponentCount = Math.min(28, Math.max(0, Number(payload.opponentCount) || 0));
       const drawPileCount = Math.min(28, Math.max(0, Number(payload.drawPileCount) || 0));
+      const previousActionNumber = Math.max(0, Number(gameState.actionNumber) || 0);
+      const previousBoardIds = new Set(gameState.boardTiles.map(tile => tile.id));
+      const previousHumanCount = gameState.players[HUMAN]?.length || 0;
+      const previousOpponentCount = gameState.players[BOT]?.length || 0;
       officialMatchId = String(payload.matchId || '');
+      const actionNumber = Math.max(0, Number(payload.actionNumber) || 0);
+      if (officialOpeningMatchId !== officialMatchId) {
+        officialOpeningMatchId = officialMatchId;
+        officialOpeningFinished = actionNumber > 0 || boardTiles.length > 0 || payload.complete === true;
+        officialOpeningInProgress = false;
+        officialPendingPayload = null;
+      }
+      if (!officialOpeningFinished && actionNumber === 0 && boardTiles.length === 0) {
+        officialPendingPayload = payload;
+        if (!officialOpeningInProgress) {
+          officialOpeningInProgress = true;
+          officialInteractive = false;
+          gameState.players = [[], []];
+          gameState.boardTiles = [];
+          gameState.drawPile = generateDominoSet();
+          gameState.gameOver = false;
+          gameState.isBusy = true;
+          setMessage("N ap brase domino yo...");
+          renderGame();
+          officialOpeningCallback = () => {
+            officialOpeningCallback = null;
+            officialOpeningInProgress = false;
+            officialOpeningFinished = true;
+            const latest = officialPendingPayload;
+            officialPendingPayload = null;
+            window.parent.postMessage({type:'jwetpro-domino-opening-complete',matchId:officialMatchId},window.location.origin);
+            if (latest) applyOfficialState(latest);
+          };
+          runOpeningAnimation(generateDominoSet());
+        }
+        return;
+      }
       officialInteractive = payload.interactive === true && payload.currentTurn === 'self' && payload.complete !== true;
-      gameState.players = [hand, Array.from({length:opponentCount}, (_,index) => ({id:`hidden-${index}`,a:0,b:0}))];
+      const displayedHand = REPLAY_MODE
+        ? Array.from({length:selfCount}, (_,index) => ({id:`replay-self-${index}`,a:0,b:0}))
+        : hand;
+      gameState.players = [displayedHand, Array.from({length:opponentCount}, (_,index) => ({id:`hidden-${index}`,a:0,b:0}))];
       gameState.boardTiles = boardTiles;
       gameState.drawPile = Array.from({length:drawPileCount}, (_,index) => ({id:`draw-${index}`,a:0,b:0}));
       gameState.currentPlayer = payload.currentTurn === 'self' ? HUMAN : BOT;
@@ -1525,11 +1584,34 @@
       gameState.isBusy = false;
       gameState.selectedTile = null;
       gameState.revealBotHand = false;
+      gameState.actionNumber = actionNumber;
       closeSideModal();
       closeDrawModal();
       closeForcedDrawModal();
-      stopHumanTurnTimer();
       renderGame();
+
+      if (actionNumber > previousActionNumber) {
+        const addedTile = boardTiles.find(tile => !previousBoardIds.has(tile.id));
+        if (addedTile) {
+          playSoundEffect(addedTile.a === addedTile.b ? "doubleDomino" : "playDomino");
+          animatePlayedTile(addedTile.id, getHandTileRect(BOT, addedTile.id));
+        } else if (displayedHand.length > previousHumanCount) {
+          animateDraw(HUMAN, displayedHand.at(-1)?.id);
+        } else if (opponentCount > previousOpponentCount) {
+          animateDraw(BOT, '');
+        }
+      }
+
+      const timerKey = `${officialMatchId}:${actionNumber}`;
+      if (officialInteractive && gameState.currentPlayer === HUMAN && !gameState.gameOver) {
+        if (officialHumanTimerKey !== timerKey) {
+          officialHumanTimerKey = timerKey;
+          startHumanTurnTimer(Number(payload.turnDeadlineAt)||0);
+        }
+      } else {
+        officialHumanTimerKey = "";
+        stopHumanTurnTimer();
+      }
 
       const mustPass = officialInteractive && gameState.currentPlayer === HUMAN && !playerPlayableTiles(HUMAN).length && !drawPileCount;
       const passKey = `${officialMatchId}:${String(payload.revision || '')}`;
@@ -1817,7 +1899,8 @@
         openingSoundPhase = null;
         els.introLayer.hidden = true;
         els.introStack.innerHTML = "";
-        finishOpeningDeal(deck);
+        if (OFFICIAL_MODE && officialOpeningCallback) officialOpeningCallback();
+        else finishOpeningDeal(deck);
       };
 
       gsap.to(cards, {
@@ -1885,7 +1968,7 @@
       gameState.players[HUMAN].forEach(tile => {
         const sides = canPlayTile(tile);
         const forcedStarter = gameState.firstMove && tile.id !== gameState.starterTileId;
-        const tileEl = createDomino(tile);
+        const tileEl = createDomino(tile, { hidden: REPLAY_MODE });
 
         if (humanTurn && sides.length && !forcedStarter) {
           tileEl.classList.add("playable");
@@ -2584,7 +2667,6 @@
 
     function drawTile() {
       if (!mustHumanDraw()) return;
-      if (OFFICIAL_MODE) return sendOfficialAction('draw');
       closeForcedDrawModal();
       openDrawModal();
     }
@@ -2908,10 +2990,10 @@
       return hand.reduce((total, tile) => total + tile.a + tile.b, 0);
     }
 
-    function startHumanTurnTimer() {
+    function startHumanTurnTimer(authoritativeDeadline = 0) {
       stopHumanTurnTimer();
       if (gameState.currentPlayer !== HUMAN || gameState.gameOver) return;
-      humanTurnDeadline = Date.now() + HUMAN_TURN_SECONDS * 1000;
+      humanTurnDeadline = authoritativeDeadline > Date.now() ? authoritativeDeadline : Date.now() + HUMAN_TURN_SECONDS * 1000;
       els.turnTimer.hidden = false;
       updateHumanTurnTimer();
       humanTurnTimerId = setInterval(updateHumanTurnTimer, 250);
@@ -2941,6 +3023,11 @@
     function handleHumanTimeout() {
       if (gameState.currentPlayer !== HUMAN || gameState.gameOver) return;
       stopHumanTurnTimer();
+      if (OFFICIAL_MODE) {
+        setMessage("Tan 30 segonn lan fini. N ap valide rezilta a...");
+        sendOfficialAction('timeout');
+        return;
+      }
       const points = handPoints(gameState.players[HUMAN]);
       gameState.scores[BOT] += points;
       endRound(`Tan 30 segonn lan fini. BOT genyen +${points} pwen.`, BOT, { timeout: true });
@@ -3093,6 +3180,13 @@
       if (gameState.currentPlayer !== HUMAN || gameState.gameOver || gameState.isBusy) return;
       if (!Number.isInteger(drawIndex) || drawIndex < 0 || drawIndex >= gameState.drawPile.length) {
         closeDrawModal();
+        return;
+      }
+
+      if (OFFICIAL_MODE) {
+        closeDrawModal();
+        playSoundEffect("draw");
+        sendOfficialAction('draw', '', '', drawIndex);
         return;
       }
 

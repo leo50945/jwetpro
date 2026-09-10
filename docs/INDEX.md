@@ -11,6 +11,7 @@ Lire cet index avant les autres documents.
 | `RESPONSIVE_SPEC.md` | Desktop, tablette et mobile. |
 | `ANIMATIONS.md` | GSAP et reduction de mouvement. |
 | `SECURITY_AND_DEPENDENCIES.md` | Packages, self-hosting, CDN et CSP future. |
+| `SOCIAL_DEPLOYMENT.md` | Ordre de déploiement, backfill, recette et retour arrière du système social. |
 | `ASSISTANT_ARCHITECTURE.md` | Base de connaissances, Gemini, confidentialité et escalade humaine. |
 | `ASSETS.md` | Assets existants, temporaires et manquants. |
 | `ROADMAP.md` | Phases futures et retention. |

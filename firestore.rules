@@ -66,10 +66,11 @@ service cloud.firestore {
         && (!('favoriteGames' in data) || (data.favoriteGames is list && data.favoriteGames.size() <= 30))
         && (!('notificationPreferences' in data) || (
           data.notificationPreferences is map
-          && data.notificationPreferences.keys().hasOnly(['matchReminders', 'results', 'championships'])
+          && data.notificationPreferences.keys().hasOnly(['matchReminders', 'results', 'championships', 'social'])
           && (!('matchReminders' in data.notificationPreferences) || data.notificationPreferences.matchReminders is bool)
           && (!('results' in data.notificationPreferences) || data.notificationPreferences.results is bool)
           && (!('championships' in data.notificationPreferences) || data.notificationPreferences.championships is bool)
+          && (!('social' in data.notificationPreferences) || data.notificationPreferences.social is bool)
         ))
         && data.updatedAt == request.time;
     }
@@ -93,10 +94,11 @@ service cloud.firestore {
         && data.username.matches('^[A-Za-z0-9._-]{3,24}$')
         && data.profilePublic is bool
         && data.notificationPreferences is map
-        && data.notificationPreferences.keys().hasOnly(['matchReminders', 'results', 'championships'])
+        && data.notificationPreferences.keys().hasOnly(['matchReminders', 'results', 'championships', 'social'])
         && data.notificationPreferences.matchReminders is bool
         && data.notificationPreferences.results is bool
         && data.notificationPreferences.championships is bool
+        && (!('social' in data.notificationPreferences) || data.notificationPreferences.social is bool)
         && data.createdAt == request.time
         && data.updatedAt == request.time;
     }
@@ -113,16 +115,70 @@ service cloud.firestore {
     // Public ranking projection: only non-sensitive leaderboard fields are exposed.
     match /leaderboard/{userId} {
       allow read: if true;
-      allow create, update: if signedIn()
-        && (request.auth.uid == userId || isAdmin())
-        && validLeaderboard(request.resource.data);
-      allow delete: if false;
+      allow create, update, delete: if false;
     }
 
     // Public profile projection maintained exclusively by trusted Cloud Functions.
     match /publicProfiles/{userId} {
       allow read: if true;
       allow create, update, delete: if false;
+    }
+
+    // Minimal social identity. Private profiles expose only the fields projected by trusted functions.
+    match /socialProfiles/{socialId} {
+      allow read: if true;
+      allow create, update, delete: if false;
+    }
+
+    // Aggregate likes are public; individual likes and relationship edges remain server-only.
+    match /socialEntityStats/{entityId} {
+      allow read: if true;
+      allow create, update, delete: if false;
+    }
+
+    match /socialLikes/{likeId} {
+      allow read, write: if false;
+    }
+
+    match /socialFollows/{followId} {
+      allow read, write: if false;
+    }
+
+    match /socialPrivateStats/{userId} {
+      allow read: if signedIn() && request.auth.uid == userId;
+      allow write: if false;
+    }
+
+    match /socialBlocks/{blockId} {
+      allow read, write: if false;
+    }
+
+    match /socialReports/{reportId} {
+      allow read: if isAdmin();
+      allow create, update, delete: if false;
+    }
+
+    // Favorites and notifications are private projections maintained by Cloud Functions.
+    match /users/{userId}/favorites/{favoriteId} {
+      allow read: if signedIn() && request.auth.uid == userId;
+      allow write: if false;
+    }
+
+    match /users/{userId}/notifications/{notificationId} {
+      allow read: if signedIn() && request.auth.uid == userId;
+      allow write: if false;
+    }
+
+    // Conversation metadata and history remain visible only to their two real participants.
+    match /directConversations/{conversationId} {
+      allow read: if signedIn() && request.auth.uid in resource.data.participantIds;
+      allow create, update, delete: if false;
+
+      match /messages/{messageId} {
+        allow read: if signedIn()
+          && request.auth.uid in get(/databases/$(database)/documents/directConversations/$(conversationId)).data.participantIds;
+        allow create, update, delete: if false;
+      }
     }
 
     // Share snapshots and referral attribution are created and rendered server-side.
@@ -169,13 +225,24 @@ service cloud.firestore {
       allow delete: if isAdmin() || (signedIn() && resource.data.authorId == request.auth.uid);
     }
 
-    // Only the four official guide entries are public. All knowledge writes stay admin-only.
+    // Daily simulated-community programs are private administration data.
+    // Public clients only receive the resulting messages through communityMessages.
+    match /communityDailyPrograms/{dayKey} {
+      allow read, create, update, delete: if isAdmin();
+    }
+
+    match /communityProgramConversations/{conversationId} {
+      allow read, create, update, delete: if isAdmin();
+    }
+
+    // Only official guide entries are public. All knowledge writes stay admin-only.
     match /assistantKnowledge/{knowledgeId} {
       allow read: if isAdmin() || knowledgeId in [
         'championship-format',
         'championship-rewards',
         'championship-lifecycle',
-        'match-series-and-replay'
+        'match-series-and-replay',
+        'social-sharing'
       ];
       allow create, update, delete: if isAdmin();
     }
@@ -266,6 +333,13 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Bot simulation jobs expose progress to the dashboard only. Their lifecycle,
+    // results and retry leases are exclusively managed by trusted Cloud Functions.
+    match /simulationBotJobs/{jobId} {
+      allow read: if isAdmin();
+      allow create, update, delete: if false;
+    }
+
     // Results are dashboard-managed. They remain private until a public results schema is reviewed.
     match /results/{resultId} {
       allow read, create, update, delete: if isAdmin();
@@ -286,6 +360,15 @@ service cloud.firestore {
     match /jwetproCredits/{creditId} {
       allow read: if signedIn() && resource.data.playerUid == request.auth.uid;
       allow create, update, delete: if false;
+    }
+
+    match /jwetproCoupons/{couponId} {
+      allow read: if signedIn() && resource.data.playerUid == request.auth.uid;
+      allow create, update, delete: if false;
+    }
+
+    match /playerRewardEvents/{eventId} {
+      allow read, write: if false;
     }
 
     match /jwetproTicketEvents/{eventId} {

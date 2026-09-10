@@ -188,7 +188,7 @@ const BUILT_IN_KNOWLEDGE = [
   {
     id: 'ranking-points-levels', category: 'general', priority: 100,
     titleFr: 'Points et niveaux des joueurs', titleHt: 'Pwen ak nivo jwè yo',
-    contentFr: 'Les points sont attribués seulement après publication officielle : participation confirmée +5, victoire en 16e +10, victoire en 8e +15, victoire en quart +25, victoire en demi-finale +40, titre de champion +75 et bonus sans abandon +5. Chaque joueur est compté une seule fois par championnat. Les niveaux automatiques sont : Débutant 0–49 points, Intermédiaire 50–149, Confirmé 150–299, Expert 300–599 et Élite à partir de 600.',
+    contentFr: 'Les points de victoire sont crédités dès la validation serveur de chaque série officielle; les bonus globaux sont réglés à la clôture du championnat : participation confirmée +5, victoire en 16e +10, victoire en 8e +15, victoire en quart +25, victoire en demi-finale +40, titre de champion +75 et bonus sans abandon +5. Chaque joueur est compté une seule fois par championnat. Les niveaux automatiques sont : Débutant 0–49 points, Intermédiaire 50–149, Confirmé 150–299, Expert 300–599 et Élite à partir de 600.',
     contentHt: 'Pwen yo bay sèlman apre piblikasyon ofisyèl : patisipasyon konfime +5, viktwa nan 16yèm +10, viktwa nan 8yèm +15, viktwa nan ka final +25, viktwa nan demi-final +40, chanpyon +75 epi bonis san abandon +5. Yo konte chak jwè yon sèl fwa pou chak chanpyona. Nivo otomatik yo se : Debitan 0–49 pwen, Entèmedyè 50–149, Konfime 150–299, Ekspè 300–599 epi Elit depi 600.',
     keywords: ['points', 'niveau', 'débutant', 'intermédiaire', 'confirmé', 'expert', 'élite', 'pwen', 'nivo']
   },
@@ -226,6 +226,13 @@ const BUILT_IN_KNOWLEDGE = [
     contentFr: 'Jean Estime répond uniquement dans la conversation privée d’assistance du joueur. Il n’est pas présent et ne répond jamais dans le groupe communautaire. Le groupe peut afficher une courte animation entre personnages simulés après cinq secondes de silence lorsqu’un vrai lecteur est présent; cette animation s’arrête dès qu’un utilisateur écrit ou que personne ne regarde la page. Elle est distincte de Jean Estime et ne constitue jamais une réponse à un utilisateur. Lorsqu’une vérification officielle est nécessaire, la demande privée peut être signalée à l’équipe JWETPRO.',
     contentHt: 'Jean Estime reponn sèlman nan konvèsasyon asistans prive jwè a. Li pa prezan epi li pa janm reponn nan gwoup kominotè a. Gwoup la ka montre yon ti animasyon ant pèsonaj simile apre senk segonn silans lè yon vrè moun ap gade; animasyon an kanpe depi yon itilizatè ekri oswa pèsonn pa sou paj la. Li diferan ak Jean Estime epi li pa janm yon repons pou yon itilizatè. Lè yon verifikasyon ofisyèl nesesè, demann prive a ka make pou ekip JWETPRO a.',
     keywords: ['message', 'Jean Estime', 'privé', 'groupe', 'animation', 'salon', 'prive', 'gwoup']
+  },
+  {
+    id: 'social-sharing', category: 'community', priority: 105,
+    titleFr: 'Partage, favoris, abonnements et messages privés', titleHt: 'Pataj, favori, abonnman ak mesaj prive',
+    contentFr: 'Les championnats publiés et les matchs officiels planifiés, en direct ou terminés peuvent être partagés par tout visiteur. Un compte réel connecté peut aimer un championnat ou un match; ce J’aime l’ajoute à Mes favoris. Les joueurs réels et simulés peuvent être suivis, mais un joueur simulé ne suit jamais en retour et ne participe pas aux messages privés. Deux vrais joueurs peuvent s’écrire dans Communauté > Messages privés uniquement lorsqu’ils se suivent mutuellement. Si l’un se désabonne, l’historique reste visible en lecture seule. Le profil permet de consulter ses listes privées d’abonnés et d’abonnements, de bloquer ou signaler, et de partager son nombre d’abonnés sans révéler l’identité d’une nouvelle personne.',
+    contentHt: 'Tout vizitè ka pataje chanpyona ki pibliye ak match ofisyèl ki planifye, an dirèk oswa fini. Yon vrè kont ki konekte ka renmen yon chanpyona oswa yon match; sa mete li nan Favori mwen yo. Yo ka swiv jwè reyèl ak jwè simile, men yon jwè simile pa janm swiv an retou epi li pa patisipe nan mesaj prive. De vrè jwè ka ekri youn lòt nan Kominote > Mesaj prive sèlman lè yo swiv youn lòt. Si youn sispann swiv, ansyen mesaj yo rete vizib sèlman pou lekti. Pwofil la pèmèt jwè a wè lis prive moun k ap swiv li ak moun li swiv, bloke oswa rapòte, epi pataje kantite moun k ap swiv li san revele idantite nouvo moun nan.',
+    keywords: ['partager','partage','favori','aimer','abonné','suivre','follow','message privé','pataje','favori','swiv','mesaj prive']
   },
   {
     id: 'payments-policy', category: 'payments', priority: 100,
@@ -501,13 +508,18 @@ async function loadDynamicContext(admin, db, category, userId, question) {
   return context;
 }
 
-async function loadRecentConversation(db, roomId, currentMessageId) {
+const ASSISTANT_WELCOME_MESSAGES = {
+  fr: 'Bonjour, je suis l’assistant JWETPRO. Je m’appelle Jean Estime. Je suis là pour vous aider. Comment puis-je vous aider aujourd’hui ?',
+  ht: 'Bonjou, mwen se asistan JWETPRO. Non mwen se Jean Estime. Mwen la pou m ede w. Kijan mwen ka ede w jodi a?'
+};
+
+async function loadRecentConversation(db, roomId, currentMessageId, language = 'fr') {
   const snapshot = await db.collection('communityMessages')
     .where('roomId', '==', roomId)
     .orderBy('createdAt', 'asc')
     .limitToLast(14)
     .get();
-  return snapshot.docs
+  const history = snapshot.docs
     .filter(document => document.id !== currentMessageId)
     .map(document => {
       const data = document.data();
@@ -519,8 +531,14 @@ async function loadRecentConversation(db, roomId, currentMessageId) {
         conversationTopic: cleanText(data.conversationTopic || data.category, 40)
       };
     })
-    .filter(item => item.body)
-    .slice(-10);
+    .filter(item => item.body);
+  const welcome = {
+    role: 'assistant',
+    body: ASSISTANT_WELCOME_MESSAGES[language === 'ht' ? 'ht' : 'fr'],
+    isInScope: true,
+    conversationTopic: 'general'
+  };
+  return [welcome, ...history.slice(-9)];
 }
 
 function hasOpenChampionship(dynamicContext) {
@@ -679,7 +697,7 @@ function createAssistantService({admin, db, generateJson = generateGroqJson}) {
   async function answerUserMessage({messageId, message, userId, preferredLanguage, roomId}) {
     await enforceRateLimit(admin, db, userId);
     const language = detectLanguage(message, preferredLanguage);
-    const recentMessages = await loadRecentConversation(db, roomId || `coordinator_${userId}`, messageId);
+    const recentMessages = await loadRecentConversation(db, roomId || `coordinator_${userId}`, messageId, language);
     const scope = classifyScope(message, recentMessages);
     const category = scope.conversationTopic;
     if (!scope.isInScope) {

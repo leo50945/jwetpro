@@ -49,13 +49,36 @@ const sharedHomeLink = `<a class="nav-home-link" href="./index.html#top">${share
 const sharedHeader = `<header class="site-header"><div class="container header-inner"><a class="brand header-brand text-brand" href="./index.html#top" aria-label="JWETPRO accueil"><span class="wordmark-jp serif">JP</span><span class="wordmark-jwet">JWET</span><span class="wordmark-pro">PRO</span></a><nav class="main-nav"><a href="./play.html">JOUER</a><a class="nav-live" href="./live.html">REGARDER <span class="live-dot"></span></a><a href="./ranking.html">CLASSEMENT</a><a href="./champions.html">CHAMPIONS</a><a href="./activity.html">RÉSULTATS</a><a href="./guide.html">COMMENT ÇA MARCHE</a></nav><a class="login-button" href="./index.html#login">${sharedIcon('UserRound')} CONNEXION</a><button class="menu-button" id="menu-button" aria-label="Ouvrir le menu" aria-expanded="false">${sharedIcon('Menu')}</button></div><nav class="mobile-nav" id="mobile-nav"><button class="mobile-nav-close" id="mobile-nav-close" type="button" aria-label="Fermer le menu">${sharedIcon('X')}</button><a href="./play.html">JOUER</a><a href="./live.html">REGARDER · LIVE</a><a href="./ranking.html">CLASSEMENT</a><a href="./champions.html">CHAMPIONS</a><a href="./activity.html">RÉSULTATS</a><a href="./guide.html">COMMENT ÇA MARCHE</a></nav></header>`;
 const sharedFooter = `<footer><div class="container footer-grid"><div><a class="brand" href="./index.html#top"><span class="brand-mark serif">JP</span><span>JWET<span class="brand-pro">PRO</span></span></a><p class="footer-copy">Le hub des championnats<br>de jeux de table en Haïti.</p></div><div><div class="footer-title">LIENS RAPIDES</div><div class="footer-links"><a href="./calendar.html">Championnats</a><a href="./live.html">En direct</a><a href="./ranking.html">Classement</a><a href="./champions.html">Champions</a></div></div><div><div class="footer-title">SUPPORT</div><div class="footer-links"><a href="./faq.html">FAQ</a><a href="./index.html#rules">Règlement</a><a href="./privacy.html">Confidentialité</a></div></div><div><div class="footer-title">SUIVEZ-NOUS</div><div class="footer-links social-links"><a href="./social.html#facebook" aria-label="Facebook"><img src="./src/images/facebook.png" alt="Facebook" loading="lazy"></a><a href="./social.html#instagram" aria-label="Instagram"><img src="./src/images/instagrame.png" alt="Instagram" loading="lazy"></a><a href="./social.html#whatsapp" aria-label="WhatsApp"><img src="./src/images/whatsapp.png" alt="WhatsApp" loading="lazy"></a></div></div></div><div class="container footer-bottom"><span>© 2026 JWETPRO. Tous droits réservés.</span><span>Championnats de jeux de table en Haïti.</span></div></footer>`;
 const mountSharedShell = () => { document.querySelectorAll('.public-head,.activity-page-header').forEach(element => element.remove()); document.querySelectorAll('.public-foot,.activity-page-footer').forEach(element => element.remove()); document.body.insertAdjacentHTML('afterbegin', sharedHeader); document.body.insertAdjacentHTML('beforeend', sharedFooter); const currentPage=location.pathname.split('/').pop()||'index.html'; document.querySelectorAll('.main-nav a,.mobile-nav a').forEach(link=>{const target=link.getAttribute('href')?.split('#')[0].replace('./','');if(target===currentPage)link.setAttribute('aria-current','page')}); const menu=document.querySelector('#mobile-nav'); const backdrop=document.createElement('div'); backdrop.className='mobile-nav-backdrop'; document.body.append(backdrop); const close=()=>{menu?.classList.remove('open');backdrop.classList.remove('open');document.body.classList.remove('mobile-menu-open');document.querySelector('#menu-button')?.setAttribute('aria-expanded','false')}; document.querySelector('#menu-button')?.addEventListener('click',()=>{const open=!menu.classList.contains('open');menu.classList.toggle('open',open);backdrop.classList.toggle('open',open);document.body.classList.toggle('mobile-menu-open',open);document.querySelector('#menu-button').setAttribute('aria-expanded',String(open))}); document.querySelector('#mobile-nav-close')?.addEventListener('click',close); backdrop.addEventListener('click',close); menu?.querySelectorAll('a').forEach(link=>link.addEventListener('click',close)); window.renderIcons(); };
-mountSharedShell();
+if (!document.body.classList.contains('community-page-body')) mountSharedShell();
+else window.renderIcons();
 
 if (!window.JwetproI18n && !document.querySelector('script[data-jwetpro-i18n]')) {
   const i18nScript = document.createElement('script');
-  i18nScript.src = './shared-i18n.js?v=20260904-official-championship-rules';
+  i18nScript.src = './shared-i18n.js?v=20260908-champions-language';
   i18nScript.dataset.jwetproI18n = 'true';
   document.head.append(i18nScript);
+}
+
+if (!document.querySelector('link[data-jwetpro-social-style]')) {
+  const socialStyle = document.createElement('link');
+  socialStyle.rel = 'stylesheet';
+  socialStyle.href = './src/social-system.css?v=20260909-social-v3';
+  socialStyle.dataset.jwetproSocialStyle = 'true';
+  document.head.append(socialStyle);
+}
+if (!document.querySelector('script[data-jwetpro-social]')) {
+  const socialScript = document.createElement('script');
+  socialScript.src = './shared-social.js?v=20260909-social-v3';
+  socialScript.defer = true;
+  socialScript.dataset.jwetproSocial = 'true';
+  document.head.append(socialScript);
+}
+if (!document.querySelector('script[data-jwetpro-notifications]')) {
+  const notificationsScript = document.createElement('script');
+  notificationsScript.src = './shared-notifications.js?v=20260909-social-v3';
+  notificationsScript.defer = true;
+  notificationsScript.dataset.jwetproNotifications = 'true';
+  document.head.append(notificationsScript);
 }
 
 const sharedFirebaseConfig = {

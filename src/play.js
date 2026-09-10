@@ -24,6 +24,7 @@
   const replayView = $('#match-replay-view');
   const replayBoard = $('#match-replay-board');
   const replayDominoBoard = $('#match-replay-domino-board');
+  const replayBoardWrap = replayDominoBoard?.parentElement;
   const matchCount = $('#match-count');
   const ACCESS_WINDOW_MS = 15 * 60 * 1000;
   const OPPONENT_GRACE_PERIOD_MS = 5 * 60 * 1000;
@@ -50,6 +51,8 @@
   let officialSeriesUnsubscribe = null;
   let officialWatchedSeriesId = null;
   let officialSeriesData = null;
+  let officialSeriesReward = null;
+  let officialRewardPendingSeriesId = null;
   let officialLastGame = null;
   let countdownTimer = null;
   let attendanceTimer = null;
@@ -68,6 +71,11 @@
   let replayMatch = null;
   let replaySeries = null;
   let replaySeriesGames = [];
+  let replayDominoFrame = null;
+  let replayDominoFrameReady = false;
+  let replayDominoFramePayload = null;
+  let replayDominoOpeningComplete = false;
+  let replayDominoAutoPlayAfterOpening = false;
   let officialDominoHand = [];
   let officialDominoHandMatchId = null;
   let officialDominoHandPending = false;
@@ -75,11 +83,18 @@
   let officialDominoFrame = null;
   let officialDominoFrameReady = false;
   let officialDominoFramePayload = null;
+  let officialDominoOpeningComplete = false;
+  let officialDominoBotTimer = null;
+  let officialDominoBotPending = false;
 
   const resetOfficialDominoFrame = () => {
     officialDominoFrame = null;
     officialDominoFrameReady = false;
     officialDominoFramePayload = null;
+    officialDominoOpeningComplete = false;
+    window.clearTimeout(officialDominoBotTimer);
+    officialDominoBotTimer = null;
+    officialDominoBotPending = false;
     officialSection?.classList.remove('is-domino-match');
   };
 
@@ -91,13 +106,50 @@
     },window.location.origin);
   };
 
+  const postReplayDominoState = () => {
+    if (!replayDominoFrameReady || !replayDominoFramePayload || !replayDominoFrame?.contentWindow) return;
+    replayDominoFrame.contentWindow.postMessage({
+      type:'jwetpro-domino-state',
+      payload:replayDominoFramePayload
+    },window.location.origin);
+  };
+
+  const mountReplayDominoFrame = () => {
+    if (!replayDominoBoard) return;
+    replayDominoBoard.innerHTML='<iframe id="replay-domino-match-frame" title="Replay visuel de la manche Domino" src="./dominocash/index.html?embed=1&intro=0&official=1&replay=1&v=20260908-full-replay" loading="eager" allow="autoplay; fullscreen" allowfullscreen></iframe>';
+    replayDominoFrame=replayDominoBoard.querySelector('#replay-domino-match-frame');
+    replayDominoFrameReady=false;
+    replayDominoOpeningComplete=false;
+    replayDominoFramePayload=null;
+  };
+
   window.addEventListener('message',event => {
-    if (event.origin !== window.location.origin || event.source !== officialDominoFrame?.contentWindow) return;
+    if (event.origin !== window.location.origin) return;
     const message = event.data;
     if (!message || typeof message !== 'object') return;
+    if (event.source === replayDominoFrame?.contentWindow) {
+      if (message.type === 'jwetpro-domino-ready') {
+        replayDominoFrameReady=true;
+        postReplayDominoState();
+      } else if (message.type === 'jwetpro-domino-opening-complete' && message.matchId === replayMatch?.id) {
+        replayDominoOpeningComplete=true;
+        renderReplayFrame(replayIndex);
+        if (replayDominoAutoPlayAfterOpening) {
+          replayDominoAutoPlayAfterOpening=false;
+          startReplay();
+        }
+      }
+      return;
+    }
+    if (event.source !== officialDominoFrame?.contentWindow) return;
     if (message.type === 'jwetpro-domino-ready') {
       officialDominoFrameReady = true;
       postOfficialDominoState();
+      return;
+    }
+    if (message.type === 'jwetpro-domino-opening-complete') {
+      officialDominoOpeningComplete = true;
+      if (officialLastGame) renderOfficialBoard(officialLastGame);
       return;
     }
     if (message.type !== 'jwetpro-domino-action' || message.matchId !== viewingOfficialMatchId) return;
@@ -105,9 +157,11 @@
     const action = String(message.action || '');
     const tileId = String(message.tileId || '');
     const side = String(message.side || '');
-    if (!['play','draw','pass'].includes(action)) return;
+    const drawIndex = Number(message.drawIndex);
+    if (!['play','draw','pass','timeout'].includes(action)) return;
     if (action === 'play' && (!/^[0-6]-[0-6]$/.test(tileId) || !['start','left','right'].includes(side))) return;
-    submitOfficialDominoAction(message.matchId,action,tileId,side);
+    if (action === 'draw' && (!Number.isInteger(drawIndex) || drawIndex < 0 || drawIndex >= Number(officialDominoFramePayload?.drawPileCount))) return;
+    submitOfficialDominoAction(message.matchId,action,tileId,side,Number(officialDominoFramePayload?.actionNumber)||0,drawIndex);
   });
 
   const toDate = value => {
@@ -117,6 +171,9 @@
   };
 
   const normalizeStatus = value => String(value || 'scheduled').toLowerCase();
+  const socialMatchId = data => String(data?.kind === 'series' ? data.id : data?.seriesId || data?.parentSeriesId || data?.matchSeriesId || data?.id || '');
+  const socialPlayerId = (data,uid) => String(data?.participantSocialIds?.[uid] || uid || '');
+  const playerProfileMarkup = (data,uid,label) => /^[A-Za-z0-9_-]{1,150}$/.test(socialPlayerId(data,uid)) ? `<a class="player-social-link" href="./player.html?id=${encodeURIComponent(socialPlayerId(data,uid))}">${escapeHtml(label)}</a>` : escapeHtml(label);
   const isCompleted = status => ['completed','finished','ended','termine','terminé','cancelled'].includes(status);
   const LIVE_STATUSES = ['ongoing','live','in-progress','active'];
   const isLive = status => LIVE_STATUSES.includes(status);
@@ -336,7 +393,7 @@
       const opponent = opponentId ? participantName(match.data,opponentId) || 'Adversaire attribue' : 'Adversaire a attribuer';
       const action = getMatchAction(match);
       const actionMarkup = `<button class="match-action" type="button" data-match-action="${action.kind}" data-match-id="${escapeHtml(match.id)}" ${action.enabled?'':'disabled'}>${icon(action.kind==='join'?'log-in':action.kind==='result'?'play-circle':action.kind==='forfeit'?'flag':'clock-3')}${escapeHtml(action.label)}</button>`;
-      return `<article class="match-card" data-match-card="${escapeHtml(match.id)}"><div class="match-info"><span>${escapeHtml(normalizeStatus(match.data.status || match.data.state).toUpperCase())}</span><h3>${escapeHtml(matchTitle(match.data,match.id))}</h3><p>${escapeHtml(dateLabel(match.startAt))}</p></div><div class="match-opponent"><span>ADVERSAIRE</span><strong>${escapeHtml(opponent)}</strong><small>${ids.length}/2 participants confirmes</small></div><div class="match-countdown">${countdownMarkup(match)}${actionMarkup}</div></article>`;
+      return `<article class="match-card" data-match-card="${escapeHtml(match.id)}" data-social-kind="match" data-social-id="${escapeHtml(socialMatchId({...match.data,id:match.id}))}"><div class="match-info"><span>${escapeHtml(normalizeStatus(match.data.status || match.data.state).toUpperCase())}</span><h3>${escapeHtml(matchTitle(match.data,match.id))}</h3><p>${escapeHtml(dateLabel(match.startAt))}</p></div><div class="match-opponent"><span>ADVERSAIRE</span><strong>${playerProfileMarkup(match.data,opponentId,opponent)}</strong><small>${ids.length}/2 participants confirmes</small></div><div class="match-countdown">${countdownMarkup(match)}${actionMarkup}</div></article>`;
     }).join('');
     matchList.querySelectorAll('[data-match-action]').forEach(button => button.addEventListener('click',() => handleMatchAction(button)));
     window.renderIcons?.();
@@ -470,7 +527,7 @@
     const action = participant
       ? `<a class="match-action" href="./play.html?join=${encodeURIComponent(data.id)}">${icon('log-in')}Rejoindre le match</a>`
       : `<button class="match-action" type="button" data-watch-match="${escapeHtml(data.id)}">${icon('eye')}Regarder</button>`;
-    return `<article class="match-card" data-live-card="${escapeHtml(data.id)}"><div class="match-info"><span class="live-badge"><i aria-hidden="true"></i>EN DIRECT</span><h3>${escapeHtml(matchTitle(data,data.id))}</h3><p>${isDomino(data) ? 'Domino' : 'Mopyon'}</p></div><div class="match-opponent"><span>JOUEURS</span><strong>${escapeHtml(opponentOne)} vs ${escapeHtml(opponentTwo)}</strong><small>${ids.length}/2 participants</small></div><div class="match-countdown">${action}</div></article>`;
+    return `<article class="match-card" data-live-card="${escapeHtml(data.id)}" data-social-kind="match" data-social-id="${escapeHtml(socialMatchId(data))}"><div class="match-info"><span class="live-badge"><i aria-hidden="true"></i>EN DIRECT</span><h3>${escapeHtml(matchTitle(data,data.id))}</h3><p>${isDomino(data) ? 'Domino' : 'Mopyon'}</p></div><div class="match-opponent"><span>JOUEURS</span><strong>${playerProfileMarkup(data,ids[0],opponentOne)} <span>vs</span> ${playerProfileMarkup(data,ids[1],opponentTwo)}</strong><small>${ids.length}/2 participants</small></div><div class="match-countdown">${action}</div></article>`;
   };
 
   const renderLiveMatches = () => {
@@ -541,17 +598,53 @@
 
   const hideMatchEndModal = () => { if (matchEndModal) matchEndModal.hidden = true; };
 
-  const showMatchEndModal = ({winnerName,winnerId,draw,replayId,scoreLabel,forfeit,mancheOnly=false,canAdvance=false,shareable=false}) => {
+  const pointsProgressText = total => {
+    const points=Math.max(0,Number(total)||0);
+    const next=[['Intermédiaire',50],['Confirmé',150],['Expert',300],['Élite',600]].find(([,threshold])=>points<threshold);
+    return next ? ` Encore ${next[1]-points} points pour atteindre le niveau ${next[0]}.` : ' Vous avez atteint le niveau Élite.';
+  };
+
+  const loadOfficialSeriesReward = async seriesId => {
+    if(!functions||!seriesId||officialRewardPendingSeriesId===seriesId||officialSeriesReward?.seriesId===seriesId)return;
+    officialRewardPendingSeriesId=seriesId;
+    try{
+      const response=await functions.httpsCallable('getDominoSeriesReward')({seriesId});
+      if(!response.data?.pending) officialSeriesReward=response.data||null;
+    }catch(error){ console.error('Domino reward receipt read failed:',error); }
+    finally{
+      officialRewardPendingSeriesId=null;
+      if(officialLastGame)evaluateMatchEndState(officialLastGame);
+    }
+  };
+
+  const showMatchEndModal = ({winnerName,winnerId,draw,replayId,scoreLabel,forfeit,mancheOnly=false,canAdvance=false,shareable=false,reward=null}) => {
     if (!matchEndModal) return;
+    const playerIsParticipant=participantIds(officialLastGame?.data||{}).includes(currentUser?.uid);
+    const playerWon=Boolean(playerIsParticipant&&winnerId&&winnerId===currentUser?.uid);
+    const playerLost=Boolean(playerIsParticipant&&!draw&&winnerId&&winnerId!==currentUser?.uid);
+    matchEndModal.querySelector('.match-end-card')?.classList.toggle('is-loss',playerLost);
     matchEndModal.querySelector('.match-end-kicker').textContent = mancheOnly ? 'MANCHE TERMINÉE' : 'MATCH TERMINÉ';
     matchEndTitle.textContent = draw
       ? (mancheOnly ? 'Manche nulle' : 'Match nul')
+      : playerWon ? `Vous avez gagné ${mancheOnly?'cette manche':'le match'}`
+      : playerLost ? `Vous avez perdu ${mancheOnly?'cette manche':'le match'}`
       : winnerName ? `${winnerName} remporte ${mancheOnly ? 'la manche' : 'le match'}` : (mancheOnly ? 'Manche terminée' : 'Match terminé');
     matchEndSubtitle.textContent = forfeit
       ? 'L’adversaire a perdu par forfait de temps après cinq minutes d’absence.'
       : mancheOnly
         ? `${scoreLabel ? `Score de la rencontre : ${scoreLabel}. ` : ''}Le match continue jusqu’à deux manches gagnées.`
         : scoreLabel ? `Score final de la rencontre : ${scoreLabel}.` : 'Cette rencontre officielle est maintenant terminée.';
+    const rewardNode=$('#match-end-reward');
+    if(rewardNode){
+      let rewardText='';
+      const pointsDelta=Math.max(0,Number(reward?.pointsDelta)||0);
+      const hasTotal=Number.isFinite(Number(reward?.pointsTotal));
+      if(!mancheOnly&&pointsDelta>0) rewardText=`+${pointsDelta} points crédités${hasTotal?` — Total : ${Number(reward.pointsTotal)} points.${pointsProgressText(reward.pointsTotal)}`:'.'}`;
+      if(!mancheOnly&&playerLost&&reward?.coupon) rewardText+=`${rewardText?' ':''}${reward.coupon.label||'Votre coupon'} est gagné et enregistré dans « Mes coupons » de votre profil.`;
+      if(!mancheOnly&&(playerWon||playerLost)&&!reward) rewardText='Validation de vos points et récompenses en cours…';
+      rewardNode.textContent=rewardText;
+      rewardNode.hidden=!rewardText;
+    }
     matchEndReplay.href = `./play.html?replay=${encodeURIComponent(replayId)}`;
     matchEndReplay.innerHTML = `${icon('play-circle')}${mancheOnly ? 'Revoir cette manche' : 'Voir le replay du match'}`;
     matchEndNext.hidden = !canAdvance;
@@ -584,7 +677,10 @@
       // closed until the player explicitly chooses “Passer à la manche suivante” in this modal.
       if (participantCanAdvance && functions && seriesSyncedGameId !== match.id) {
         seriesSyncedGameId = match.id;
-        functions.httpsCallable(isDomino(data) ? 'advanceDominoSeries' : 'advanceMopyonSeries')({gameId:match.id}).catch(error => {
+        functions.httpsCallable(isDomino(data) ? 'advanceDominoSeries' : 'advanceMopyonSeries')({gameId:match.id}).then(response=>{
+          if(isDomino(data)&&response.data?.seriesComplete) officialSeriesReward=response.data||null;
+          if(officialLastGame) evaluateMatchEndState(officialLastGame);
+        }).catch(error => {
           console.error('Automatic series score sync failed:',error);
           seriesSyncedGameId = null;
         });
@@ -595,7 +691,9 @@
     const winnerName = data.draw ? null : info.seriesId
       ? (info.seriesData.winnerName || (info.seriesData.winnerUid && participantName(data,info.seriesData.winnerUid)) || participantName(data,data.winnerId) || 'Le vainqueur')
       : (participantName(data,data.winnerId) || 'Le vainqueur');
-    showMatchEndModal({winnerName,winnerId:info.seriesData?.winnerUid || data.winnerId,draw:Boolean(data.draw),replayId:info.seriesId || match.id,scoreLabel:seriesScoreLabel(info.seriesData),forfeit:data.forfeitReason === 'attendance-timeout',shareable:true});
+    const reward=officialSeriesReward?.seriesId===info.seriesId?officialSeriesReward:null;
+    showMatchEndModal({winnerName,winnerId:info.seriesData?.winnerUid || data.winnerId,draw:Boolean(data.draw),replayId:info.seriesId || match.id,scoreLabel:seriesScoreLabel(info.seriesData),forfeit:data.forfeitReason === 'attendance-timeout',shareable:true,reward});
+    if(info.seriesId&&!spectatorMode&&participantIds(data).includes(currentUser?.uid)&&!reward) loadOfficialSeriesReward(info.seriesId);
   };
 
   const watchOfficialSeries = seriesId => {
@@ -617,6 +715,8 @@
     officialSeriesData = null;
     officialWatchedSeriesId = null;
     officialLastGame = null;
+    officialSeriesReward = null;
+    officialRewardPendingSeriesId = null;
     seriesSyncedGameId = null;
     officialDominoHand = [];
     officialDominoHandMatchId = null;
@@ -641,6 +741,7 @@
       const dominoGame = isDomino(officialLastGame?.data || {});
       const response = await functions.httpsCallable(dominoGame ? 'advanceDominoSeries' : 'advanceMopyonSeries')({gameId:pendingFinishedGameId});
       const result = response.data || {};
+      if(dominoGame&&result.seriesComplete) officialSeriesReward=result;
       if (result.seriesComplete) {
         pendingFinishedGameId = null;
         return;
@@ -754,14 +855,23 @@
       if (refreshed && officialLastGame?.id === matchId) renderOfficialBoard(officialLastGame);
     }
   };
-  const submitOfficialDominoAction = async (matchId,action,tileId='',side='') => {
+  const submitOfficialDominoAction = async (matchId,action,tileId='',side='',expectedActionNumber=0,drawIndex=null) => {
     if(officialMovePending||!functions)return;
     officialMovePending=true;
     try {
-      await functions.httpsCallable('submitDominoMove')({matchId,action,tileId,side});
+      const response=await functions.httpsCallable('submitDominoMove')({matchId,action,tileId,side,drawIndex,expectedActionNumber});
       selectedOfficialDominoTileId='';
-      officialDominoHandMatchId=null;
-      await refreshOfficialDominoHand(matchId);
+      if(Array.isArray(response.data?.hand)){
+        officialDominoHand=response.data.hand;
+        officialDominoHandMatchId=matchId;
+      }else{
+        officialDominoHandMatchId=null;
+        await refreshOfficialDominoHand(matchId);
+      }
+      if(response.data?.state&&officialLastGame?.id===matchId){
+        officialLastGame={...officialLastGame,data:{...officialLastGame.data,...response.data.state,board:response.data.state.boardTiles}};
+        renderOfficialBoard(officialLastGame);
+      }
     } catch(error) {
       console.error('Official Domino action failed:',error);
       $('#official-turn').textContent='Cette action Domino n’a pas été acceptée. Le plateau va être resynchronisé.';
@@ -769,6 +879,31 @@
       officialMovePending=false;
       if (officialLastGame?.id === matchId) renderOfficialBoard(officialLastGame);
     }
+  };
+
+  const scheduleOfficialDominoBot = match => {
+    window.clearTimeout(officialDominoBotTimer);
+    officialDominoBotTimer=null;
+    const data=match.data;
+    const ids=participantIds(data);
+    const opponentId=ids.find(uid=>uid!==currentUser?.uid);
+    if(spectatorMode||!functions||!currentUser||!opponentId||!isBotParticipant(data,opponentId)||data.currentTurnUid!==opponentId||data.winnerId||data.draw)return;
+    const actionNumber=Math.max(0,Number(data.actionNumber)||0);
+    if(actionNumber===0&&!officialDominoOpeningComplete)return;
+    const readyDate=toDate(data.botReadyAt);
+    const delay=Math.max(0,(readyDate?.getTime()||Date.now())-Date.now()+60);
+    $('#official-turn').textContent=data.botStatus==='drawing'?'L’adversaire pioche…':'L’adversaire réfléchit…';
+    officialDominoBotTimer=window.setTimeout(async()=>{
+      if(officialDominoBotPending||viewingOfficialMatchId!==match.id)return;
+      officialDominoBotPending=true;
+      try{await functions.httpsCallable('performDominoBotAction')({matchId:match.id,expectedActionNumber:actionNumber});}
+      catch(error){
+        if(!['functions/aborted','functions/failed-precondition'].includes(error?.code)) console.error('Official Domino bot action failed:',error);
+      }finally{
+        officialDominoBotPending=false;
+        if(officialLastGame?.id===match.id&&Number(officialLastGame.data?.actionNumber)===actionNumber) scheduleOfficialDominoBot(officialLastGame);
+      }
+    },delay);
   };
 
   const renderOfficialDominoBoard = (match,canPlay) => {
@@ -784,7 +919,7 @@
     officialBoard.setAttribute('role','group');
     officialBoard.setAttribute('aria-label','Plateau Domino officiel, identique au mode entraînement');
     if (!officialDominoFrame?.isConnected) {
-      officialBoard.innerHTML='<iframe id="official-domino-match-frame" title="Plateau Domino du match officiel" src="./dominocash/index.html?embed=1&intro=0&official=1&v=20260906-official-match" loading="eager" allow="autoplay; fullscreen" allowfullscreen></iframe>';
+      officialBoard.innerHTML='<iframe id="official-domino-match-frame" title="Plateau Domino du match officiel" src="./dominocash/index.html?embed=1&intro=0&official=1&v=20260908-full-replay" loading="eager" allow="autoplay; fullscreen" allowfullscreen></iframe>';
       officialDominoFrame=officialBoard.querySelector('#official-domino-match-frame');
       officialDominoFrameReady=false;
     }
@@ -799,9 +934,13 @@
       interactive:Boolean(canPlay&&!spectatorMode&&officialDominoHandMatchId===match.id&&!officialMovePending),
       complete:Boolean(data.winnerId||data.draw),
       spectator:spectatorMode,
+      actionNumber:Math.max(0,Number(data.actionNumber)||0),
+      botStatus:String(data.botStatus||''),
+      turnDeadlineAt:toDate(data.turnDeadlineAt)?.getTime()||null,
       revision:`${Array.isArray(data.moves)?data.moves.length:0}:${boardTiles.length}:${String(data.currentTurnUid||'')}`
     };
     postOfficialDominoState();
+    scheduleOfficialDominoBot(match);
   };
 
   const renderOfficialBoard = match => {
@@ -887,6 +1026,10 @@
         return;
       }
       const match = {id:snapshot.id,data:snapshot.data()};
+      officialSection.querySelector(':scope > .entity-social-actions')?.remove();
+      officialSection.dataset.socialKind='match';
+      officialSection.dataset.socialId=String(match.data.seriesId||match.id);
+      window.JwetproSocial?.decorate?.(officialSection);
       officialLastGame = match;
       watchOfficialSeries(match.data.seriesId || null);
       renderOfficialBoard(match);
@@ -907,6 +1050,10 @@
     activateTab('matches');
     matchList.hidden = true;
     officialSection.hidden = false;
+    officialSection.querySelector(':scope > .entity-social-actions')?.remove();
+    officialSection.dataset.socialKind='match';
+    officialSection.dataset.socialId=match.id;
+    window.JwetproSocial?.decorate?.(officialSection);
     $('#official-match-kicker').textContent = 'VOTRE MATCH PLANIFIÉ';
     $('#official-back').setAttribute('aria-label','Retour à mes matchs');
     let openingGame = false;
@@ -1041,11 +1188,24 @@
 
   const normalizeDominoReplayMoves = data => {
     const rawMoves = Array.isArray(data.moves) ? data.moves : [];
-    return rawMoves.map(move => {
+    let currentBoard = [];
+    return rawMoves.map((move,order) => {
       if (!move || typeof move !== 'object') return null;
-      const boardAfter = Array.isArray(move.boardAfter) ? move.boardAfter.filter(tile => tile && typeof tile.a === 'number' && typeof tile.b === 'number') : null;
-      if (!boardAfter) return null;
-      return {type:move.type || 'play',playerId:move.playerId || '',tileId:move.tileId || '',side:move.side || '',boardAfter};
+      const type = String(move.type || 'play').toLowerCase();
+      if (!['play','draw','pass'].includes(type)) return null;
+      const publishedBoard = Array.isArray(move.boardAfter)
+        ? move.boardAfter.filter(tile => tile && typeof tile.a === 'number' && typeof tile.b === 'number' && typeof tile.id === 'string')
+        : null;
+      if (publishedBoard) currentBoard=publishedBoard.map(tile => ({id:tile.id,a:tile.a,b:tile.b}));
+      if (type === 'play' && !publishedBoard) return null;
+      return {
+        type,
+        playerId:String(move.playerId || ''),
+        tileId:String(move.tileId || move.tile?.id || ''),
+        side:String(move.side || ''),
+        actionNumber:Math.max(1,Number(move.actionNumber) || order + 1),
+        boardAfter:currentBoard.map(tile => ({...tile}))
+      };
     }).filter(Boolean);
   };
 
@@ -1135,22 +1295,70 @@
   const renderDominoReplayFrame = index => {
     replayIndex = Math.max(0,Math.min(index,replayMoves.length));
     const move = replayIndex ? replayMoves[replayIndex - 1] : null;
-    const boardTiles = move ? move.boardAfter : [];
-    if (replayDominoBoard) replayDominoBoard.innerHTML = boardTiles.length ? boardTiles.map(tile => `<span class="domino-replay-tile">${escapeHtml(tile.a)}|${escapeHtml(tile.b)}</span>`).join('') : '<p class="replay-empty">Plateau vide.</p>';
+    const players = replayMatch?.players || [];
+    const firstId = String(players[0]?.id || 'player-one');
+    const secondId = String(players[1]?.id || 'player-two');
+    const counts = {[firstId]:7,[secondId]:7};
+    let drawPileCount=14;
+    let boardTiles=[];
+    let currentPlayerId=String(replayMatch?.data?.starterUid || replayMatch?.data?.currentTurnUid || firstId);
+    replayMoves.slice(0,replayIndex).forEach(action => {
+      const actorId=String(action.playerId || currentPlayerId || firstId);
+      if (!(actorId in counts)) counts[actorId]=7;
+      if (action.type === 'draw') {
+        counts[actorId]=Math.min(28,counts[actorId]+1);
+        drawPileCount=Math.max(0,drawPileCount-1);
+        currentPlayerId=actorId;
+      } else if (action.type === 'play') {
+        counts[actorId]=Math.max(0,counts[actorId]-1);
+        boardTiles=action.boardAfter.map(tile => ({...tile}));
+        currentPlayerId=actorId === firstId ? secondId : firstId;
+      } else if (action.type === 'pass') currentPlayerId=actorId === firstId ? secondId : firstId;
+    });
+    replayDominoFramePayload={
+      matchId:replayMatch?.id || '',
+      hand:[],
+      selfCount:Math.max(0,counts[firstId] ?? 0),
+      opponentCount:Math.max(0,counts[secondId] ?? 0),
+      drawPileCount,
+      boardTiles,
+      currentTurn:currentPlayerId === firstId ? 'self' : 'opponent',
+      interactive:false,
+      spectator:true,
+      complete:replayIndex === replayMoves.length,
+      actionNumber:replayIndex,
+      revision:`replay:${replayMatch?.id || ''}:${replayIndex}`
+    };
+    postReplayDominoState();
     $('#match-replay-progress').textContent = `Coup ${replayIndex} / ${replayMoves.length}`;
     $('#match-replay-progress-bar').style.width = `${replayMoves.length ? replayIndex / replayMoves.length * 100 : 0}%`;
-    $('#match-replay-status').textContent = replayIndex === replayMoves.length ? replayResultText() : dominoMoveLabel(move);
+    $('#match-replay-status').textContent = !replayDominoOpeningComplete ? 'Brassage et distribution des dominos...' : replayIndex === replayMoves.length ? replayResultText() : dominoMoveLabel(move);
     $('#match-replay-start').disabled = replayIndex === 0;
     $('#match-replay-back').disabled = replayIndex === 0;
-    $('#match-replay-forward').disabled = replayIndex === replayMoves.length;
-    $('#match-replay-end').disabled = replayIndex === replayMoves.length;
+    $('#match-replay-forward').disabled = !replayDominoOpeningComplete || replayIndex === replayMoves.length;
+    $('#match-replay-end').disabled = !replayDominoOpeningComplete || replayIndex === replayMoves.length;
+    $('#match-replay-play').disabled = !replayDominoOpeningComplete || !replayMoves.length;
     if (replayIndex === replayMoves.length) stopReplay();
   };
 
   const renderReplayFrame = index => replayMatch?.isDomino ? renderDominoReplayFrame(index) : renderMopyonReplayFrame(index);
 
   const startReplay = () => {
-    if (replayIndex === replayMoves.length) renderReplayFrame(0);
+    if (replayMatch?.isDomino && !replayDominoOpeningComplete) {
+      replayDominoAutoPlayAfterOpening=true;
+      return;
+    }
+    if (replayIndex === replayMoves.length) {
+      if (replayMatch?.isDomino) {
+        stopReplay();
+        replayIndex=0;
+        replayDominoAutoPlayAfterOpening=true;
+        mountReplayDominoFrame();
+        renderDominoReplayFrame(0);
+        return;
+      }
+      renderReplayFrame(0);
+    }
     window.clearInterval(replayTimer);
     const button = $('#match-replay-play');
     button.innerHTML = `${icon('pause')}<span>Pause</span>`;
@@ -1185,6 +1393,15 @@
     replayIndex=0;
     if (replayBoard) replayBoard.hidden = matchIsDomino;
     if (replayDominoBoard) replayDominoBoard.hidden = !matchIsDomino;
+    replayBoardWrap?.classList.toggle('has-domino-replay',matchIsDomino);
+    replayDominoAutoPlayAfterOpening=matchIsDomino && moves.length > 0;
+    if (matchIsDomino) mountReplayDominoFrame();
+    else {
+      replayDominoFrame=null;
+      replayDominoFrameReady=false;
+      replayDominoFramePayload=null;
+      replayDominoOpeningComplete=false;
+    }
     const titleData = replaySeries?.data || data;
     $('#match-replay-title').textContent = `${String(titleData.game || titleData.type || 'Mopyon').toUpperCase()} #${titleData.number || titleData.matchNumber || replaySeries?.id || game.id}`;
     const source = simulationMatch ? 'REPLAY SIMULÉ' : 'REPLAY OFFICIEL';
@@ -1193,7 +1410,7 @@
     $('#match-replay-player-one').innerHTML=replayPlayerMarkup(players[0],!matchIsDomino);
     $('#match-replay-player-two').innerHTML=replayPlayerMarkup(players[1],!matchIsDomino);
     renderReplayFrame(0);
-    $('#match-replay-play').disabled = !moves.length;
+    $('#match-replay-play').disabled = !moves.length || (matchIsDomino && !replayDominoOpeningComplete);
     $('#match-replay-speed').disabled = !moves.length;
     replayMancheSelector?.querySelectorAll('[data-replay-game]').forEach((button,buttonIndex) => {
       const active = buttonIndex === index;
@@ -1218,8 +1435,12 @@
     const currentId = String(series.data.currentGameId || series.data.activeGameId || '');
     if (currentId && !ids.includes(currentId)) ids.push(currentId);
     if (extraGame?.id && !ids.includes(extraGame.id)) ids.push(extraGame.id);
-    const snapshots = await Promise.all(ids.filter(id => /^[A-Za-z0-9_-]{1,160}$/.test(id)).map(id => db.collection('matches').doc(id).get()));
-    const games = snapshots.filter(snapshot => snapshot.exists).map(snapshot => ({id:snapshot.id,data:snapshot.data() || {}}));
+    for (let gameNumber=1;gameNumber<=3;gameNumber += 1) {
+      const candidates=[`${series.id.slice(0,142)}-g${gameNumber}`,`${series.id.slice(0,136)}-auto-g${gameNumber}`];
+      candidates.forEach(candidate => { if (!ids.includes(candidate)) ids.push(candidate); });
+    }
+    const snapshots = await Promise.all(ids.filter(id => /^[A-Za-z0-9_-]{1,160}$/.test(id)).map(id => db.collection('matches').doc(id).get().catch(() => null)));
+    const games = snapshots.filter(snapshot => snapshot?.exists).map(snapshot => ({id:snapshot.id,data:snapshot.data() || {}})).filter(game => !game.data.seriesId || game.data.seriesId === series.id);
     if (extraGame && !games.some(game => game.id === extraGame.id)) games.push(extraGame);
     return games.sort((a,b) => (Number(a.data.gameNumber) || ids.indexOf(a.id) + 1) - (Number(b.data.gameNumber) || ids.indexOf(b.id) + 1));
   };
@@ -1244,7 +1465,8 @@
         replaySeriesGames = await readReplaySeriesGames(replaySeries,requestedGame);
         if (!replaySeriesGames.length) return showReplayError('Replay indisponible','Aucune manche terminée n’a encore été publiée pour ce match.');
         renderReplayMancheSelector();
-        selectReplayGame(replaySeriesGames[0],0);
+        const requestedIndex=requestedGame ? replaySeriesGames.findIndex(game => game.id === requestedGame.id) : 0;
+        selectReplayGame(replaySeriesGames[Math.max(0,requestedIndex)],Math.max(0,requestedIndex));
       } else {
         replaySeriesGames = [];
         renderReplayMancheSelector();
@@ -1256,7 +1478,15 @@
     }
   };
 
-  $('#match-replay-start')?.addEventListener('click',() => {stopReplay(); renderReplayFrame(0);});
+  $('#match-replay-start')?.addEventListener('click',() => {
+    stopReplay();
+    if (replayMatch?.isDomino) {
+      replayIndex=0;
+      replayDominoAutoPlayAfterOpening=false;
+      mountReplayDominoFrame();
+      renderDominoReplayFrame(0);
+    } else renderReplayFrame(0);
+  });
   $('#match-replay-back')?.addEventListener('click',() => {stopReplay(); renderReplayFrame(replayIndex-1);});
   $('#match-replay-forward')?.addEventListener('click',() => {stopReplay(); renderReplayFrame(replayIndex+1);});
   $('#match-replay-end')?.addEventListener('click',() => {stopReplay(); renderReplayFrame(replayMoves.length);});

@@ -138,7 +138,9 @@ const applyAction = (source, uid, action) => {
   } else if (type === 'draw') {
     if (playableTiles(state, uid).length) throw new Error('play-available');
     if (!state.drawPile.length) throw new Error('draw-pile-empty');
-    const tile = state.drawPile.shift();
+    const requestedIndex=Number(action.drawIndex);
+    const drawIndex=Number.isInteger(requestedIndex)&&requestedIndex>=0&&requestedIndex<state.drawPile.length?requestedIndex:0;
+    const [tile] = state.drawPile.splice(drawIndex,1);
     state.hands[uid].push(tile);
     state.actionNumber += 1;
     event = {type:'draw', playerId:uid, tileId:tile.id, actionNumber:state.actionNumber};
@@ -153,6 +155,21 @@ const applyAction = (source, uid, action) => {
   } else throw new Error('invalid-action');
 
   return {state, event};
+};
+
+const applyTimeout = (source, uid) => {
+  const state=cloneState(source);
+  if(!state.participantIds.includes(uid)) throw new Error('not-participant');
+  if(state.winnerId||state.draw||!state.currentTurnUid) throw new Error('game-over');
+  if(state.currentTurnUid!==uid) throw new Error('not-your-turn');
+  const opponentId=state.participantIds.find(id=>id!==uid);
+  state.winnerId=opponentId;
+  state.draw=false;
+  state.blocked=false;
+  state.winReason='turn-timeout';
+  state.currentTurnUid=null;
+  state.actionNumber+=1;
+  return {state,event:{type:'timeout',playerId:uid,winnerId:opponentId,actionNumber:state.actionNumber}};
 };
 
 const playBotTurn = (source, botUid) => {
@@ -172,16 +189,30 @@ const playBotTurn = (source, botUid) => {
   return {state, events};
 };
 
+const playBotAction = (source, botUid) => {
+  const state = cloneState(source);
+  if (state.currentTurnUid !== botUid || state.winnerId || state.draw) throw new Error('not-bot-turn');
+  const playable = playableTiles(state, botUid);
+  const playableDrawIndex=state.drawPile.findIndex(tile=>playableSides(tile,state.boardTiles,state.starterTileId).length);
+  const lowestDrawIndex=state.drawPile.reduce((best,tile,index,tiles)=>best<0||handPoints([tile])<handPoints([tiles[best]])?index:best,-1);
+  const action = playable.length
+    ? {type:'play', tileId:playable[0].tile.id, side:playable[0].sides[0]}
+    : state.drawPile.length ? {type:'draw',drawIndex:playableDrawIndex>=0?playableDrawIndex:lowestDrawIndex} : {type:'pass'};
+  const result = applyAction(state, botUid, action);
+  return {state:result.state, event:{...result.event, automated:true}};
+};
+
 const publicState = state => ({
   boardTiles:state.boardTiles,
   currentTurnUid:state.currentTurnUid,
   starterTileId:state.starterTileId,
   handCounts:Object.fromEntries(state.participantIds.map(uid => [uid, state.hands[uid].length])),
   drawPileCount:state.drawPile.length,
+  actionNumber:Math.max(0, Number(state.actionNumber) || 0),
   winnerId:state.winnerId,
   draw:state.draw,
   blocked:state.blocked,
   winReason:state.winReason
 });
 
-module.exports = {MAX_PIP, createSet, validTile, handPoints, boardEnds, playableSides, createGameState, playableTiles, applyAction, playBotTurn, publicState};
+module.exports = {MAX_PIP, createSet, validTile, handPoints, boardEnds, playableSides, createGameState, playableTiles, applyAction, applyTimeout, playBotAction, playBotTurn, publicState};

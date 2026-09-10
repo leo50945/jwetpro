@@ -36,6 +36,23 @@ module.exports = ({ admin, db, integrationSecret }) => {
     const snapshot = await db.collection('integrations').doc('smartcutTickets').get();
     return { enabled: snapshot.exists && snapshot.data()?.enabled === true };
   };
+  const releaseCouponReservation = async (couponId, playerUid = '') => db.runTransaction(async transaction => {
+    const couponRef=db.collection('jwetproCoupons').doc(couponId);
+    const couponSnapshot=await transaction.get(couponRef);
+    if(!couponSnapshot.exists)return false;
+    const coupon=couponSnapshot.data()||{};
+    if(playerUid&&coupon.playerUid!==playerUid)return false;
+    if(coupon.status!=='reserved'||!coupon.reservedForIntentId)return false;
+    const reservationRef=db.collection('championshipTicketReservations').doc(String(coupon.reservedForIntentId));
+    const championshipRef=coupon.targetChampionshipId?db.collection('championships').doc(String(coupon.targetChampionshipId)):null;
+    const [reservationSnapshot,championshipSnapshot]=await Promise.all([transaction.get(reservationRef),championshipRef?transaction.get(championshipRef):Promise.resolve(null)]);
+    const reservation=reservationSnapshot.data()||{};
+    const expired=Number(reservation.expiresAt?.toMillis?.()||0)<=Date.now();
+    if(reservationSnapshot.exists&&!expired&&!['payment_error','cancelled'].includes(String(reservation.status||'')))return false;
+    const registrationOpen=championshipSnapshot?.exists&&String(championshipSnapshot.data()?.status||'')==='registration-open';
+    transaction.set(couponRef,{status:registrationOpen?'available':'expired',reservedForIntentId:admin.firestore.FieldValue.delete(),reservedAt:admin.firestore.FieldValue.delete(),...(registrationOpen?{}:{expiredAt:admin.firestore.FieldValue.serverTimestamp()}),updatedAt:admin.firestore.FieldValue.serverTimestamp()},{merge:true});
+    return true;
+  });
   const postSigned = async (url, body, eventId) => {
     const response = await fetch(url, { method: 'POST', headers: signedHeaders(body, eventId), body: JSON.stringify(body) });
     const payload = await response.json().catch(() => ({}));
@@ -164,6 +181,7 @@ module.exports = ({ admin, db, integrationSecret }) => {
     let championshipForSync = null;
     let paidWithCredit = false;
     let creditAllocations = [];
+    let appliedCoupon = null;
     await db.runTransaction(async (transaction) => {
       const championshipSnapshot = await transaction.get(championshipRef);
       const registrationSnapshot = await transaction.get(registrationRef);
@@ -182,7 +200,7 @@ module.exports = ({ admin, db, integrationSecret }) => {
       if (registrationDeadline && registrationDeadline.getTime() <= now) {
         throw new HttpsError('failed-precondition', 'La date limite d inscription est depassee.');
       }
-      if (registrationSnapshot.exists && registrationSnapshot.data()?.status === 'paid' && registrationSnapshot.data()?.paymentMethod === 'jwetpro_credit') {
+      if (registrationSnapshot.exists && registrationSnapshot.data()?.status === 'paid' && ['jwetpro_credit','jwetpro_coupon'].includes(registrationSnapshot.data()?.paymentMethod)) {
         checkoutData = registrationSnapshot.data();
         creditAllocations = Array.isArray(checkoutData.creditAllocations) ? checkoutData.creditAllocations : [];
         paidWithCredit = true;
@@ -197,12 +215,24 @@ module.exports = ({ admin, db, integrationSecret }) => {
       const profileSnapshot = await transaction.get(db.collection('users').doc(uid));
       const profile = profileSnapshot.data() || {};
       const amount = Math.max(0, Number(championship.entryFee) || 0);
-      checkoutData = { intentId, reservationId: intentId, championshipId, championshipName: championship.name || championship.title || `${championship.game || 'Championnat'} #${championship.number || championshipId}`, playerUid: uid, playerEmail: request.auth.token.email || profile.email || '', playerName: [profile.firstName, profile.lastName].filter(Boolean).join(' ') || profile.username || request.auth.token.email || 'Joueur', amount, ticketPrice: amount, currency: 'HTG', returnBaseUrl };
+      const coupons = await transaction.get(db.collection('jwetproCoupons').where('playerUid','==',uid).where('status','in',['pending','available','reserved']));
+      const couponDocument=[...coupons.docs].sort((left,right)=>Number(left.data()?.createdAt?.toMillis?.()||0)-Number(right.data()?.createdAt?.toMillis?.()||0)).find(item=>{
+        const coupon=item.data()||{};
+        return (!coupon.targetChampionshipId||coupon.targetChampionshipId===championshipId)&&(coupon.status!=='reserved'||coupon.reservedForIntentId===intentId);
+      });
+      const coupon=couponDocument?.data()||null;
+      const discountAmount=coupon?Math.min(amount,coupon.type==='free_entry'?amount:Math.max(0,Number(coupon.value)||0)):0;
+      const amountDue=Math.max(0,amount-discountAmount);
+      if(couponDocument) appliedCoupon={id:couponDocument.id,type:String(coupon.type||'fixed_discount'),discountAmount};
+      checkoutData = { intentId, reservationId: intentId, championshipId, championshipName: championship.name || championship.title || `${championship.game || 'Championnat'} #${championship.number || championshipId}`, playerUid: uid, playerEmail: request.auth.token.email || profile.email || '', playerName: [profile.firstName, profile.lastName].filter(Boolean).join(' ') || profile.username || request.auth.token.email || 'Joueur', amount:amountDue, ticketPrice:amount, grossAmount:amount, discountAmount, couponId:couponDocument?.id||'', currency: 'HTG', returnBaseUrl };
+      // Firestore transactions require every read to happen before the first write.
+      // In particular, a coupon checkout must load credits before reserving the coupon.
       const credits = await transaction.get(db.collection('jwetproCredits').where('playerUid', '==', uid).where('status', '==', 'available'));
       const availableCredits = credits.docs.filter((item) => Number(item.data()?.remainingAmount || 0) > 0);
       const creditTotal = availableCredits.reduce((sum, item) => sum + Number(item.data()?.remainingAmount || 0), 0);
-      if (amount > 0 && creditTotal >= amount) {
-        let remaining = amount;
+      if(couponDocument) transaction.set(couponDocument.ref,{targetChampionshipId:championshipId,targetChampionshipName:championship.name||championship.title||`${championship.game||'Championnat'} #${championship.number||championshipId}`,status:'reserved',reservedForIntentId:intentId,reservedAt:admin.firestore.FieldValue.serverTimestamp(),updatedAt:admin.firestore.FieldValue.serverTimestamp()},{merge:true});
+      if (amountDue === 0 || (amountDue > 0 && creditTotal >= amountDue)) {
+        let remaining = amountDue;
         availableCredits.forEach((credit) => {
           if (remaining <= 0) return;
           const current = Number(credit.data()?.remainingAmount || 0);
@@ -212,7 +242,8 @@ module.exports = ({ admin, db, integrationSecret }) => {
           transaction.set(credit.ref, { remainingAmount: next, status: next > 0 ? 'available' : 'used', usedForChampionshipId: championshipId, updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
           remaining -= used;
         });
-        transaction.set(registrationRef, { ...checkoutData, status: 'paid', paymentMethod: 'jwetpro_credit', creditApplied: amount, creditAllocations, paidAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+        transaction.set(registrationRef, { ...checkoutData, status: 'paid', paymentMethod: amountDue===0?'jwetpro_coupon':'jwetpro_credit', creditApplied: amountDue, creditAllocations, paidAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+        if(couponDocument) transaction.set(couponDocument.ref,{status:'used',usedForChampionshipId:championshipId,usedAt:admin.firestore.FieldValue.serverTimestamp(),updatedAt:admin.firestore.FieldValue.serverTimestamp()},{merge:true});
         transaction.set(championshipRef, { paidRegistrationCount: admin.firestore.FieldValue.increment(1), updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
         paidWithCredit = true;
         return;
@@ -234,14 +265,22 @@ module.exports = ({ admin, db, integrationSecret }) => {
         syncPending = true;
         await db.collection('ticketIntegrationAlerts').add({ type: 'credit_sync_failed', championshipId, intentId, message: text(error.message, 500), createdAt: admin.firestore.FieldValue.serverTimestamp() });
       }
-      return { intentId, paidWithCredit: true, syncPending, returnUrl: `${returnBaseUrl}/registration-return.html?intent=${encodeURIComponent(intentId)}` };
+      return { intentId, paidWithCredit: true, coupon:appliedCoupon,amount:Number(checkoutData?.amount)||0,ticketPrice:Number(checkoutData?.ticketPrice)||0,discountAmount:Number(checkoutData?.discountAmount)||0,syncPending, returnUrl: `${returnBaseUrl}/registration-return.html?intent=${encodeURIComponent(intentId)}` };
     }
     try {
       const smartCut = await postSigned(SMARTCUT_CHECKOUT_URL, checkoutData, `ticket-checkout-${intentId}-${Date.now()}`);
       await reservationRef.set({ smartCutSessionId: smartCut.sessionId || '', checkoutUrl: smartCut.checkoutUrl || '', status: 'payment_pending', updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
-      return { intentId, checkoutUrl: smartCut.checkoutUrl, expiresAt: expiresAt.toDate().toISOString() };
+      return { intentId, checkoutUrl: smartCut.checkoutUrl, coupon:appliedCoupon,amount:Number(checkoutData?.amount)||0,ticketPrice:Number(checkoutData?.ticketPrice)||0,discountAmount:Number(checkoutData?.discountAmount)||0,expiresAt: expiresAt.toDate().toISOString() };
     } catch (error) {
+      console.error('Smart Cut checkout failed', {
+        championshipId,
+        intentId,
+        playerUid: uid,
+        code: text(error?.code, 120),
+        message: text(error?.message, 500)
+      });
       await reservationRef.set({ status: 'payment_error', errorMessage: text(error.message, 500), updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+      if(appliedCoupon?.id) await releaseCouponReservation(appliedCoupon.id,uid).catch(releaseError=>console.error('Coupon release failed',{intentId,message:releaseError.message}));
       throw new HttpsError('unavailable', error.message || 'Paiement indisponible.');
     }
   });
@@ -263,6 +302,14 @@ module.exports = ({ admin, db, integrationSecret }) => {
     const enabled = request.data?.enabled === true;
     await db.collection('integrations').doc('smartcutTickets').set({ enabled, updatedBy: request.auth.uid, updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
     return { enabled };
+  });
+
+  const releaseExpiredCouponReservations = onCall({region:REGION,cors:true},async request=>{
+    if(!request.auth||request.auth.token?.firebase?.sign_in_provider==='anonymous') throw new HttpsError('unauthenticated','Connexion requise.');
+    const coupons=await db.collection('jwetproCoupons').where('playerUid','==',request.auth.uid).where('status','==','reserved').get();
+    let released=0;
+    for(const coupon of coupons.docs) if(await releaseCouponReservation(coupon.id,request.auth.uid)) released+=1;
+    return {released};
   });
 
   const confirmChampionshipTicketPayment = onRequest({ region: REGION, secrets: [integrationSecret] }, async (request, response) => {
@@ -287,6 +334,8 @@ module.exports = ({ admin, db, integrationSecret }) => {
       const championship = championshipSnapshot.data() || {};
       const existing = await transaction.get(registrationRef);
       if (existing.exists && ['paid', 'credited'].includes(existing.data()?.status)) { result = { status: existing.data().status }; transaction.set(eventRef, { result, processedAt: admin.firestore.FieldValue.serverTimestamp() }); return; }
+      const couponRef=reservation.couponId?db.collection('jwetproCoupons').doc(String(reservation.couponId)):null;
+      const couponSnapshot=couponRef?await transaction.get(couponRef):null;
       const paid = await transaction.get(db.collection('championshipTicketRegistrations').where('championshipId', '==', reservation.championshipId).where('status', '==', 'paid'));
       const capacity = Math.max(0, Number(championship.maxPlayers) || 0);
       const canRegister = String(championship.status) === 'registration-open' && (!capacity || paid.size < capacity);
@@ -294,12 +343,14 @@ module.exports = ({ admin, db, integrationSecret }) => {
       if (canRegister) {
         transaction.set(registrationRef, { ...base, status: 'paid' }, { merge: true });
         transaction.set(reservationRef, { status: 'paid', updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+        if(couponRef&&couponSnapshot?.exists&&couponSnapshot.data()?.reservedForIntentId===intentId) transaction.set(couponRef,{status:'used',usedForChampionshipId:reservation.championshipId,usedAt:admin.firestore.FieldValue.serverTimestamp(),updatedAt:admin.firestore.FieldValue.serverTimestamp()},{merge:true});
         transaction.set(championshipRef, { paidRegistrationCount: admin.firestore.FieldValue.increment(1), updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
         result = { status: 'paid' };
       } else {
         transaction.set(registrationRef, { ...base, status: 'credited', creditAmount: base.amount }, { merge: true });
         transaction.set(creditRef, { playerUid: reservation.playerUid, sourceIntentId: intentId, championshipId: reservation.championshipId, amount: base.amount, remainingAmount: base.amount, status: 'available', commissionAlreadyRecorded: true, createdAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
         transaction.set(reservationRef, { status: 'credited', creditAmount: base.amount, updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+        if(couponRef&&couponSnapshot?.exists&&couponSnapshot.data()?.reservedForIntentId===intentId) transaction.set(couponRef,{status:'expired',expiredAt:admin.firestore.FieldValue.serverTimestamp(),updatedAt:admin.firestore.FieldValue.serverTimestamp()},{merge:true});
         result = { status: 'credited', creditAmount: base.amount };
       }
       transaction.set(eventRef, { result, processedAt: admin.firestore.FieldValue.serverTimestamp() });
@@ -307,5 +358,5 @@ module.exports = ({ admin, db, integrationSecret }) => {
     return response.status(200).json({ ok: true, ...result });
   });
 
-  return { syncChampionshipTicketToSmartCut, syncChampionshipTicketNow, refreshTicketCountsFromReservation, refreshTicketCountsFromRegistration, createChampionshipRegistrationCheckout, getChampionshipRegistrationStatus, manageSmartCutTicketIntegration, confirmChampionshipTicketPayment };
+  return { syncChampionshipTicketToSmartCut, syncChampionshipTicketNow, refreshTicketCountsFromReservation, refreshTicketCountsFromRegistration, createChampionshipRegistrationCheckout, getChampionshipRegistrationStatus, releaseExpiredCouponReservations, manageSmartCutTicketIntegration, confirmChampionshipTicketPayment };
 };

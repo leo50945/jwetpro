@@ -1,4 +1,7 @@
 const championsFirebaseConfig = {apiKey:'AIzaSyD_Hbkc00HfJDmtw-2KSR4b9AbsThFt8vg',authDomain:'mopyonlakay.firebaseapp.com',projectId:'mopyonlakay',storageBucket:'mopyonlakay.firebasestorage.app',messagingSenderId:'307157893690',appId:'1:307157893690:web:4e5a033d13d54ce86feb03'};
+const championsLanguage = () => window.JwetproI18n?.language() === 'ht' ? 'ht' : 'fr';
+const championsText = value => window.JwetproI18n?.translate(value) || value;
+const championsLocale = () => championsLanguage() === 'ht' ? 'ht-HT' : 'fr-FR';
 const championsEscape = value => String(value ?? '').replace(/[&<>"']/g, character => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character]));
 const championsDate = value => { const date = value?.toDate ? value.toDate() : new Date(value); return Number.isNaN(date.getTime()) ? null : date; };
 const normalizeChampionName = value => String(value || '').trim().toLocaleLowerCase('fr').replace(/\s+/g, ' ');
@@ -54,11 +57,17 @@ const championAvatar = (champion, leaderboardById, leaderboardByName) => {
         ? `${index % 4 * 100 / 3}% ${Math.floor(index / 4) * 50}%/400% auto no-repeat url('./src/images/ranking-avatar-sprite.png')`
         : 'none';
   const style = `display:grid;place-items:center;width:68px;height:68px;border:3px solid #dce5eb;border-radius:50%;background:${background};box-shadow:0 5px 12px #10283d24${background === 'none' ? ';background-color:#e7edf2;color:#476174;font-size:20px;font-weight:800' : ''}`;
-  return `<span class="champion-profile-avatar" style="${style}" role="img" aria-label="Photo de profil de ${championsEscape(champion.name)}">${background === 'none' ? championInitials(champion.name) : ''}</span>`;
+  return `<span class="champion-profile-avatar" style="${style}" role="img" aria-label="${championsEscape(championsText('Photo de profil de'))} ${championsEscape(champion.name)}">${background === 'none' ? championInitials(champion.name) : ''}</span>`;
 };
+const championSocialProfile = (champion, leaderboardById, leaderboardByName) => {
+  const winner=champion.winner||champion.champion||{};
+  const identifiers=[champion.winnerSocialId,champion.championSocialId,winner.socialPlayerId,champion.winnerId,champion.championId,champion.winnerUid,champion.championUid,winner.uid,winner.id,winner.userId,winner.playerId].filter(Boolean).map(String);
+  return identifiers.map(identifier=>leaderboardById.get(identifier)).find(Boolean)||leaderboardByName.get(normalizeChampionName(champion.name))||{};
+};
+const championProfileLink = (champion, leaderboardById, leaderboardByName, markup) => { const profile=championSocialProfile(champion,leaderboardById,leaderboardByName);const socialId=String(profile.socialPlayerId||profile.id||champion.winnerSocialId||champion.championSocialId||'');return /^[A-Za-z0-9_-]{1,150}$/.test(socialId)?`<a class="player-social-link" href="./player.html?id=${encodeURIComponent(socialId)}" aria-label="${championsEscape(championsText('Voir le profil de'))} ${championsEscape(champion.name)}">${markup}</a>`:markup};
 const championsSearchText = value => String(value || '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase('fr').replace(/\s+/g, ' ').trim();
 const championsDateKey = date => date ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` : 'date-inconnue';
-const championsDateLabel = date => date ? date.toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'}) : 'Date non publiée';
+const championsDateLabel = date => date ? date.toLocaleDateString(championsLocale(),{weekday:'long',day:'numeric',month:'long',year:'numeric'}) : championsText('Date non publiée');
 const championsGame = value => String(value || 'Mopyon').toLowerCase() === 'domino' ? 'DOMINO' : 'MOPYON';
 const championsIcon = name => {
   const paths = name === 'search'
@@ -66,7 +75,7 @@ const championsIcon = name => {
     : '<path d="M18 6 6 18M6 6l12 12"></path>';
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
 };
-const championResultCard = (item, leaderboardById, leaderboardByName) => `<article class="info-card champion-result"><div class="champion-result-visual">${championAvatar(item,leaderboardById,leaderboardByName)}<span class="champion-medal" aria-hidden="true">★</span></div><div class="champion-result-copy"><p class="champion-label">CHAMPION VALIDÉ</p><h2>${championsEscape(item.name)}</h2><p>${championsGame(item.game)} · #${championsEscape(item.number || item.id)}</p></div><div class="champion-result-meta"><span><small>DATE DE VALIDATION</small>${item.completedAt ? item.completedAt.toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'}) : 'Date non publiée'}</span><strong><small>PRIX OFFICIEL</small>${Number(item.prize || 0).toLocaleString('fr-FR')} HTG</strong></div></article>`;
+const championResultCard = (item, leaderboardById, leaderboardByName) => `<article class="info-card champion-result" data-social-kind="championship" data-social-id="${championsEscape(item.id)}"><div class="champion-result-visual">${championProfileLink(item,leaderboardById,leaderboardByName,championAvatar(item,leaderboardById,leaderboardByName))}<span class="champion-medal" aria-hidden="true">★</span></div><div class="champion-result-copy"><p class="champion-label">${championsText('CHAMPION VALIDÉ')}</p>${championProfileLink(item,leaderboardById,leaderboardByName,`<h2>${championsEscape(item.name)}</h2>`)}<p>${championsGame(item.game)} · #${championsEscape(item.number || item.id)}</p></div><div class="champion-result-meta"><span><small>${championsText('DATE DE VALIDATION')}</small>${item.completedAt ? item.completedAt.toLocaleDateString(championsLocale(),{day:'numeric',month:'long',year:'numeric'}) : championsText('Date non publiée')}</span><strong><small>${championsText('PRIX OFFICIEL')}</small>${Number(item.prize || 0).toLocaleString(championsLocale())} HTG</strong></div></article>`;
 const championsArchiveMarkup = (champions, leaderboardById, leaderboardByName) => {
   const dateGroups = new Map();
   champions.forEach(item => {
@@ -84,12 +93,11 @@ const championsArchiveMarkup = (champions, leaderboardById, leaderboardByName) =
       const game = championsGame(item.game);
       const championshipLabel = String(item.title || item.championshipTitle || item.championshipName || `${game} · #${item.number || item.id}`);
       const search = championsSearchText([item.name,game,item.number,item.id,championshipLabel].filter(Boolean).join(' '));
-      return `<details class="champions-championship" data-champion-entry data-search="${championsEscape(search)}"${open ? ' open' : ''}><summary><span class="champions-game-mark" aria-hidden="true">${game === 'DOMINO' ? 'D' : 'M'}</span><span class="champions-championship-copy"><small>CHAMPIONNAT</small><strong>${championsEscape(championshipLabel)}</strong></span><span class="champions-winner-preview">${championsEscape(item.name)}</span><span class="champions-chevron" aria-hidden="true"></span></summary><div class="champions-result-panel">${championResultCard(item,leaderboardById,leaderboardByName)}</div></details>`;
+      return `<details class="champions-championship" data-champion-entry data-search="${championsEscape(search)}"${open ? ' open' : ''}><summary><span class="champions-game-mark" aria-hidden="true">${game === 'DOMINO' ? 'D' : 'M'}</span><span class="champions-championship-copy"><small>${championsText('CHAMPIONNAT')}</small><strong>${championsEscape(championshipLabel)}</strong></span><span class="champions-winner-preview">${championsEscape(item.name)}</span><span class="champions-chevron" aria-hidden="true"></span></summary><div class="champions-result-panel">${championResultCard(item,leaderboardById,leaderboardByName)}</div></details>`;
     }).join('');
-    return `<section class="champions-date-group" data-champions-date><header class="champions-date-heading"><span></span><time datetime="${group.date ? group.date.toISOString() : ''}">${championsEscape(championsDateLabel(group.date))}</time><b data-visible-champion-count>${items.length} championnat${items.length === 1 ? '' : 's'}</b></header>${championshipsMarkup}</section>`;
+    return `<section class="champions-date-group" data-champions-date><header class="champions-date-heading"><span></span><time datetime="${group.date ? group.date.toISOString() : ''}">${championsEscape(championsDateLabel(group.date))}</time><b data-visible-champion-count>${items.length} ${championsText(items.length === 1 ? 'championnat' : 'championnats')}</b></header>${championshipsMarkup}</section>`;
   }).join('');
-  const plural = champions.length === 1 ? '' : 's';
-  return `<div class="champions-archive"><div class="champions-toolbar"><div class="champions-search">${championsIcon('search')}<label class="info-sr-only" for="champions-search-input">Rechercher un champion</label><input id="champions-search-input" type="search" data-champions-search placeholder="Rechercher un champion ou un championnat" autocomplete="off"><button type="button" data-champions-clear aria-label="Effacer la recherche" hidden>${championsIcon('close')}</button></div><p class="champions-result-count" role="status" aria-live="polite"><strong data-champions-result-count>${champions.length}</strong><span data-champions-result-label> champion${plural} publié${plural}</span></p></div><div class="champions-groups">${groupsMarkup}</div><div class="info-card champions-search-empty" data-champions-empty hidden><h2>Aucun champion trouvé</h2><p>Essayez le nom d’un joueur, un numéro ou le nom d’un championnat.</p></div></div>`;
+  return `<div class="champions-archive"><div class="champions-toolbar"><div class="champions-search">${championsIcon('search')}<label class="info-sr-only" for="champions-search-input">${championsText('Rechercher un champion')}</label><input id="champions-search-input" type="search" data-champions-search placeholder="${championsText('Rechercher un champion ou un championnat')}" autocomplete="off"><button type="button" data-champions-clear aria-label="${championsText('Effacer la recherche')}" hidden>${championsIcon('close')}</button></div><p class="champions-result-count" role="status" aria-live="polite"><strong data-champions-result-count>${champions.length}</strong><span data-champions-result-label> ${championsText(champions.length === 1 ? 'champion publié' : 'champions publiés')}</span></p></div><div class="champions-groups">${groupsMarkup}</div><div class="info-card champions-search-empty" data-champions-empty hidden><h2>${championsText('Aucun champion trouvé')}</h2><p>${championsText('Essayez le nom d’un joueur, un numéro ou le nom d’un championnat.')}</p></div></div>`;
 };
 const bindChampionsArchive = () => {
   const archive = document.querySelector('.champions-archive');
@@ -114,11 +122,10 @@ const bindChampionsArchive = () => {
       const visibleCount = group.querySelectorAll('[data-champion-entry]:not([hidden])').length;
       group.hidden = visibleCount === 0;
       const groupCount = group.querySelector('[data-visible-champion-count]');
-      if (groupCount) groupCount.textContent = `${visibleCount} championnat${visibleCount === 1 ? '' : 's'}`;
+      if (groupCount) groupCount.textContent = `${visibleCount} ${championsText(visibleCount === 1 ? 'championnat' : 'championnats')}`;
     });
-    const plural = visibleTotal === 1 ? '' : 's';
     count.textContent = visibleTotal;
-    label.textContent = ` champion${plural} publié${plural}`;
+    label.textContent = ` ${championsText(visibleTotal === 1 ? 'champion publié' : 'champions publiés')}`;
     empty.hidden = visibleTotal !== 0;
     clear.hidden = !query;
   };
@@ -146,12 +153,12 @@ const renderChampionsPage = async () => {
       const completedAt = championsDate(data.completedAt || data.endAt || data.startAt);
       return name ? {...data,id:document.id,name,completedAt} : null;
     }).filter(Boolean).sort((a,b) => (b.completedAt?.getTime() || 0) - (a.completedAt?.getTime() || 0));
-    list.innerHTML = champions.length ? championsArchiveMarkup(champions,leaderboardById,leaderboardByName) : '<div class="info-card"><h2>Aucun champion publié</h2><p>Les vainqueurs apparaîtront ici après validation officielle.</p></div>';
+    list.innerHTML = champions.length ? championsArchiveMarkup(champions,leaderboardById,leaderboardByName) : `<div class="info-card"><h2>${championsText('Aucun champion publié')}</h2><p>${championsText('Les vainqueurs apparaîtront ici après validation officielle.')}</p></div>`;
     bindChampionsArchive();
   } catch (error) {
     console.error('Chargement des champions impossible :', error);
-    list.innerHTML = '<div class="info-card"><h2>Palmarès indisponible</h2><p>Impossible de charger les champions pour le moment.</p></div>';
+    list.innerHTML = `<div class="info-card"><h2>${championsText('Palmarès indisponible')}</h2><p>${championsText('Impossible de charger les champions pour le moment.')}</p></div>`;
   }
 };
 window.addEventListener('shared-shell-ready', () => { document.querySelectorAll('a[href="./champions.html"]').forEach(link => link.setAttribute('aria-current','page')); renderChampionsPage(); }, {once:true});
-const championsShell = document.createElement('script'); championsShell.src = './shared-shell.js?v=20260820-jean-estime'; document.head.append(championsShell);
+const championsShell = document.createElement('script'); championsShell.src = './shared-shell.js?v=20260909-social-v3'; document.head.append(championsShell);

@@ -6,7 +6,8 @@ const crypto = require('crypto');
 const admin = require('firebase-admin');
 const {createAssistantService, callGroqChat, BUILT_IN_KNOWLEDGE, cleanText, detectLanguage, technicalWaitAnswer, countRecentTechnicalWaits} = require('./assistant-core');
 const {BOARD_CELLS, isValidBoard, applyMove, chooseBotMove} = require('./mopyon-match-core');
-const {createGameState: createDominoGameState, applyAction: applyDominoAction, playBotTurn: playDominoBotTurn, publicState: publicDominoState} = require('./domino-match-core');
+const {createGameState: createDominoGameState, applyAction: applyDominoAction, applyTimeout: applyDominoTimeout, playBotAction: playSingleDominoBotAction, publicState: publicDominoState} = require('./domino-match-core');
+const {roundKey:dominoRoundKey,victoryPoints:dominoVictoryPoints,playerLevelName,eliminationCoupon}=require('./domino-rewards-core');
 
 admin.initializeApp();
 const groqApiKey = defineSecret('GROQ_API_KEY');
@@ -15,6 +16,9 @@ const db = admin.firestore();
 const assistantService = createAssistantService({admin, db});
 Object.assign(exports, require('./jwetpro-tickets')({ admin, db, integrationSecret: smartCutTicketSecret }));
 Object.assign(exports, require('./jwetpro-sharing')({admin,db}));
+Object.assign(exports, require('./social-system')({admin,db}));
+const communityPrograms = require('./community-programs')({admin,db});
+Object.assign(exports, communityPrograms.functions);
 
 const isAdmin = async (context) => {
   if (!context.auth) return false;
@@ -22,6 +26,10 @@ const isAdmin = async (context) => {
   const profile = await admin.firestore().collection('users').doc(context.auth.uid).get();
   return profile.exists && profile.data().role === 'admin';
 };
+
+// Server-authoritative championship simulation: deterministic bracket closure,
+// bot-vs-bot jobs, replay generation and automatic round progression.
+Object.assign(exports, require('./simulation-orchestrator')({admin, db, isAdmin}));
 
 exports.getAdminBootstrapStatus = onCall({region: 'us-central1', cors: true}, async () => {
   const snapshot = await admin.firestore().collection('users').where('role', '==', 'admin').limit(1).get();
@@ -134,14 +142,9 @@ exports.autoReplyToCoordinatorMessage = onDocumentCreated({document:'communityMe
 
 const COMMUNITY_ROOM_ID = 'general';
 const SIMULATION_VIEWER_WINDOW_MS = 12 * 1000;
-const SIMULATION_COOLDOWN_MS = 10 * 60 * 1000;
+const SIMULATION_COOLDOWN_MS = 3 * 60 * 1000;
 const SIMULATION_LOCK_TTL_MS = 6 * 60 * 1000;
-const SIMULATION_PERSONAS = [
-  'Mika J.','Nadia L.','David T.','Ruth J.','Wesley A.','Sarah C.','Peterson F.','Gaëlle M.',
-  'Frantz D.','Wideline P.','Junior C.','Vanessa R.','Samuel B.','Esther N.','Ricardo P.','Lovely S.',
-  'Jameson L.','Stéphanie V.','Emmanuel J.','Roseline A.','Wood K.','Kervens T.','Natacha G.','Mackenson P.',
-  'Darline C.','Jeff R.','Tamara L.','Claude M.','Melissa D.','Stanley F.','Judith E.','Andy N.'
-];
+const SIMULATION_PERSONAS = communityPrograms.personas;
 const SIMULATION_SCENARIOS = [
   {id:'quick-hello',topic:'salutations rapides',lines:['Hello 👋','Bonjou!','Koman nou ye?','Nap boule 😊']},
   {id:'mopyon-who-joins',topic:'participants au prochain Mopyon',lines:['Kiyès k ap patisipe nan chanpyona Mopyon an?','Mwen enterese 👀','M ap pratike avan.','Bon chans tout moun!']},
@@ -181,7 +184,7 @@ const SIMULATION_SCENARIOS = [
   {id:'strategy-choice',topic:'attaque ou défense',lines:['Nou plis atak oswa defans?','Defans dabò pou mwen.','Mwen renmen mete presyon 😄','Fòk gen balans.']}
 ];
 const sleep = ms => new Promise(resolve => setTimeout(resolve,ms));
-const randomBetween = (min,max) => Math.round(min + Math.random() * (max - min));
+const randomBetween = (min,max) => Math.floor(min + Math.random() * (max - min + 1));
 const slugify = value => String(value || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'') || 'joueur';
 const normalizeSimulationText = value => cleanText(value,300).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim();
 const simulationMessageKey = (author,text) => crypto.createHash('sha256').update(`${author}|${normalizeSimulationText(text)}`).digest('hex').slice(0,24);
@@ -190,18 +193,28 @@ const communityDayKey = date => {
   const value = Object.fromEntries(parts.map(part => [part.type,part.value]));
   return `${value.year}-${value.month}-${value.day}`;
 };
-const pickSimulationPersonas = () => [...SIMULATION_PERSONAS].sort(() => Math.random() - 0.5).slice(0,randomBetween(3,5));
+const shuffleSimulationItems = items => [...items].sort(() => Math.random() - 0.5);
+const pickSimulationPersonas = (usedToday = []) => {
+  const count = randomBetween(4,6);
+  const alreadyUsed = new Set(usedToday);
+  const fresh = shuffleSimulationItems(SIMULATION_PERSONAS.filter(name => !alreadyUsed.has(name)));
+  const selected = fresh.slice(0,count);
+  if (selected.length < count) {
+    selected.push(...shuffleSimulationItems(SIMULATION_PERSONAS.filter(name => !selected.includes(name))).slice(0,count-selected.length));
+  }
+  return selected;
+};
 const fallbackSimulationScript = (scenario,personas) => scenario.lines.map((text,index) => ({author:personas[index % personas.length],text}));
 const buildSimulationPrompt = (personas,scenario,excludedTexts) => [
   'Génère une courte animation de conversation pour le salon communautaire JWETPRO consacré aux championnats de Mopyon et Domino.',
-  'Chaque message sera clairement identifié comme simulé dans l’interface. Ne prétends pas que ces personnages sont des personnes réelles.',
+  'Les personnages sont fictifs. Ne leur attribue aucune identité réelle, expérience vérifiable ou information officielle.',
   `Personnages simulés autorisés: ${personas.join(', ')}. Le champ "author" doit reprendre exactement un de ces noms.`,
   `Sujet imposé pour cette animation: ${scenario.topic}.`,
   'Écris en français ou en kreyòl ayisyen naturel. Ton amical, respectueux et sobre entre passionnés de jeux de table.',
   'Mélange des messages très courts et des phrases brèves. Quelques réponses peuvent contenir surtout des emoji.',
   'Reste général: aucun montant, aucune date, aucun résultat, aucune promesse et aucune information officielle inventée.',
   'Ne réponds à aucun message utilisateur et ne mentionne aucun utilisateur réel. Il s’agit uniquement d’une courte conversation autonome.',
-  'Produis entre 4 et 7 messages courts qui s’enchaînent naturellement. Fais intervenir au moins trois personnages.',
+  'Produis entre 5 et 8 messages courts qui s’enchaînent naturellement. Fais intervenir au moins quatre personnages différents.',
   excludedTexts.length ? `N’utilise et ne paraphrase aucun de ces messages déjà employés aujourd’hui: ${excludedTexts.slice(-80).join(' | ')}` : '',
   'Retourne uniquement un objet JSON valide: {"messages":[{"author":"...","text":"..."}]}.'
 ].filter(Boolean).join('\n');
@@ -235,9 +248,13 @@ exports.startCommunitySimulation = onCall({secrets:[groqApiKey],region:'us-centr
     const snapshot = await transaction.get(stateRef);
     const state = snapshot.exists ? snapshot.data() : {};
     const startedAt = state.startedAt?.toMillis ? state.startedAt.toMillis() : 0;
-    if (state.active === true && startedAt && now - startedAt < SIMULATION_LOCK_TTL_MS) return null;
+    if (state.active === true && startedAt && now - startedAt < SIMULATION_LOCK_TTL_MS) {
+      return {blocked:true,reason:'active',retryAfterMs:Math.max(15000,SIMULATION_LOCK_TTL_MS-(now-startedAt)+5000)};
+    }
     const lastEndedAt = state.lastEndedAt?.toMillis ? state.lastEndedAt.toMillis() : 0;
-    if (lastEndedAt && now - lastEndedAt < SIMULATION_COOLDOWN_MS) return null;
+    if (lastEndedAt && now - lastEndedAt < SIMULATION_COOLDOWN_MS) {
+      return {blocked:true,reason:'cooldown',retryAfterMs:Math.max(15000,SIMULATION_COOLDOWN_MS-(now-lastEndedAt)+5000)};
+    }
     const sameDay = state.dailyKey === today;
     const dailyScenarioIds = sameDay && Array.isArray(state.dailyScenarioIds) ? state.dailyScenarioIds : [];
     const previousDayScenarioIds = sameDay
@@ -245,6 +262,8 @@ exports.startCommunitySimulation = onCall({secrets:[groqApiKey],region:'us-centr
       : (Array.isArray(state.dailyScenarioIds) ? state.dailyScenarioIds : []);
     const dailyMessageKeys = sameDay && Array.isArray(state.dailyMessageKeys) ? state.dailyMessageKeys : [];
     const dailyMessageTexts = sameDay && Array.isArray(state.dailyMessageTexts) ? state.dailyMessageTexts : [];
+    const dailyPersonaNames = sameDay && Array.isArray(state.dailyPersonaNames) ? state.dailyPersonaNames : [];
+    const dailyProgramConversationKeys = sameDay && Array.isArray(state.dailyProgramConversationKeys) ? state.dailyProgramConversationKeys : [];
     transaction.set(stateRef,{
       active:true,
       startedAt:admin.firestore.FieldValue.serverTimestamp(),
@@ -253,11 +272,62 @@ exports.startCommunitySimulation = onCall({secrets:[groqApiKey],region:'us-centr
       dailyScenarioIds,
       previousDayScenarioIds,
       dailyMessageKeys,
-      dailyMessageTexts
+      dailyMessageTexts,
+      dailyPersonaNames,
+      dailyProgramConversationKeys
     },{merge:true});
-    return {dailyScenarioIds,previousDayScenarioIds,dailyMessageKeys,dailyMessageTexts};
+    return {dailyScenarioIds,previousDayScenarioIds,dailyMessageKeys,dailyMessageTexts,dailyPersonaNames,dailyProgramConversationKeys};
   });
-  if (!lease) return {started:false,reason:'cooldown-or-active'};
+  if (lease.blocked) return {started:false,reason:lease.reason,retryAfterMs:lease.retryAfterMs};
+
+  const scheduled = await communityPrograms.prepareProgramTimeline(today,lease.dailyProgramConversationKeys);
+  if (scheduled.programFound) {
+    if (!scheduled.timeline.length) {
+      await stateRef.set({active:false,lastEndedAt:admin.firestore.FieldValue.serverTimestamp()},{merge:true});
+      return {started:false,reason:'daily-program-exhausted',sourceDay:scheduled.sourceDay,retryAfterMs:SIMULATION_COOLDOWN_MS+5000};
+    }
+    await stateRef.set({dailyProgramConversationKeys:admin.firestore.FieldValue.arrayUnion(...scheduled.selectedKeys)},{merge:true});
+    const simulationStartedAt = Date.now();
+    let messagesPosted = 0;
+    let previousOffsetSeconds = 0;
+    try {
+      for (const line of scheduled.timeline) {
+        const waitMs = Math.max(0,(line.offsetSeconds-previousOffsetSeconds)*1000);
+        if (waitMs) await sleep(waitMs);
+        previousOffsetSeconds = line.offsetSeconds;
+        if (!(await hasActiveGroupViewer()) || await hasRealGroupMessageSince(simulationStartedAt)) break;
+        try {
+          await db.collection('communityMessages').doc(line.documentId).create({
+            roomId:COMMUNITY_ROOM_ID,
+            authorId:`simulated_${slugify(line.author)}`,
+            authorName:line.author,
+            authorImageName:'',
+            authorRole:'simulated',
+            automated:true,
+            simulation:true,
+            simulationSource:'dashboard-program',
+            simulationDay:today,
+            programSourceDay:scheduled.sourceDay,
+            programRevision:scheduled.revision,
+            programConversationId:line.conversationId,
+            conversationTitle:line.conversationTitle,
+            threadId:line.threadId,
+            replyToMessageId:line.replyToMessageId || '',
+            ...(line.replyTo ? {replyTo:line.replyTo} : {}),
+            body:line.text,
+            language:detectLanguage(line.text),
+            createdAt:admin.firestore.FieldValue.serverTimestamp()
+          });
+          messagesPosted += 1;
+        } catch (error) {
+          if (error.code !== 6 && error.code !== 'already-exists') throw error;
+        }
+      }
+    } finally {
+      await stateRef.set({active:false,lastEndedAt:admin.firestore.FieldValue.serverTimestamp()},{merge:true});
+    }
+    return {started:messagesPosted>0,messagesPosted,sourceDay:scheduled.sourceDay,conversationCount:scheduled.selectedKeys.length,retryAfterMs:SIMULATION_COOLDOWN_MS+5000};
+  }
 
   const usedToday = new Set(lease.dailyScenarioIds);
   const usedYesterday = new Set(lease.previousDayScenarioIds);
@@ -273,7 +343,7 @@ exports.startCommunitySimulation = onCall({secrets:[groqApiKey],region:'us-centr
   const simulationStartedAt = Date.now();
   let messagesPosted = 0;
   try {
-    const personas = pickSimulationPersonas();
+    const personas = pickSimulationPersonas(lease.dailyPersonaNames);
     const usedMessageKeys = new Set(lease.dailyMessageKeys);
     const uniqueLines = lines => lines.filter(line => {
       const key = simulationMessageKey(line.author,line.text);
@@ -288,8 +358,8 @@ exports.startCommunitySimulation = onCall({secrets:[groqApiKey],region:'us-centr
       const cleaned = uniqueLines(Array.isArray(parsed) ? parsed
         .map(line => ({author:cleanText(line?.author,60),text:cleanText(line?.text,300)}))
         .filter(line => line.author && line.text && personas.includes(line.author))
-        .slice(0,7) : []);
-      if (cleaned.length >= 4 && new Set(cleaned.map(line => line.author)).size >= 3) script = cleaned;
+        .slice(0,8) : []);
+      if (cleaned.length >= 5 && new Set(cleaned.map(line => line.author)).size >= 4) script = cleaned;
     } catch (error) { console.error('Community animation generation failed:',error); }
 
     for (let index = 0; index < script.length; index += 1) {
@@ -311,7 +381,8 @@ exports.startCommunitySimulation = onCall({secrets:[groqApiKey],region:'us-centr
       });
       await stateRef.set({
         dailyMessageKeys:admin.firestore.FieldValue.arrayUnion(simulationMessageKey(line.author,line.text)),
-        dailyMessageTexts:admin.firestore.FieldValue.arrayUnion(normalizeSimulationText(line.text))
+        dailyMessageTexts:admin.firestore.FieldValue.arrayUnion(normalizeSimulationText(line.text)),
+        dailyPersonaNames:admin.firestore.FieldValue.arrayUnion(line.author)
       },{merge:true});
       messagesPosted += 1;
       if (index < script.length - 1) await sleep(randomBetween(6000,11000));
@@ -319,18 +390,41 @@ exports.startCommunitySimulation = onCall({secrets:[groqApiKey],region:'us-centr
   } finally {
     await stateRef.set({active:false,lastEndedAt:admin.firestore.FieldValue.serverTimestamp()},{merge:true});
   }
-  return {started:messagesPosted > 0,messagesPosted,scenarioId:scenario.id};
+  return {started:messagesPosted > 0,messagesPosted,scenarioId:scenario.id,retryAfterMs:SIMULATION_COOLDOWN_MS+5000};
 });
 
 const MATCH_ACCESS_WINDOW_MS = 15 * 60 * 1000;
 const OPPONENT_GRACE_PERIOD_MS = 5 * 60 * 1000;
 const MATCH_DURATION_MS = 90 * 60 * 1000;
+const DOMINO_OPENING_MS = 5000;
+const DOMINO_BOT_MIN_DELAY_MS = 1200;
+const DOMINO_BOT_MAX_DELAY_MS = 2200;
+const DOMINO_BOT_DRAW_MIN_DELAY_MS = 800;
+const DOMINO_BOT_DRAW_MAX_DELAY_MS = 1400;
+const DOMINO_HUMAN_TURN_MS = 30000;
 const MOPYON_LIVE_STATUSES = new Set(['ongoing', 'live', 'in-progress', 'active']);
 const MOPYON_JOINABLE_STATUSES = new Set(['scheduled', 'upcoming', 'registration-closed', 'waiting-opponent', ...MOPYON_LIVE_STATUSES]);
 
 const matchGameIsMopyon = data => /mopyon|morpion|gomoku/i.test(String(data.game || data.type || ''));
 const matchGameIsDomino = data => /domino/i.test(String(data.game || data.type || ''));
 const timestampMillis = value => value?.toMillis ? value.toMillis() : Number.NaN;
+const randomDelay = (minimum, maximum) => Math.floor(minimum + Math.random() * (maximum - minimum + 1));
+const dominoBotTiming = (delay, status = 'thinking') => ({
+  botStatus:status,
+  botReadyAt:admin.firestore.Timestamp.fromMillis(Date.now() + delay)
+});
+const clearDominoBotTiming = () => ({
+  botStatus:admin.firestore.FieldValue.delete(),
+  botReadyAt:admin.firestore.FieldValue.delete()
+});
+const dominoTurnTiming = (state, data, realUid = '') => {
+  if(state.winnerId||state.draw||!state.currentTurnUid||isBotParticipant(data,state.currentTurnUid,realUid)) return {turnDeadlineAt:admin.firestore.FieldValue.delete()};
+  const existing=timestampMillis(data.turnDeadlineAt);
+  const sameTurn=data.currentTurnUid===state.currentTurnUid;
+  if(sameTurn&&Number.isFinite(existing)) return {turnDeadlineAt:data.turnDeadlineAt};
+  const openingDelay=(Number(state.actionNumber)||0)===0?DOMINO_OPENING_MS:0;
+  return {turnDeadlineAt:admin.firestore.Timestamp.fromMillis(Date.now()+openingDelay+DOMINO_HUMAN_TURN_MS)};
+};
 const participantRecord = (data, uid) => {
   const records = [
     ...[data.participants, data.players].filter(Array.isArray).flat(),
@@ -377,7 +471,7 @@ const participantDisplayName = (data, uid) => {
 };
 
 const childGameFields = (series, seriesId, participants, gameId, gameNumber, realUid = '') => {
-  const copiedFields = ['participantNames', 'playerNames', 'participants', 'players', 'player1', 'player2', 'botParticipantIds', 'simulatedParticipantIds', 'botParticipantId', 'simulatedParticipantId', 'participantTypes', 'simulation', 'simulated', 'isSimulation', 'simulationId', 'simulationRunId', 'championshipId', 'tournamentId', 'competitionId', 'championshipName', 'championshipTitle', 'stage', 'round', 'roundLabel', 'phase', 'bracketSlot', 'visibility'];
+  const copiedFields = ['participantNames', 'playerNames', 'participantSocialIds', 'participants', 'players', 'player1', 'player2', 'botParticipantIds', 'simulatedParticipantIds', 'botParticipantId', 'simulatedParticipantId', 'participantTypes', 'simulation', 'simulated', 'isSimulation', 'simulationId', 'simulationRunId', 'championshipId', 'tournamentId', 'competitionId', 'championshipName', 'championshipTitle', 'stage', 'round', 'roundLabel', 'phase', 'bracketSlot', 'visibility'];
   const inherited = Object.fromEntries(copiedFields.filter(key => series[key] !== undefined).map(key => [key, series[key]]));
   const firstParticipant = realUid && participants.includes(realUid) ? realUid : participants[0];
   const secondParticipant = participants.find(uid => uid !== firstParticipant);
@@ -725,7 +819,7 @@ const dominoMatchUpdates = state => ({
   updatedAt:admin.firestore.FieldValue.serverTimestamp()
 });
 const dominoChildGameFields = (series, seriesId, participants, gameNumber, state, startAt) => {
-  const copiedFields = ['participantNames','playerNames','participants','players','player1','player2','botParticipantIds','simulatedParticipantIds','botParticipantId','simulatedParticipantId','participantTypes','simulation','simulated','isSimulation','simulationId','simulationRunId','championshipId','tournamentId','competitionId','championshipName','championshipTitle','stage','round','roundLabel','phase','bracketSlot','visibility'];
+  const copiedFields = ['participantNames','playerNames','participantSocialIds','participants','players','player1','player2','botParticipantIds','simulatedParticipantIds','botParticipantId','simulatedParticipantId','participantTypes','simulation','simulated','isSimulation','simulationId','simulationRunId','championshipId','tournamentId','competitionId','championshipName','championshipTitle','stage','round','roundLabel','phase','bracketSlot','visibility'];
   const inherited = Object.fromEntries(copiedFields.filter(key => series[key] !== undefined).map(key => [key,series[key]]));
   return {
     ...inherited,
@@ -859,12 +953,16 @@ exports.joinDominoMatch = onCall({region:'us-central1',cors:true},async request=
     }
     presence[request.auth.uid]=joinedAt;
     const updates={presence,updatedAt:admin.firestore.FieldValue.serverTimestamp(),hands:admin.firestore.FieldValue.delete(),drawPile:admin.firestore.FieldValue.delete(),passStreak:admin.firestore.FieldValue.delete()};
-    let events=[];
     if(opponentIsBot){
       updates.status='ongoing';updates.botMatch=true;updates.botParticipantId=opponentId;
       updates.waitingForOpponentSince=admin.firestore.FieldValue.delete();updates.attendanceDeadlineAt=admin.firestore.FieldValue.delete();updates.waitingForOpponentUid=admin.firestore.FieldValue.delete();
       if(!data.startedAt) updates.startedAt=admin.firestore.FieldValue.serverTimestamp();
-      if(state.currentTurnUid===opponentId&&!state.winnerId&&!state.draw){const bot=playDominoBotTurn(state,opponentId);state=bot.state;events=bot.events;}
+      if(state.currentTurnUid===opponentId&&!state.winnerId&&!state.draw){
+        const existingReadyAt=timestampMillis(data.botReadyAt);
+        Object.assign(updates,Number.isFinite(existingReadyAt)
+          ? {botStatus:data.botStatus||'opening',botReadyAt:data.botReadyAt}
+          : dominoBotTiming((Number(state.actionNumber)||0)===0?DOMINO_OPENING_MS+randomDelay(DOMINO_BOT_MIN_DELAY_MS,DOMINO_BOT_MAX_DELAY_MS):randomDelay(DOMINO_BOT_MIN_DELAY_MS,DOMINO_BOT_MAX_DELAY_MS),(Number(state.actionNumber)||0)===0?'opening':'thinking'));
+      }else Object.assign(updates,clearDominoBotTiming());
     }else if(Number.isFinite(opponentPresenceMillis)){
       updates.status='ongoing';updates.waitingForOpponentSince=admin.firestore.FieldValue.delete();updates.attendanceDeadlineAt=admin.firestore.FieldValue.delete();updates.waitingForOpponentUid=admin.firestore.FieldValue.delete();
       if(!data.startedAt) updates.startedAt=admin.firestore.FieldValue.serverTimestamp();
@@ -873,8 +971,8 @@ exports.joinDominoMatch = onCall({region:'us-central1',cors:true},async request=
       updates.status='waiting-opponent';updates.waitingForOpponentSince=waitingSince;updates.attendanceDeadlineAt=Number.isFinite(deadlineMillis)?data.attendanceDeadlineAt:admin.firestore.Timestamp.fromMillis(timestampMillis(waitingSince)+OPPONENT_GRACE_PERIOD_MS);updates.waitingForOpponentUid=opponentId;
     }
     Object.assign(updates,publicDominoState(state),{board:state.boardTiles});
+    Object.assign(updates,dominoTurnTiming(state,data,request.auth.uid));
     if(state.winnerId||state.draw){updates.status='completed';updates.completedAt=admin.firestore.FieldValue.serverTimestamp();}
-    if(events.length) updates.moves=admin.firestore.FieldValue.arrayUnion(...publicDominoEvents(events));
     transaction.set(stateReference,{...state,...(stateWasCreated?{createdAt:admin.firestore.FieldValue.serverTimestamp()}:{}),updatedAt:admin.firestore.FieldValue.serverTimestamp()},{merge:true});
     transaction.set(gameReference,updates,{merge:true});
     return {matchId:preparedId,seriesId:data.seriesId||'',status:updates.status,attendanceDeadlineAt:timestampMillis(updates.attendanceDeadlineAt)||null,botMatch:opponentIsBot};
@@ -914,24 +1012,73 @@ exports.submitDominoMove = onCall({region:'us-central1',cors:true},async request
     if(!participants.includes(actingUid)) throw new HttpsError('invalid-argument','The active Domino player is invalid.');
     const status=String(data.status||'').toLowerCase();
     if(!MOPYON_LIVE_STATUSES.has(status)||data.winnerId||data.draw) throw new HttpsError('failed-precondition','The match is not in progress.');
+    const currentActionNumber=Math.max(0,Number(stateSnapshot.data().actionNumber)||0);
+    const expectedActionNumber=Number(request.data?.expectedActionNumber);
+    if(!adminAccess&&(!Number.isInteger(expectedActionNumber)||expectedActionNumber!==currentActionNumber)) throw new HttpsError('aborted','The Domino board changed. Please retry from the latest state.');
+    const actionType=String(request.data?.action||'');
     let result;
-    try{result=applyDominoAction(stateSnapshot.data(),actingUid,{type:String(request.data?.action||''),tileId:String(request.data?.tileId||''),side:String(request.data?.side||'')});}
+    try{
+      if(actionType==='timeout'){
+        const deadline=timestampMillis(data.turnDeadlineAt);
+        if(!Number.isFinite(deadline)||Date.now()<deadline) throw new Error('timeout-not-reached');
+        result=applyDominoTimeout(stateSnapshot.data(),actingUid);
+      }else result=applyDominoAction(stateSnapshot.data(),actingUid,{type:actionType,tileId:String(request.data?.tileId||''),side:String(request.data?.side||''),drawIndex:Number(request.data?.drawIndex)});
+    }
     catch(error){throw new HttpsError('failed-precondition',`Domino action refused: ${error.message}`);}
-    let state=result.state;
-    let events=[result.event];
+    const state=result.state;
+    const events=[result.event];
     const opponentId=participants.find(uid=>uid!==actingUid);
-    if(state.currentTurnUid===opponentId&&isBotParticipant(data,opponentId,actingUid)&&!state.winnerId&&!state.draw){const bot=playDominoBotTurn(state,opponentId);state=bot.state;events.push(...bot.events);}
     const updates={...dominoMatchUpdates(state),moves:admin.firestore.FieldValue.arrayUnion(...publicDominoEvents(events))};
+    if(state.currentTurnUid===opponentId&&isBotParticipant(data,opponentId,actingUid)&&!state.winnerId&&!state.draw){
+      Object.assign(updates,dominoBotTiming(randomDelay(DOMINO_BOT_MIN_DELAY_MS,DOMINO_BOT_MAX_DELAY_MS)));
+    }else Object.assign(updates,clearDominoBotTiming());
+    Object.assign(updates,dominoTurnTiming(state,data,actingUid));
     if(state.winnerId||state.draw) updates.completedAt=admin.firestore.FieldValue.serverTimestamp();
     transaction.set(stateReference,{...state,updatedAt:admin.firestore.FieldValue.serverTimestamp()},{merge:true});
     transaction.set(gameReference,updates,{merge:true});
-    return {accepted:true,winnerId:state.winnerId||null,won:state.winnerId===actingUid,draw:state.draw,handCount:state.hands[actingUid].length};
+    return {accepted:true,actionNumber:state.actionNumber,winnerId:state.winnerId||null,won:state.winnerId===actingUid,draw:state.draw,handCount:state.hands[actingUid].length,hand:state.hands[actingUid],state:publicDominoState(state)};
   });
 });
 
-exports.advanceDominoSeries = onCall({region:'us-central1',cors:true},async request=>{
+exports.performDominoBotAction = onCall({region:'us-central1',cors:true},async request=>{
   if(!request.auth) throw new HttpsError('unauthenticated','Authentication is required.');
-  const gameId=String(request.data?.gameId||'');
+  const matchId=String(request.data?.matchId||'');
+  if(!/^[A-Za-z0-9_-]{1,150}$/.test(matchId)) throw new HttpsError('invalid-argument','A valid match id is required.');
+  const expectedActionNumber=Number(request.data?.expectedActionNumber);
+  if(!Number.isInteger(expectedActionNumber)||expectedActionNumber<0) throw new HttpsError('invalid-argument','The expected Domino action number is required.');
+  const gameReference=db.collection('matches').doc(matchId);
+  const stateReference=dominoStateReference(matchId);
+  return db.runTransaction(async transaction=>{
+    const [gameSnapshot,stateSnapshot]=await Promise.all([transaction.get(gameReference),transaction.get(stateReference)]);
+    if(!gameSnapshot.exists||!stateSnapshot.exists) throw new HttpsError('not-found','Domino game state not found.');
+    const data=gameSnapshot.data();
+    const participants=requireMatchParticipant(data,request.auth.uid);
+    if(!matchGameIsDomino(data)||data.kind==='series'||!MOPYON_LIVE_STATUSES.has(String(data.status||'').toLowerCase())) throw new HttpsError('failed-precondition','This Domino game is not active.');
+    const botUid=participants.find(uid=>uid!==request.auth.uid);
+    if(!isBotParticipant(data,botUid,request.auth.uid)) throw new HttpsError('failed-precondition','This match has no simulated opponent.');
+    const state=stateSnapshot.data();
+    if((Number(state.actionNumber)||0)!==expectedActionNumber) throw new HttpsError('aborted','The Domino board changed.');
+    if(state.currentTurnUid!==botUid||state.winnerId||state.draw) throw new HttpsError('failed-precondition','It is not the simulated opponent turn.');
+    const readyAt=timestampMillis(data.botReadyAt);
+    if(!Number.isFinite(readyAt)||Date.now()<readyAt) throw new HttpsError('failed-precondition','The simulated opponent is still thinking.');
+    let result;
+    try{result=playSingleDominoBotAction(state,botUid);}
+    catch(error){throw new HttpsError('failed-precondition',`Domino bot action refused: ${error.message}`);}
+    const nextState=result.state;
+    const updates={...dominoMatchUpdates(nextState),moves:admin.firestore.FieldValue.arrayUnion(...publicDominoEvents([result.event]))};
+    if(nextState.currentTurnUid===botUid&&!nextState.winnerId&&!nextState.draw){
+      Object.assign(updates,dominoBotTiming(randomDelay(DOMINO_BOT_DRAW_MIN_DELAY_MS,DOMINO_BOT_DRAW_MAX_DELAY_MS),'drawing'));
+    }else Object.assign(updates,clearDominoBotTiming());
+    Object.assign(updates,dominoTurnTiming(nextState,data,request.auth.uid));
+    if(nextState.winnerId||nextState.draw) updates.completedAt=admin.firestore.FieldValue.serverTimestamp();
+    transaction.set(stateReference,{...nextState,updatedAt:admin.firestore.FieldValue.serverTimestamp()},{merge:true});
+    transaction.set(gameReference,updates,{merge:true});
+    return {accepted:true,actionNumber:nextState.actionNumber,eventType:result.event.type,winnerId:nextState.winnerId||null,draw:nextState.draw};
+  });
+});
+
+const advanceDominoSeriesForParticipant=async (gameIdValue,participantUid)=>{
+  const gameId=String(gameIdValue||'');
   if(!/^[A-Za-z0-9_-]{1,150}$/.test(gameId)) throw new HttpsError('invalid-argument','A valid game id is required.');
   const gameReference=db.collection('matches').doc(gameId);
   return db.runTransaction(async transaction=>{
@@ -939,14 +1086,14 @@ exports.advanceDominoSeries = onCall({region:'us-central1',cors:true},async requ
     if(!gameSnapshot.exists) throw new HttpsError('not-found','Game not found.');
     const game=gameSnapshot.data();
     if(!matchGameIsDomino(game)||game.kind==='series') throw new HttpsError('failed-precondition','This is not a Domino manche.');
-    const participants=requireMatchParticipant(game,request.auth.uid);
+    const participants=requireMatchParticipant(game,participantUid);
     if(!game.winnerId&&game.draw!==true) throw new HttpsError('failed-precondition','This manche is not over.');
     const seriesId=String(game.seriesId||'');
     const seriesReference=db.collection('matches').doc(seriesId);
     const seriesSnapshot=await transaction.get(seriesReference);
     if(!seriesSnapshot.exists) throw new HttpsError('not-found','Series not found.');
     const series=seriesSnapshot.data();
-    const seriesParticipants=requireMatchParticipant(series,request.auth.uid);
+    const seriesParticipants=requireMatchParticipant(series,participantUid);
     if(!participants.every(uid=>seriesParticipants.includes(uid))) throw new HttpsError('data-loss','The manche participants do not match the series.');
     const recorded=Array.isArray(series.gameIds)?series.gameIds.filter(id=>typeof id==='string'):[];
     const alreadyRecorded=recorded.includes(gameId);
@@ -960,8 +1107,72 @@ exports.advanceDominoSeries = onCall({region:'us-central1',cors:true},async requ
     const alreadyComplete=Boolean(series.winnerUid||series.winnerId)||String(series.status||'').toLowerCase()==='completed';
     if(winnerUid||alreadyComplete){
       const officialWinner=String(series.winnerUid||series.winnerId||winnerUid);
-      transaction.set(seriesReference,{gameIds,seriesScore:score,status:'completed',winnerUid:officialWinner,winnerId:officialWinner,winnerName:participantDisplayName(series,officialWinner),currentGameId:null,activeGameId:null,completedAt:admin.firestore.FieldValue.serverTimestamp(),updatedAt:admin.firestore.FieldValue.serverTimestamp()},{merge:true});
-      return {seriesId,seriesComplete:true,nextGameId:null,seriesScore:score,winnerUid:officialWinner};
+      const loserUid=seriesParticipants.find(uid=>uid!==officialWinner)||'';
+      const winnerIsReal=!isBotParticipant(series,officialWinner,participantUid);
+      const loserIsReal=Boolean(loserUid)&&!isBotParticipant(series,loserUid,participantUid);
+      const championshipId=String(series.championshipId||series.tournamentId||series.competitionId||'');
+      const couponDefinition=eliminationCoupon(series);
+      const roundKey=dominoRoundKey(series);
+      const stagePoints=dominoVictoryPoints(series);
+      const loserCompletionPoints=loserUid?5+(game.forfeitReason==='attendance-timeout'&&game.forfeitedUid===loserUid?0:5):0;
+      const winnerCompletionPoints=roundKey==='final'?10:0;
+      const rewardReference=db.collection('playerRewardEvents').doc(`domino_series_${seriesId}`);
+      const winnerProfileReference=winnerIsReal?db.collection('users').doc(officialWinner):null;
+      const loserProfileReference=loserIsReal?db.collection('users').doc(loserUid):null;
+      const winnerLeaderboardReference=db.collection('leaderboard').doc(officialWinner);
+      const loserLeaderboardReference=loserUid?db.collection('leaderboard').doc(loserUid):null;
+      const couponReference=loserIsReal&&championshipId?db.collection('jwetproCoupons').doc(`elimination_${championshipId}_${loserUid}`):null;
+      const loserCompletionReference=loserUid&&championshipId?db.collection('playerRewardEvents').doc(`championship_completion_${championshipId}_${loserUid}`):null;
+      const winnerCompletionReference=winnerCompletionPoints&&championshipId?db.collection('playerRewardEvents').doc(`championship_completion_${championshipId}_${officialWinner}`):null;
+      const reads=await Promise.all([
+        transaction.get(rewardReference),
+        winnerProfileReference?transaction.get(winnerProfileReference):Promise.resolve(null),
+        loserProfileReference?transaction.get(loserProfileReference):Promise.resolve(null),
+        couponReference?transaction.get(couponReference):Promise.resolve(null),
+        loserCompletionReference?transaction.get(loserCompletionReference):Promise.resolve(null),
+        winnerCompletionReference?transaction.get(winnerCompletionReference):Promise.resolve(null),
+        transaction.get(winnerLeaderboardReference),
+        loserLeaderboardReference?transaction.get(loserLeaderboardReference):Promise.resolve(null)
+      ]);
+      const [rewardSnapshot,winnerProfileSnapshot,loserProfileSnapshot,couponSnapshot,loserCompletionSnapshot,winnerCompletionSnapshot,winnerLeaderboardSnapshot,loserLeaderboardSnapshot]=reads;
+      let rewards=rewardSnapshot.exists?(rewardSnapshot.data()?.rewards||{}):{};
+      if(!rewardSnapshot.exists){
+        const winnerCurrentPoints=Math.max(0,Number(winnerProfileSnapshot?.data()?.points??winnerLeaderboardSnapshot.data()?.points)||0);
+        const loserCurrentPoints=Math.max(0,Number(loserProfileSnapshot?.data()?.points??loserLeaderboardSnapshot?.data()?.points)||0);
+        const winnerGlobalDelta=winnerCompletionReference&&!winnerCompletionSnapshot?.exists?winnerCompletionPoints:0;
+        const loserGlobalDelta=loserCompletionReference&&!loserCompletionSnapshot?.exists?loserCompletionPoints:0;
+        const winnerPointsDelta=stagePoints+winnerGlobalDelta;
+        const winnerPointsTotal=winnerCurrentPoints+winnerPointsDelta;
+        const loserPointsTotal=loserUid?loserCurrentPoints+loserGlobalDelta:null;
+        const coupon=loserIsReal&&championshipId?{
+          id:couponReference.id,
+          type:couponDefinition.type,
+          value:couponDefinition.value,
+          label:couponDefinition.label,
+          status:couponSnapshot?.exists?String(couponSnapshot.data()?.status||'pending'):'pending'
+        }:null;
+        rewards={
+          [officialWinner]:{outcome:'win',pointsDelta:winnerPointsDelta,pointsTotal:winnerPointsTotal,coupon:null},
+          ...(loserUid?{[loserUid]:{outcome:'loss',pointsDelta:loserGlobalDelta,pointsTotal:loserPointsTotal,coupon}}:{})
+        };
+        if(winnerProfileReference){
+          transaction.set(winnerProfileReference,{points:winnerPointsTotal,matchesPlayed:admin.firestore.FieldValue.increment(1),wins:admin.firestore.FieldValue.increment(1),updatedAt:admin.firestore.FieldValue.serverTimestamp()},{merge:true});
+        }
+        transaction.set(winnerLeaderboardReference,{displayName:participantDisplayName(series,officialWinner),points:winnerPointsTotal,level:playerLevelName(winnerPointsTotal),simulated:!winnerIsReal,updatedAt:admin.firestore.FieldValue.serverTimestamp()},{merge:true});
+        if(loserProfileReference){
+          transaction.set(loserProfileReference,{points:loserPointsTotal,matchesPlayed:admin.firestore.FieldValue.increment(1),updatedAt:admin.firestore.FieldValue.serverTimestamp()},{merge:true});
+        }
+        if(loserLeaderboardReference) transaction.set(loserLeaderboardReference,{displayName:participantDisplayName(series,loserUid),points:loserPointsTotal,level:playerLevelName(loserPointsTotal),simulated:!loserIsReal,updatedAt:admin.firestore.FieldValue.serverTimestamp()},{merge:true});
+        if(loserCompletionReference&&!loserCompletionSnapshot?.exists) transaction.create(loserCompletionReference,{type:'championship-completion',championshipId,playerUid:loserUid,participationPoints:5,noAbandonPoints:loserCompletionPoints-5,pointsDelta:loserCompletionPoints,pointsTotal:loserPointsTotal,settledAtElimination:true,createdAt:admin.firestore.FieldValue.serverTimestamp()});
+        if(winnerCompletionReference&&!winnerCompletionSnapshot?.exists) transaction.create(winnerCompletionReference,{type:'championship-completion',championshipId,playerUid:officialWinner,participationPoints:5,noAbandonPoints:5,pointsDelta:winnerCompletionPoints,pointsTotal:winnerPointsTotal,settledAtFinal:true,createdAt:admin.firestore.FieldValue.serverTimestamp()});
+        if(couponReference&&!couponSnapshot?.exists){
+          transaction.create(couponReference,{playerUid:loserUid,sourceChampionshipId:championshipId,sourceSeriesId:seriesId,type:couponDefinition.type,value:couponDefinition.value,currency:'HTG',targetChampionshipId:'',status:'pending',personal:true,transferable:false,stackable:false,createdAt:admin.firestore.FieldValue.serverTimestamp(),updatedAt:admin.firestore.FieldValue.serverTimestamp()});
+        }
+        transaction.create(rewardReference,{type:'domino-series',seriesId,championshipId,winnerUid:officialWinner,loserUid,round:roundKey,rewards,createdAt:admin.firestore.FieldValue.serverTimestamp()});
+      }
+      transaction.set(seriesReference,{gameIds,seriesScore:score,status:'completed',winnerUid:officialWinner,winnerId:officialWinner,winnerName:participantDisplayName(series,officialWinner),currentGameId:null,activeGameId:null,completedAt:series.completedAt||admin.firestore.FieldValue.serverTimestamp(),updatedAt:admin.firestore.FieldValue.serverTimestamp()},{merge:true});
+      const personalReward=rewards[participantUid]||{outcome:participantUid===officialWinner?'win':'loss',pointsDelta:0,pointsTotal:null,coupon:null};
+      return {seriesId,seriesComplete:true,nextGameId:null,seriesScore:score,winnerUid:officialWinner,...personalReward};
     }
     const current=String(series.currentGameId||series.activeGameId||'');
     if(alreadyRecorded&&current&&current!==gameId) return {seriesId,seriesComplete:false,nextGameId:current,seriesScore:score,winnerUid:null};
@@ -971,6 +1182,80 @@ exports.advanceDominoSeries = onCall({region:'us-central1',cors:true},async requ
     transaction.set(seriesReference,{gameIds,seriesScore:score,status:'live',currentGameId:nextGameId,activeGameId:nextGameId,updatedAt:admin.firestore.FieldValue.serverTimestamp()},{merge:true});
     return {seriesId,seriesComplete:false,nextGameId,seriesScore:score,winnerUid:null};
   });
+};
+
+exports.advanceDominoSeries = onCall({region:'us-central1',cors:true},async request=>{
+  if(!request.auth) throw new HttpsError('unauthenticated','Authentication is required.');
+  return advanceDominoSeriesForParticipant(request.data?.gameId,request.auth.uid);
+});
+
+// A completed official Domino manche validates itself. The transaction above is idempotent, so
+// retries and a simultaneous client call cannot count the same manche or reward twice.
+exports.autoAdvanceCompletedDominoGame = onDocumentWritten({
+  document:'matches/{matchId}',
+  region:'us-central1',
+  retry:true
+},async event=>{
+  const before=event.data?.before?.exists?event.data.before.data():null;
+  const after=event.data?.after?.exists?event.data.after.data():null;
+  if(!after||after.kind==='series'||!matchGameIsDomino(after)||!after.seriesId)return;
+  const completed=Boolean(after.winnerId)||after.draw===true;
+  const wasCompleted=Boolean(before?.winnerId)||before?.draw===true;
+  if(!completed||wasCompleted)return;
+  const participants=Array.isArray(after.participantIds)?after.participantIds.filter(uid=>typeof uid==='string'):[];
+  if(participants.length!==2)return;
+  const realParticipant=participants.find(uid=>!isBotParticipant(after,uid,participants.find(other=>other!==uid)||''));
+  const participantUid=realParticipant||participants[0];
+  await advanceDominoSeriesForParticipant(event.params.matchId,participantUid);
+});
+
+exports.getDominoSeriesReward = onCall({region:'us-central1',cors:true},async request=>{
+  if(!request.auth) throw new HttpsError('unauthenticated','Authentication is required.');
+  const seriesId=String(request.data?.seriesId||'');
+  if(!/^[A-Za-z0-9_-]{1,150}$/.test(seriesId)) throw new HttpsError('invalid-argument','A valid series id is required.');
+  const [seriesSnapshot,rewardSnapshot]=await Promise.all([
+    db.collection('matches').doc(seriesId).get(),
+    db.collection('playerRewardEvents').doc(`domino_series_${seriesId}`).get()
+  ]);
+  if(!seriesSnapshot.exists) throw new HttpsError('not-found','Series not found.');
+  requireMatchParticipant(seriesSnapshot.data(),request.auth.uid);
+  if(!rewardSnapshot.exists) return {seriesId,pending:true};
+  const reward=rewardSnapshot.data()?.rewards?.[request.auth.uid];
+  return {seriesId,pending:false,...(reward||{outcome:'none',pointsDelta:0,pointsTotal:null,coupon:null})};
+});
+
+exports.settleChampionshipCompletion = onCall({region:'us-central1',cors:true},async request=>{
+  if(!(await isAdmin(request))) throw new HttpsError('permission-denied','Administrator access is required.');
+  const championshipId=String(request.data?.championshipId||'');
+  if(!/^[A-Za-z0-9_-]{1,150}$/.test(championshipId)) throw new HttpsError('invalid-argument','A valid championship id is required.');
+  const championshipReference=db.collection('championships').doc(championshipId);
+  const [championshipSnapshot,matchesSnapshot]=await Promise.all([championshipReference.get(),db.collection('matches').where('championshipId','==',championshipId).get()]);
+  if(!championshipSnapshot.exists) throw new HttpsError('not-found','Championship not found.');
+  const championship=championshipSnapshot.data()||{};
+  if(String(championship.status||'').toLowerCase()!=='completed') throw new HttpsError('failed-precondition','The championship must be completed first.');
+  const participantIds=[...new Set((Array.isArray(championship.participants)?championship.participants:[]).map(item=>typeof item==='string'?item:item?.uid||item?.id||item?.userId||item?.playerId).filter(Boolean))]
+    .filter(uid=>!isBotParticipant(championship,uid,''));
+  const forfeited=new Set(matchesSnapshot.docs.map(document=>String(document.data()?.forfeitedUid||'')).filter(Boolean));
+  const settled=await db.runTransaction(async transaction=>{
+    const records=await Promise.all(participantIds.map(async uid=>{
+      const ledgerRef=db.collection('playerRewardEvents').doc(`championship_completion_${championshipId}_${uid}`);
+      const profileRef=db.collection('users').doc(uid);
+      const [ledger,profile]=await Promise.all([transaction.get(ledgerRef),transaction.get(profileRef)]);
+      return {uid,ledgerRef,profileRef,ledger,profile};
+    }));
+    let count=0;
+    records.forEach(record=>{
+      if(record.ledger.exists)return;
+      const pointsDelta=5+(forfeited.has(record.uid)?0:5);
+      const pointsTotal=Math.max(0,Number(record.profile.data()?.points)||0)+pointsDelta;
+      transaction.set(record.profileRef,{points:pointsTotal,updatedAt:admin.firestore.FieldValue.serverTimestamp()},{merge:true});
+      transaction.set(db.collection('leaderboard').doc(record.uid),{displayName:participantDisplayName(championship,record.uid),points:pointsTotal,level:playerLevelName(pointsTotal),updatedAt:admin.firestore.FieldValue.serverTimestamp()},{merge:true});
+      transaction.create(record.ledgerRef,{type:'championship-completion',championshipId,playerUid:record.uid,participationPoints:5,noAbandonPoints:forfeited.has(record.uid)?0:5,pointsDelta,pointsTotal,createdAt:admin.firestore.FieldValue.serverTimestamp()});
+      count+=1;
+    });
+    return count;
+  });
+  return {championshipId,settled};
 });
 
 exports.claimDominoForfeit = onCall({region:'us-central1',cors:true},async request=>{

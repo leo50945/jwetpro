@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const {onCall, onRequest, HttpsError} = require('firebase-functions/v2/https');
 const {onDocumentWritten} = require('firebase-functions/v2/firestore');
+const {entityStatsId, entityDestination, publicEntityStatus, matchIsChildRound} = require('./social-core');
 
 const REGION = 'us-central1';
 // Keep links operational until the branded custom domain is attached in Firebase Hosting.
@@ -94,6 +95,12 @@ module.exports = ({admin,db}) => {
     if (type === 'welcome') {
       return {...base,sourceId:'welcome',milestone:'account-created',title:'Je rejoins JWETPRO',description:`${player.publicName} vient de rejoindre la communauté JWETPRO.`,shareText:'Je viens de rejoindre JWETPRO pour jouer au Mopyon et au Domino. Rejoins-moi !'};
     }
+    if (type === 'followers') {
+      if (!player.isPublic) throw new HttpsError('failed-precondition','Activez votre profil public avant de partager vos abonnés.');
+      const socialProfile = await db.collection('socialProfiles').doc(uid).get();
+      const followerCount = Math.max(0,Number(socialProfile.data()?.followerCount) || 0);
+      return {...base,sourceId:`followers-${followerCount}`,milestone:String(followerCount),followerCount,title:`${followerCount.toLocaleString('fr-FR')} abonnés sur JWETPRO`,description:`${player.publicName} rassemble maintenant ${followerCount.toLocaleString('fr-FR')} abonnés sur JWETPRO.`,shareText:`Nous sommes maintenant ${followerCount.toLocaleString('fr-FR')} sur mon profil JWETPRO. Merci pour votre soutien !`};
+    }
     if (type === 'registration') {
       const championshipId = clean(input.championshipId,150);
       if (!championshipId) throw new HttpsError('invalid-argument','Identifiant du championnat requis.');
@@ -128,7 +135,7 @@ module.exports = ({admin,db}) => {
   const createShareEvent = onCall({region:REGION,cors:true},async request => {
     const uid = requirePlayer(request);
     const type = clean(request.data?.type,40).toLowerCase();
-    if (!['profile','level','invite','welcome','registration','result','qualification'].includes(type)) throw new HttpsError('invalid-argument','Type de partage invalide.');
+    if (!['profile','level','invite','welcome','followers','registration','result','qualification'].includes(type)) throw new HttpsError('invalid-argument','Type de partage invalide.');
     const payload = await eventPayload(uid,type,request.data || {});
     const shareId = shareIdFor(uid,type,payload.sourceId,payload.milestone);
     const reference = db.collection('shareEvents').doc(shareId);
@@ -154,30 +161,81 @@ module.exports = ({admin,db}) => {
 
   const renderSharePage = onRequest({region:REGION,invoker:'public'},async (request,response) => {
     const pathParts = String(request.path || '').split('/').filter(Boolean);
-    const shareId = clean(request.query.id || pathParts.at(-1),80);
-    if (!/^[a-f0-9]{28}$/.test(shareId)) return response.status(404).send('Partage introuvable.');
-    const document = await db.collection('shareEvents').doc(shareId).get();
-    if (!document.exists || document.data()?.visibility !== 'public') return response.status(404).send('Partage introuvable.');
-    const data = document.data() || {};
+    const entityCode = pathParts.length >= 3 && pathParts[0] === 's' ? pathParts[1] : '';
+    const rawId = clean(request.query.id || pathParts.at(-1),150);
+    let data;
+    let shareUrl;
+    let destinationUrl;
+    let ctaLabel = 'Rejoindre JWETPRO';
+    let eyebrow = 'ACCOMPLISSEMENT JWETPRO';
+    let statMarkup = '';
+    if (entityCode === 'c' || entityCode === 'm') {
+      if (!/^[A-Za-z0-9_-]{1,150}$/.test(rawId)) return response.status(404).send('Partage introuvable.');
+      const kind = entityCode === 'c' ? 'championship' : 'match';
+      let document = await db.collection(kind === 'championship' ? 'championships' : 'matches').doc(rawId).get();
+      if (!document.exists) return response.status(404).send('Partage introuvable.');
+      let record = document.data() || {};
+      const requestedChildRound = kind === 'match' && matchIsChildRound(record);
+      if (kind === 'match' && record.kind !== 'series') {
+        const parentId = clean(record.seriesId || record.parentSeriesId || record.matchSeriesId,150);
+        if (parentId && /^[A-Za-z0-9_-]{1,150}$/.test(parentId)) {
+          const parent = await db.collection('matches').doc(parentId).get();
+          if (parent.exists) { document = parent; record = parent.data() || {}; }
+        }
+      }
+      if (requestedChildRound && document.id === rawId) return response.status(404).send('Partage introuvable.');
+      const status = clean(record.status || record.state,40).toLowerCase();
+      if (!publicEntityStatus(kind,status) || status === 'cancelled' || (kind === 'match' && !clean(record.championshipId || record.tournamentId || record.competitionId,150))) return response.status(404).send('Partage introuvable.');
+      const game = clean(record.game || record.type,40).toLowerCase() === 'domino' ? 'Domino' : 'Mopyon';
+      const number = clean(record.number || record.championshipNumber || document.id,80);
+      const players = Object.values(record.participantNames || {}).map(value => clean(value,80)).filter(Boolean).slice(0,2);
+      const isCompleted = ['completed','finished','ended'].includes(status);
+      const title = kind === 'championship' ? `${game} #${number}` : `${game} · ${players.length === 2 ? `${players[0]} contre ${players[1]}` : `Match #${number}`}`;
+      const description = kind === 'championship'
+        ? `${isCompleted ? 'Revivez' : status === 'registration-open' ? 'Inscrivez-vous au' : 'Suivez le'} championnat ${title} sur JWETPRO.`
+        : `${isCompleted ? 'Revivez' : 'Suivez'} ce match officiel ${game} sur JWETPRO.`;
+      const stats = await db.collection('socialEntityStats').doc(entityStatsId(kind,document.id)).get();
+      const likeCount = Math.max(0,Number(stats.data()?.likeCount) || 0);
+      data = {title,description,level:kind === 'championship' ? 'Championnat officiel' : 'Match officiel',points:likeCount};
+      shareUrl = `${SHARE_ORIGIN}/s/${entityCode}/${encodeURIComponent(document.id)}`;
+      destinationUrl = entityDestination(kind,document.id,status);
+      ctaLabel = kind === 'championship' ? 'Voir le championnat' : isCompleted ? 'Voir le replay' : 'Voir le match';
+      eyebrow = kind === 'championship' ? 'CHAMPIONNAT JWETPRO' : 'MATCH JWETPRO';
+      statMarkup = `<span>${kind === 'championship' ? 'Championnat officiel' : 'Match officiel'}</span><span>${likeCount.toLocaleString('fr-FR')} J’aime</span>`;
+    } else {
+      const shareId = clean(rawId,80);
+      if (!/^[a-f0-9]{28}$/.test(shareId)) return response.status(404).send('Partage introuvable.');
+      const document = await db.collection('shareEvents').doc(shareId).get();
+      if (!document.exists || document.data()?.visibility !== 'public') return response.status(404).send('Partage introuvable.');
+      data = document.data() || {};
+      shareUrl = shareUrlFor(shareId);
+      destinationUrl = referralUrlFor(shareId);
+    }
     const escape = value => String(value || '').replace(/[&<>"']/g,char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
     const title = escape(data.title || 'JWETPRO');
     const description = escape(data.description || 'Rejoignez les championnats JWETPRO.');
-    const shareUrl = shareUrlFor(shareId);
-    const referralUrl = referralUrlFor(shareId);
     const imageUrl = `${SITE_ORIGIN}/og-jwetpro.png`;
     const points = Math.max(0,Number(data.points) || 0).toLocaleString('fr-FR');
+    if (!statMarkup) statMarkup = `<span>${escape(data.level || 'Joueur')}</span><span>${data.followerCount != null ? `${Math.max(0,Number(data.followerCount)||0).toLocaleString('fr-FR')} abonnés` : `${points} points`}</span>`;
     response.set('Cache-Control','public, max-age=300, s-maxage=600');
-    response.status(200).type('html').send(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,follow"><title>${title} · JWETPRO</title><meta name="description" content="${description}"><meta property="og:type" content="website"><meta property="og:site_name" content="JWETPRO"><meta property="og:title" content="${title}"><meta property="og:description" content="${description}"><meta property="og:url" content="${shareUrl}"><meta property="og:image" content="${imageUrl}"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="${title}"><meta name="twitter:description" content="${description}"><meta name="twitter:image" content="${imageUrl}"><style>*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;background:#061827;color:#eef5f8;font-family:Arial,sans-serif}.card{width:min(100%,620px);overflow:hidden;border:1px solid #30516a;border-radius:20px;background:linear-gradient(145deg,#0b263a,#071c2c);box-shadow:0 24px 70px #0008}.brand{padding:18px 24px;border-bottom:1px solid #27465c;color:#fff;font-size:23px;font-weight:900}.brand span,.eyebrow{color:#e3aa36}.content{padding:34px 28px;text-align:center}.eyebrow{font-size:11px;font-weight:900;letter-spacing:.16em;text-transform:uppercase}h1{margin:12px 0;font-size:clamp(28px,7vw,48px);line-height:1.05}p{color:#b8cad5;line-height:1.65}.stats{display:flex;justify-content:center;gap:12px;margin:24px 0}.stats span{padding:9px 12px;border:1px solid #31536b;border-radius:999px;color:#eaf1f5;font-size:12px;font-weight:800}.cta{display:inline-flex;padding:14px 21px;border-radius:10px;background:#dda42f;color:#071827;font-weight:900;text-decoration:none}.footer{padding:15px 24px;background:#061522;color:#7891a2;font-size:11px;text-align:center}</style></head><body><main class="card"><header class="brand">JWET<span>PRO</span></header><section class="content"><div class="eyebrow">ACCOMPLISSEMENT JWETPRO</div><h1>${title}</h1><p>${description}</p><div class="stats"><span>${escape(data.level || 'Joueur')}</span><span>${points} points</span></div><a class="cta" href="${referralUrl}">Rejoindre JWETPRO</a></section><footer class="footer">Mopyon · Domino · Championnats en ligne</footer></main></body></html>`);
+    response.status(200).type('html').send(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,follow"><title>${title} · JWETPRO</title><meta name="description" content="${description}"><meta property="og:type" content="website"><meta property="og:site_name" content="JWETPRO"><meta property="og:title" content="${title}"><meta property="og:description" content="${description}"><meta property="og:url" content="${shareUrl}"><meta property="og:image" content="${imageUrl}"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="${title}"><meta name="twitter:description" content="${description}"><meta name="twitter:image" content="${imageUrl}"><style>*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;background:#061827;color:#eef5f8;font-family:Arial,sans-serif}.card{width:min(100%,620px);overflow:hidden;border:1px solid #30516a;border-radius:20px;background:linear-gradient(145deg,#0b263a,#071c2c);box-shadow:0 24px 70px #0008}.brand{padding:18px 24px;border-bottom:1px solid #27465c;color:#fff;font-size:23px;font-weight:900}.brand span,.eyebrow{color:#e3aa36}.content{padding:34px 28px;text-align:center}.eyebrow{font-size:11px;font-weight:900;letter-spacing:.16em;text-transform:uppercase}h1{margin:12px 0;font-size:clamp(28px,7vw,48px);line-height:1.05}p{color:#b8cad5;line-height:1.65}.stats{display:flex;justify-content:center;gap:12px;margin:24px 0;flex-wrap:wrap}.stats span{padding:9px 12px;border:1px solid #31536b;border-radius:999px;color:#eaf1f5;font-size:12px;font-weight:800}.cta{display:inline-flex;padding:14px 21px;border-radius:10px;background:#dda42f;color:#071827;font-weight:900;text-decoration:none}.footer{padding:15px 24px;background:#061522;color:#7891a2;font-size:11px;text-align:center}</style></head><body><main class="card"><header class="brand">JWET<span>PRO</span></header><section class="content"><div class="eyebrow">${escape(eyebrow)}</div><h1>${title}</h1><p>${description}</p><div class="stats">${statMarkup}</div><a class="cta" href="${escape(destinationUrl)}">${escape(ctaLabel)}</a></section><footer class="footer">Mopyon · Domino · Championnats en ligne</footer></main></body></html>`);
   });
 
   const syncPublicProfileFromUser = onDocumentWritten({document:'users/{uid}',region:REGION},async event => {
     const uid = event.params.uid;
     const after = event.data?.after;
     const reference = db.collection('publicProfiles').doc(uid);
-    if (!after?.exists || after.data()?.profilePublic !== true) return reference.delete().catch(error => { if (error.code !== 5) throw error; });
+    const leaderboardReference=db.collection('leaderboard').doc(uid);
+    if (!after?.exists) {
+      await Promise.all([reference.delete().catch(error=>{if(error.code!==5)throw error;}),leaderboardReference.delete().catch(error=>{if(error.code!==5)throw error;})]);
+      return;
+    }
     const data = after.data() || {};
     const name = clean(`${data.firstName || ''} ${data.lastName || ''}`) || clean(data.username) || 'Joueur JWETPRO';
-    return reference.set({displayName:name,avatarUrl:safeImage(data.photoURL),updatedAt:admin.firestore.FieldValue.serverTimestamp()},{merge:true});
+    const points=Math.max(0,Number(data.points)||0);
+    await leaderboardReference.set({displayName:name,points,level:levelForPoints(points).name,imageName:clean(data.imageName,180),photoURL:safeImage(data.photoURL),updatedAt:admin.firestore.FieldValue.serverTimestamp()},{merge:true});
+    if(data.profilePublic!==true) return reference.delete().catch(error=>{if(error.code!==5)throw error;});
+    return reference.set({displayName:name,avatarUrl:safeImage(data.photoURL),points,level:levelForPoints(points).name,updatedAt:admin.firestore.FieldValue.serverTimestamp()},{merge:true});
   });
   const syncPublicProfileFromLeaderboard = onDocumentWritten({document:'leaderboard/{uid}',region:REGION},async event => {
     if (!event.data?.after?.exists) return;

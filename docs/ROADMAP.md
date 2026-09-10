@@ -1,5 +1,9 @@
 # Roadmap
 
+- 2026-09-10 — Système social : partage et favoris des championnats/séries, profils joueurs, abonnements réels ou simulés, compteurs privés/publics, notifications internes et messagerie privée réciproque avec blocage, signalement et historique en lecture seule implémentés. Les tests unitaires et Auth/Firestore Emulator sont validés; fonctions, règles et index sont publiés sur `mopyonlakay`. Restent le backfill administrateur, la publication coordonnée de l’interface, le parcours manuel de production à deux comptes et le rattachement de `share.jwetpro.com`.
+
+- 2026-09-08 — Simulations de championnat : clôture automatique à 32 joueurs, tableau déterministe, file bot contre bot par match ou par tour, six workers concurrents, progression automatique, replays Mopyon/Domino versionnés et points simulés idempotents réalisés. Validation de charge sur un championnat complet en production à effectuer après déploiement ciblé.
+
 - 2026-09-03 — Palmarès des champions : recherche, classement par date et navigation par championnat dépliable réalisés avec une fiche de vainqueur responsive.
 
 - 2026-09-03 — Archives de replays : recherche prioritaire et classement réalisés par date puis par championnat dépliable, avec filtrage par match, joueur, jeu, phase ou compétition et présentation responsive.

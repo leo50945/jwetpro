@@ -5,7 +5,8 @@
     'championship-format',
     'championship-rewards',
     'championship-lifecycle',
-    'match-series-and-replay'
+    'match-series-and-replay',
+    'social-sharing'
   ]);
 
   const fieldText = (record, language, field) => {

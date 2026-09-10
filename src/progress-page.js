@@ -16,6 +16,13 @@
   const STATUS_LABEL = {'registration-open':'INSCRIPTIONS OUVERTES', open:'INSCRIPTIONS OUVERTES', 'registration-closed':'INSCRIPTIONS TERMINÉES', closed:'INSCRIPTIONS TERMINÉES', ongoing:'CHAMPIONNAT EN COURS', live:'CHAMPIONNAT EN COURS', completed:'CHAMPIONNAT TERMINÉ', finished:'CHAMPIONNAT TERMINÉ', upcoming:'À VENIR', scheduled:'À VENIR'};
 
   const byId = id => document.getElementById(id);
+  const ensureEliminatedStyles = () => {
+    if (document.getElementById('progress-eliminated-styles')) return;
+    const style = document.createElement('style');
+    style.id = 'progress-eliminated-styles';
+    style.textContent = '.recap-participant.is-eliminated{border-color:#d8c6c8;background:#f7f4f4;color:#748797}.recap-participant.is-eliminated .recap-participant-avatar{filter:grayscale(1);opacity:.66}.recap-participant.is-eliminated strong{color:#748797;text-decoration:line-through #a85058 2px;text-decoration-skip-ink:none}.recap-participant.is-eliminated small{color:#8999a5}';
+    document.head.append(style);
+  };
   const escapeHTML = value => String(value ?? '').replace(/[&<>"']/g, character => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[character]));
   const firstValue = (...values) => values.find(value => value !== undefined && value !== null && value !== '');
   const asArray = value => Array.isArray(value) ? value : [];
@@ -28,7 +35,9 @@
   const safePhotoURL = value => { const url = String(value || '').trim(); return /^https:\/\//.test(url) ? url.replace(/'/g, '%27') : ''; };
   const avatarStyle = player => { const image = safePhotoURL(player.photoURL) || safeAvatar(firstValue(player.imageName, player.avatar, player.photo)); return image ? ` style="background-image:url('${image}')"` : ''; };
 
-  const participantId = player => String(firstValue(player?.id, player?.uid, player?.userId, player?.playerId, '') || '');
+  const participantId = player => String(firstValue(player?.id, player?.uid, player?.userId, player?.playerId, player?.participantId, player?.playerUid, '') || '');
+  const participantSocialId = player => String(firstValue(player?.socialPlayerId, player?.simulationPersonaId, participantId(player), '') || '');
+  const playerProfileLink = (player, markup, label = playerName(player)) => /^[A-Za-z0-9_-]{1,150}$/.test(participantSocialId(player)) ? `<a class="player-social-link" href="./player.html?id=${encodeURIComponent(participantSocialId(player))}" aria-label="Voir le profil de ${escapeHTML(label)}">${markup}</a>` : markup;
   const playerName = player => String(firstValue(player?.displayName, player?.name, player?.username, player?.label, 'Joueur'));
   const normalizePlayer = (value, fallbackId = '') => { if (typeof value === 'string') return {id:value || fallbackId, displayName:''}; const player = asObject(value); return {...player, id:participantId(player) || fallbackId}; };
   const playerKey = player => participantId(player) || playerName(player).toLocaleLowerCase('fr');
@@ -72,6 +81,37 @@
   };
   const isWinner = (player, match) => { const winner = winnerIdentity(match); return Boolean((winner.id && participantId(player) === winner.id) || (winner.name && playerName(player).toLocaleLowerCase('fr') === winner.name.toLocaleLowerCase('fr'))); };
   const isDecided = match => Boolean(winnerIdentity(match).id || winnerIdentity(match).name || match.draw === true || /complete|completed|finished/.test(String(match.status || '').toLowerCase()));
+  const playerIdentityTokens = player => {
+    const tokens = [];
+    const id = participantId(player);
+    const name = playerName(player).trim().toLocaleLowerCase('fr');
+    if (id) tokens.push(`id:${id}`);
+    if (name && name !== 'joueur' && name !== 'à déterminer') tokens.push(`name:${name}`);
+    return tokens;
+  };
+  const isCompleteOfficialMatch = match => {
+    const status = String(firstValue(match.status, match.state, '')).toLocaleLowerCase('fr');
+    const isChildGame = Boolean(match.seriesId) || match.kind === 'game';
+    const isOfficialMatch = match.kind === 'series' || !isChildGame;
+    return isOfficialMatch && /complete|completed|finished|ended|termine|terminé/.test(status) && Boolean(winnerIdentity(match).id || winnerIdentity(match).name);
+  };
+  const matchLosers = match => {
+    const explicitLoser = firstValue(match.loser, match.loserPlayer, {});
+    const explicitLoserId = String(firstValue(match.loserId, match.loserUid, participantId(explicitLoser), '') || '');
+    const explicitLoserName = String(firstValue(match.loserName, playerName(explicitLoser) === 'Joueur' ? '' : playerName(explicitLoser), '') || '');
+    if (explicitLoserId || explicitLoserName) return [{...asObject(explicitLoser), id:explicitLoserId, displayName:explicitLoserName}];
+    return matchPlayers(match).filter(player => !isWinner(player, match));
+  };
+  const eliminatedPlayerTokens = matches => {
+    const eliminated = new Set();
+    matches.filter(isCompleteOfficialMatch).forEach(match => {
+      matchLosers(match).forEach(player => {
+        playerIdentityTokens(player).forEach(token => eliminated.add(token));
+      });
+    });
+    return eliminated;
+  };
+  const isEliminatedParticipant = (player, eliminated) => playerIdentityTokens(player).some(token => eliminated.has(token));
   const isLiveMatch = match => /live|direct|en cours|ongoing/.test(String(match.status || match.state || match.liveStatus || '').toLowerCase()) && !isDecided(match);
   const progressCurrentUserId = () => window.JwetproCurrentUserId || window.firebase?.auth?.().currentUser?.uid || '';
   const playableMatchId = match => match.kind === 'series' ? firstValue(match.currentGameId, match.activeGameId, match.gameId, '') : match.id;
@@ -112,7 +152,7 @@
     const playableId = playableMatchId(match);
     const participant = Boolean(progressCurrentUserId()) && asArray(match.participantIds).includes(progressCurrentUserId());
     const action = live && playableId ? `<a class="bracket-watch-link" href="./play.html?${participant ? 'join' : 'match'}=${encodeURIComponent(playableId)}">${participant ? 'REJOINDRE' : 'REGARDER'} <i data-lucide="ArrowRight"></i></a>` : '';
-    return `<article class="bracket-match${isFinal ? ' is-final' : ''}${live ? ' is-live' : ''}">${live ? '<span class="bracket-live-tag"><i></i>EN DIRECT</span>' : ''}${players.map((player, index) => `<div class="bracket-player${isWinner(player, match) ? ' is-winner' : ''}"><strong>${escapeHTML(playerName(player))}</strong><b>${escapeHTML(scoreFor(match, player, index))}</b></div>`).join('')}${action}</article>`;
+    return `<article class="bracket-match${isFinal ? ' is-final' : ''}${live ? ' is-live' : ''}" data-social-kind="match" data-social-id="${escapeHTML(firstValue(match.seriesId,match.id,''))}">${live ? '<span class="bracket-live-tag"><i></i>EN DIRECT</span>' : ''}${players.map((player, index) => `<div class="bracket-player${isWinner(player, match) ? ' is-winner' : ''}">${playerProfileLink(player,`<strong>${escapeHTML(playerName(player))}</strong>`)}<b>${escapeHTML(scoreFor(match, player, index))}</b></div>`).join('')}${action}</article>`;
   };
   const renderBracket = matches => {
     byId('progress-bracket').innerHTML = STAGES.map(stage => {
@@ -123,7 +163,7 @@
     window.renderIcons?.();
   };
 
-  const participantCard = player => { const name = playerName(player); return `<article class="recap-participant"><span class="recap-participant-avatar"${avatarStyle(player)}>${safeAvatar(firstValue(player.imageName, player.avatar, player.photo)) ? '' : escapeHTML(initials(name))}</span><div><strong>${escapeHTML(name)}</strong><small>${player.level ? `Niveau ${escapeHTML(player.level)}` : 'Participant'}</small></div></article>`; };
+  const participantCard = (player, eliminated) => { const name = playerName(player); const isEliminated = isEliminatedParticipant(player, eliminated); return `<article class="recap-participant${isEliminated ? ' is-eliminated' : ''}"${isEliminated ? ` aria-label="${escapeHTML(name)}, éliminé du championnat"` : ''}>${playerProfileLink(player,`<span class="recap-participant-avatar"${avatarStyle(player)}>${safeAvatar(firstValue(player.imageName, player.avatar, player.photo)) ? '' : escapeHTML(initials(name))}</span>`)}<div>${playerProfileLink(player,`<strong>${escapeHTML(name)}</strong>`)}<small>${isEliminated ? 'Éliminé' : player.level ? `Niveau ${escapeHTML(player.level)}` : 'Participant'}</small></div></article>`; };
   const emptyState = (title, detail) => `<div class="recap-empty"><strong>${escapeHTML(title)}</strong><span>${escapeHTML(detail)}</span></div>`;
 
   const pickChampionshipId = (docs, requestedId) => {
@@ -142,10 +182,13 @@
   let lastRenderedChampionship = null;
   let lastRenderedMatches = [];
   const renderPage = (championship, allMatches) => {
+    ensureEliminatedStyles();
     lastRenderedChampionship = championship;
     lastRenderedMatches = allMatches;
     const matches = allMatches.some(match => match.kind === 'series') ? allMatches.filter(match => match.kind === 'series') : allMatches;
     const status = effectiveStatus(championship);
+    const hero=document.querySelector('.recap-hero');
+    if(hero){hero.querySelector(':scope > .entity-social-actions')?.remove();hero.dataset.socialKind='championship';hero.dataset.socialId=championship.id;window.JwetproSocial?.decorate?.(hero)}
     const game = String(firstValue(championship.game, championship.type, 'Mopyon'));
     const gameLabel = game.toLowerCase() === 'domino' ? 'Domino' : 'Mopyon';
     const number = firstValue(championship.number, championship.code, championship.id);
@@ -161,8 +204,9 @@
     const participants = championshipParticipants(championship);
     const maxPlayers = Number(championship.maxPlayers) || EXPECTED_PLAYERS;
     const registeredCount = Math.max(participants.length, participantCount(championship));
+    const eliminated = eliminatedPlayerTokens(matches);
     byId('participants-count-badge').textContent = `${registeredCount} / ${maxPlayers}`;
-    byId('progress-participants').innerHTML = participants.length ? participants.map(participantCard).join('') : emptyState('Liste non publiée', 'Les participants inscrits apparaîtront ici dès leur publication.');
+    byId('progress-participants').innerHTML = participants.length ? participants.map(player => participantCard(player, eliminated)).join('') : emptyState('Liste non publiée', 'Les participants inscrits apparaîtront ici dès leur publication.');
 
     const decidedCount = matches.filter(isDecided).length;
     const registrationFraction = maxPlayers > 0 ? Math.min(1, registeredCount / maxPlayers) : 0;
@@ -242,6 +286,6 @@
   window.addEventListener('jwetpro-auth-ready', () => { if (lastRenderedChampionship) renderPage(lastRenderedChampionship,lastRenderedMatches); });
   window.addEventListener('shared-shell-ready', runProgressPage, {once:true});
   const sharedShellScript = document.createElement('script');
-  sharedShellScript.src = './shared-shell.js?v=20260903-auth-match-action';
+  sharedShellScript.src = './shared-shell.js?v=20260909-social-v3';
   document.head.append(sharedShellScript);
 })();
