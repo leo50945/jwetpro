@@ -102,4 +102,43 @@ if (!process.env.FIRESTORE_EMULATOR_HOST) {
     assert.equal(payload.followerCount,25);assert.equal(payload.milestone,'25');
     assert.equal('actorSocialId' in payload,false);assert.equal('followerUid' in payload,false);
   });
+
+  test('social directory backfill is admin-only and never merges ambiguous legacy simulations', async () => {
+    const prefix=`backfill-${Date.now()}`;
+    const adminUid=`${prefix}-admin`;
+    const privateUid=`${prefix}-private`;
+    const legacyOne=`${prefix}-legacy-one`;
+    const legacyTwo=`${prefix}-legacy-two`;
+    const declaredUid=`${prefix}-declared`;
+    const declaredSocialId=`sim_${prefix.replace(/[^a-z0-9_-]/gi,'_')}`;
+    await Promise.all([
+      db.doc(`users/${adminUid}`).set({firstName:'Admin',role:'admin',status:'active'}),
+      db.doc(`users/${privateUid}`).set({firstName:'Profil',lastName:'Privé',status:'active',profilePublic:false,level:'Expert',points:900}),
+      db.doc(`users/${legacyOne}`).set({firstName:'Même',lastName:'Nom',status:'active',simulation:true,profilePublic:true}),
+      db.doc(`users/${legacyTwo}`).set({firstName:'Même',lastName:'Nom',status:'active',simulation:true,profilePublic:true}),
+      db.doc(`users/${declaredUid}`).set({firstName:'Persona',lastName:'Stable',status:'active',simulation:true,profilePublic:true,socialPlayerId:declaredSocialId,level:'Confirmé',points:175}),
+      db.doc(`socialProfiles/${privateUid}`).set({displayName:'Ancien profil',profilePublic:true,level:'Expert',points:900})
+    ]);
+
+    await expectCode(call(social.rebuildSocialDirectory,privateUid,{}),'permission-denied');
+    const result=await call(social.rebuildSocialDirectory,adminUid,{}, {admin:true});
+    assert.ok(result.processed >= 5);
+
+    const privateProfile=(await db.doc(`socialProfiles/${privateUid}`).get()).data();
+    assert.equal(privateProfile.profilePublic,false);
+    assert.equal(privateProfile.ownerUid,privateUid);
+    assert.equal('level' in privateProfile,false);
+    assert.equal('points' in privateProfile,false);
+
+    const declaredProfile=(await db.doc(`socialProfiles/${declaredSocialId}`).get()).data();
+    assert.equal(declaredProfile.displayName,'Persona Stable');
+    assert.equal(declaredProfile.playerType,'simulated');
+    assert.equal(declaredProfile.points,175);
+    assert.equal('ownerUid' in declaredProfile,false);
+
+    const ambiguous=(await db.collection('socialProfiles').where('displayName','==','Même Nom').get()).docs;
+    assert.equal(ambiguous.length,2);
+    assert.notEqual(ambiguous[0].id,ambiguous[1].id);
+    assert.ok(ambiguous.every(item=>item.id.startsWith('sim_legacy_')));
+  });
 }

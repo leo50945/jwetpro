@@ -1,6 +1,8 @@
 # Changelog
 
-- 2026-09-13 : clarification du guide et de la confidentialité sociale : les entraînements, championnats annulés et manches individuelles ne constituent pas des favoris distincts; l’accès administratif à une conversation privée est limité au traitement d’un signalement lié. Les traductions françaises/créoles et l’état de publication de la roadmap sont synchronisés.
+- 2026-09-13 : validation du backfill social sous Auth/Firestore Emulator : accès réservé à l’administration, projection minimale des profils privés, persona simulée stable réutilisée et absence de fusion entre deux anciennes identités simulées homonymes. Les suites Emulator sociales passent désormais avec six tests actifs, sans test ignoré.
+
+- 2026-09-13 : clarification du guide et de la confidentialité sociale : les entraînements, championnats annulés et manches individuelles ne constituent pas des favoris distincts; l’accès administratif à une conversation privée est limité au traitement d’un signalement lié. Les traductions françaises/créoles et l’état de publication de la roadmap sont synchronisés. Le test Emulator du backfill vérifie désormais l’autorisation administrateur, la confidentialité des statistiques et l’absence de fusion entre deux anciennes identités simulées ambiguës.
 
 - 2026-09-10 : publication ciblée des fonctions sociales, règles et index Firestore sur `mopyonlakay`. Face au quota CPU Cloud Run saturé en `us-central1`, les listes privées d’abonnés et d’abonnements utilisent désormais un endpoint authentifié unique `listSocialRelationships` en `us-east1`; son refus `401` hors connexion est vérifié en production. Aucune fonction de jeu, de paiement ou d’assistance n’a été redéployée.
 
