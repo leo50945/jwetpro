@@ -41,6 +41,13 @@ test('individual rounds remain excluded and profile links remain globally hydrat
   assert.match(social, /player\.html\?id=/);
 });
 
+test('mobile social actions keep an accessible touch target', () => {
+  const styles = source('src/social-system.css');
+  assert.ok(styles.includes('@media(max-width:767px){.entity-social-actions{top:9px;right:9px}.hero-slide>.entity-social-actions{top:74px;right:12px}.entity-social-button{min-width:44px;height:44px}'));
+  assert.match(source('shared-shell.js'), /social-system\.css\?v=20260913-social-v5/);
+  assert.match(source('index.html'), /social-system\.css\?v=20260913-social-v5/);
+});
+
 test('relationship lists use the authenticated unified endpoint', () => {
   const main = source('src/main.js');
   const functions = source('functions/social-system.js');

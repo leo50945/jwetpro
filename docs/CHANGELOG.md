@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-09-13 : les actions J’aime et Partager disposent désormais d’une cible tactile minimale de 44 × 44 px sur mobile. La version de cache `social-v5` est synchronisée entre la page d’accueil et le shell commun, avec un test anti-régression dédié.
+
 - 2026-09-13 : le protocole de déploiement social reflète désormais l’état réel de production, les versions de cache `social-v4`/`social-favorites`, l’étape de backfill encore requise et la dépendance DNS de `share.jwetpro.com`.
 
 - 2026-09-13 : la cloche de notifications sépare désormais la liste des 30 événements récents du compteur des notifications non lues. Le badge reste exact jusqu’à 99 puis affiche `99+`; « Tout marquer comme lu » traite automatiquement plusieurs lots de 100.
