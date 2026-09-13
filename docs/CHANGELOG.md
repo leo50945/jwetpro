@@ -1,6 +1,6 @@
 # Changelog
 
-- 2026-09-13 : les actions J’aime et Partager disposent désormais d’une cible tactile minimale de 44 × 44 px sur mobile. La version de cache `social-v5` est synchronisée entre la page d’accueil et le shell commun, avec un test anti-régression dédié.
+- 2026-09-13 : les actions J’aime et Partager disposent désormais d’une cible tactile minimale de 44 × 44 px sur mobile. La feuille immuable `social-system-v5.css` contourne le cache CDN sur toutes les pages, avec un test anti-régression dédié.
 
 - 2026-09-13 : le protocole de déploiement social reflète désormais l’état réel de production, les versions de cache `social-v4`/`social-favorites`, l’étape de backfill encore requise et la dépendance DNS de `share.jwetpro.com`.
 

@@ -62,7 +62,7 @@ if (!window.JwetproI18n && !document.querySelector('script[data-jwetpro-i18n]'))
 if (!document.querySelector('link[data-jwetpro-social-style]')) {
   const socialStyle = document.createElement('link');
   socialStyle.rel = 'stylesheet';
-  socialStyle.href = './src/social-system.css?v=20260913-social-v5';
+  socialStyle.href = './src/social-system-v5.css';
   socialStyle.dataset.jwetproSocialStyle = 'true';
   document.head.append(socialStyle);
 }

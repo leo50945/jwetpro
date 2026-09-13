@@ -8,7 +8,7 @@ const source = file => fs.readFileSync(path.join(root, file), 'utf8');
 
 test('the shared shell loads social actions and notifications', () => {
   const shell = source('shared-shell.js');
-  assert.match(shell, /social-system\.css/);
+  assert.match(shell, /social-system-v5\.css/);
   assert.match(shell, /shared-social\.js/);
   assert.match(shell, /shared-notifications\.js/);
 
@@ -42,10 +42,10 @@ test('individual rounds remain excluded and profile links remain globally hydrat
 });
 
 test('mobile social actions keep an accessible touch target', () => {
-  const styles = source('src/social-system.css');
+  const styles = source('src/social-system-v5.css');
   assert.ok(styles.includes('@media(max-width:767px){.entity-social-actions{top:9px;right:9px}.hero-slide>.entity-social-actions{top:74px;right:12px}.entity-social-button{min-width:44px;height:44px}'));
-  assert.match(source('shared-shell.js'), /social-system\.css\?v=20260913-social-v5/);
-  assert.match(source('index.html'), /social-system\.css\?v=20260913-social-v5/);
+  assert.match(source('shared-shell.js'), /social-system-v5\.css/);
+  assert.match(source('index.html'), /social-system-v5\.css/);
 });
 
 test('relationship lists use the authenticated unified endpoint', () => {

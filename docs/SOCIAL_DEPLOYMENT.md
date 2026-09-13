@@ -41,7 +41,7 @@ Le backfill conserve chaque ancienne identité simulée ambiguë séparément. S
 
 ### 4. Interface
 
-État au 13 septembre 2026 : l’interface du site principal et la cible `jwetpro-share` sont publiées. Le script de notifications utilise `20260913-social-v4`, la ressource principale `20260913-social-favorites` et les actions sociales `20260913-social-v5`; ces versions doivent rester cohérentes dans `index.html` et `shared-shell.js` afin d’éviter un ancien cache.
+État au 13 septembre 2026 : l’interface du site principal et la cible `jwetpro-share` sont publiées. Le script de notifications utilise `20260913-social-v4`, la ressource principale `20260913-social-favorites` et les actions sociales la feuille immuable `social-system-v5.css`; ces versions doivent rester cohérentes dans `index.html` et `shared-shell.js` afin d’éviter un ancien cache.
 
 Le dashboard contient le bouton de backfill et les identités `socialPlayerId` stables. Après son ouverture avec un compte administrateur, exécuter l’étape 3 puis réaliser la recette ci-dessous. Les routes dynamiques `/s/c/*` et `/s/m/*` restent servies temporairement par `jwetpro-share.web.app` tant que `share.jwetpro.com` n’est pas configuré dans Firebase Hosting et dans le DNS.
 
