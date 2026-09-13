@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-09-13 : clarification du guide et de la confidentialité sociale : les entraînements, championnats annulés et manches individuelles ne constituent pas des favoris distincts; l’accès administratif à une conversation privée est limité au traitement d’un signalement lié. Les traductions françaises/créoles et l’état de publication de la roadmap sont synchronisés.
+
 - 2026-09-10 : publication ciblée des fonctions sociales, règles et index Firestore sur `mopyonlakay`. Face au quota CPU Cloud Run saturé en `us-central1`, les listes privées d’abonnés et d’abonnements utilisent désormais un endpoint authentifié unique `listSocialRelationships` en `us-east1`; son refus `401` hors connexion est vérifié en production. Aucune fonction de jeu, de paiement ou d’assistance n’a été redéployée.
 
 - 2026-09-10 : les contenus sociaux ajoutés après chargement Firestore dans le profil et la messagerie privée respectent désormais immédiatement la langue Français/Kreyòl. Un test de couverture protège la présence des actions sociales sur le hero, Calendrier/Live, Activité, Mes matchs, Progression, Champions et les archives, ainsi que l’exclusion des manches individuelles.

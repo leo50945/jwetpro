@@ -489,11 +489,11 @@ module.exports = ({admin, db}) => {
     listFollowers:listRelationships('requested'),
     // This read-only endpoint uses the fractional Gen 1 CPU profile so it can be
     // deployed safely even when the regional Cloud Run CPU quota is nearly full.
-    listFollowing:listRelationships('following', {cpu:'gcf_gen1', concurrency:1}),
+    listFollowing:listRelationships('following', {cpu:'gcf_gen1', concurrency:1, maxInstances:1}),
     // Relationship pagination is exposed through one low-frequency endpoint in
     // a secondary US region because us-central1 can temporarily exhaust its
     // Cloud Run deployment CPU quota. Authentication and Firestore stay shared.
-    listSocialRelationships:listRelationships('requested', {region:'us-east1', cpu:'gcf_gen1', concurrency:1}),
+    listSocialRelationships:listRelationships('requested', {region:'us-east1', cpu:'gcf_gen1', concurrency:1, maxInstances:1}),
     setSocialBlock, createSocialReport, getSocialReportConversation, createDirectConversation, sendDirectMessage,
     markConversationRead, markNotificationsRead, rebuildSocialDirectory, syncSocialProfileFromUser
   };
