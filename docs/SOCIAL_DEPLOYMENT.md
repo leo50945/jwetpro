@@ -41,9 +41,9 @@ Le backfill conserve chaque ancienne identité simulée ambiguë séparément. S
 
 ### 4. Interface
 
-Publier ensuite les ressources du site principal et du dashboard. Contrôler que la version `20260909-social-v3` du shell, des styles, des actions sociales et des notifications est servie, afin d’éviter un ancien cache.
+État au 13 septembre 2026 : l’interface du site principal et la cible `jwetpro-share` sont publiées. Le script de notifications utilise `20260913-social-v4` et la ressource principale `20260913-social-favorites`; ces versions doivent rester cohérentes dans `index.html` et `shared-shell.js` afin d’éviter un ancien cache.
 
-Publier enfin la cible `jwetpro-share` pour les routes dynamiques `/s/c/*` et `/s/m/*`.
+Le dashboard contient le bouton de backfill et les identités `socialPlayerId` stables. Après son ouverture avec un compte administrateur, exécuter l’étape 3 puis réaliser la recette ci-dessous. Les routes dynamiques `/s/c/*` et `/s/m/*` restent servies temporairement par `jwetpro-share.web.app` tant que `share.jwetpro.com` n’est pas configuré dans Firebase Hosting et dans le DNS.
 
 ## Recette de production
 
@@ -64,4 +64,4 @@ Utiliser deux vrais comptes et un joueur simulé :
 - Ne jamais assouplir les règles Firestore pour contourner une erreur d’interface.
 - En cas d’échec des fonctions, restaurer leur révision précédente depuis Firebase/Cloud Run ou redéployer l’artefact précédent validé.
 - En cas d’échec des règles, remettre la version précédente sauvegardée avant publication.
-- Laisser l’interface sociale non publiée tant que fonctions, règles, index et backfill ne sont pas validés.
+- Si le backfill ou la recette révèle une lecture privée, désactiver les points d’entrée sociaux concernés et restaurer la dernière version validée; ne jamais contourner le problème en assouplissant les règles.

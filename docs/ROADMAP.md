@@ -28,7 +28,7 @@
 - ASSISTANT CLIENT — Base officielle bilingue, contexte Firebase filtré, réponses structurées, retours et escalade humaine : implémentés; validation Firebase en production restante.
 - PHASE 03 — Page championnat : récapitulatif public responsive réalisé avec participants, tableau à élimination directe, résultats et replays publiés ; alimentation automatique et migration complète des anciens championnats restantes.
 - PHASE 04 — Connexion : creation de compte joueur publique sans verification e-mail, connexion e-mail/mot de passe et profil minimal realises.
-- PHASE 05 — Espace joueur : rubriques du profil interactives, mise à jour limitée des informations personnelles, sécurité, préférences, groupes et favoris réalisées ; alimentation complète des groupes et favoris par les parcours métier restante.
+- PHASE 05 — Espace joueur : rubriques du profil interactives, mise à jour limitée des informations personnelles, sécurité, préférences et favoris sociaux alimentés par les parcours métier réalisés ; alimentation complète des groupes restante.
 - PHASE 06 — Interface Mopyon : entraînement et protocole de match officiel réalisés; déploiement et orchestration automatique des confrontations restants.
 - PHASE 07 — Live / spectateur.
 - PHASE 08 — Systeme de tournoi et paiements confirmes.
