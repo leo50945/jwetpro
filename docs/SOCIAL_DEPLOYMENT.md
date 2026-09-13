@@ -49,6 +49,8 @@ Le dashboard contient le bouton de backfill et les identités `socialPlayerId` s
 
 Utiliser deux vrais comptes et un joueur simulé :
 
+État au 13 septembre 2026 : la partie publique de la recette est validée. Les routes championnat et match répondent sans exposer de courriel ni de champ privé; la fenêtre de partage fonctionne au clavier avec restitution du focus; un visiteur qui tente d’aimer est dirigé vers la connexion; l’interface et la fenêtre restent contenues sur mobile. Les contrôles authentifiés ci-dessous restent à exécuter après le backfill.
+
 1. Partager un championnat sans être connecté.
 2. Aimer deux fois le même match et confirmer un seul favori et un seul incrément.
 3. Faire suivre A par B, puis B par A ; confirmer les deux notifications et le marqueur réciproque.
