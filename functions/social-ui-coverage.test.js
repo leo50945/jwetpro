@@ -48,3 +48,11 @@ test('relationship lists use the authenticated unified endpoint', () => {
   assert.match(main, /direction:section/);
   assert.match(functions, /listSocialRelationships:listRelationships\('requested'/);
 });
+
+test('legacy favorites remain visible while paginated social favorites are adopted', () => {
+  const main = source('src/main.js');
+  assert.match(main, /profileLegacyFavorites/);
+  assert.match(main, /profileLegacyFavoriteIdentity/);
+  assert.match(main, /socialIdentities\.has\(identity\)/);
+  assert.match(main, /profileSocialFavoriteDocs\.map\(profileSocialFavoriteMarkup\).*legacyFavorites\.map/);
+});
