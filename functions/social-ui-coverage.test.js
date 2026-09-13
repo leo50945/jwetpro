@@ -56,3 +56,10 @@ test('legacy favorites remain visible while paginated social favorites are adopt
   assert.match(main, /socialIdentities\.has\(identity\)/);
   assert.match(main, /profileSocialFavoriteDocs\.map\(profileSocialFavoriteMarkup\).*legacyFavorites\.map/);
 });
+
+test('notification badge counts unread documents independently from the recent list', () => {
+  const notifications = source('shared-notifications.js');
+  assert.match(notifications, /orderBy\('createdAt','desc'\)\.limit\(30\)\.onSnapshot\(renderList/);
+  assert.match(notifications, /where\('read','==',false\)\.limit\(100\)\.onSnapshot\(renderUnread/);
+  assert.match(notifications, /for\(let batch=0;batch<10;batch\+=1\)/);
+});

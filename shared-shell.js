@@ -75,7 +75,7 @@ if (!document.querySelector('script[data-jwetpro-social]')) {
 }
 if (!document.querySelector('script[data-jwetpro-notifications]')) {
   const notificationsScript = document.createElement('script');
-  notificationsScript.src = './shared-notifications.js?v=20260909-social-v3';
+  notificationsScript.src = './shared-notifications.js?v=20260913-social-v4';
   notificationsScript.defer = true;
   notificationsScript.dataset.jwetproNotifications = 'true';
   document.head.append(notificationsScript);

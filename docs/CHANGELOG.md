@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-09-13 : la cloche de notifications sépare désormais la liste des 30 événements récents du compteur des notifications non lues. Le badge reste exact jusqu’à 99 puis affiche `99+`; « Tout marquer comme lu » traite automatiquement plusieurs lots de 100.
+
 - 2026-09-13 : « Mes favoris » fusionne désormais les favoris sociaux paginés et les anciens `favoriteGames` reconnaissables. Un ancien match ou championnat déjà présent dans la nouvelle collection est dédupliqué, tandis que les entrées historiques sans identité canonique restent visibles et supprimables pendant la migration. La ressource principale est versionnée à nouveau afin d’éviter qu’un ancien cache masque ce correctif.
 
 - 2026-09-13 : validation du backfill social sous Auth/Firestore Emulator : accès réservé à l’administration, projection minimale des profils privés, persona simulée stable réutilisée et absence de fusion entre deux anciennes identités simulées homonymes. Les suites Emulator sociales passent désormais avec six tests actifs, sans test ignoré.
