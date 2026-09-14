@@ -91,8 +91,8 @@
   const decorate=(root=document)=>{
     hydrateEntities(root);
     root.querySelectorAll?.('[data-social-kind][data-social-id]').forEach(node=>{
-      const kind=node.dataset.socialKind;const id=node.dataset.socialId;if(!['match','championship'].includes(kind)||!/^[A-Za-z0-9_-]{1,150}$/.test(id)||node.querySelector(':scope > .entity-social-actions'))return;
-      const actions=document.createElement('div');actions.className='entity-social-actions';actions.setAttribute('aria-label',ht()?'Aksyon sosyal':'Actions sociales');actions.innerHTML=`<button class="entity-social-button" type="button" data-entity-like aria-label="${escape(words().like)}" aria-pressed="false">${icon('heart')}<span class="entity-like-count"></span></button><button class="entity-social-button" type="button" data-entity-share aria-label="${escape(words().share)}">${icon('share')}</button>`;node.prepend(actions);updateNode(node);
+      const kind=node.dataset.socialKind;const id=node.dataset.socialId;if(!['match','championship'].includes(kind)||!/^[A-Za-z0-9_-]{1,150}$/.test(id)||node.querySelector('.entity-social-actions'))return;
+      const actions=document.createElement('div');actions.className='entity-social-actions';actions.setAttribute('aria-label',ht()?'Aksyon sosyal':'Actions sociales');actions.innerHTML=`<button class="entity-social-button" type="button" data-entity-like aria-label="${escape(words().like)}" aria-pressed="false">${icon('heart')}<span class="entity-like-count"></span></button><button class="entity-social-button" type="button" data-entity-share aria-label="${escape(words().share)}">${icon('share')}</button>`;const slot=node.querySelector(':scope [data-social-actions-slot]');if(slot)slot.append(actions);else node.prepend(actions);updateNode(node);
     });
     scheduleRefresh();
   };

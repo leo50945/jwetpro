@@ -6,6 +6,12 @@
 .entity-social-button.is-liked{background:#dca331;color:#071827}
 .entity-social-button svg{width:17px;height:17px;flex:none;stroke:currentColor}
 .entity-like-count:empty{display:none}
+.activity-social-slot>.entity-social-actions{position:static;z-index:auto;flex:0 0 auto;padding:3px;gap:3px;border-color:#d6e0e6;background:#f3f6f8;box-shadow:none;backdrop-filter:none}
+.activity-social-slot .entity-social-button{min-width:30px;width:30px;height:30px;padding:0;color:#536a7b}
+.activity-social-slot .entity-social-button:hover,.activity-social-slot .entity-social-button:focus-visible{background:#e3eaf0;color:#a86f16}
+.activity-social-slot .entity-social-button.is-liked{background:#dca331;color:#071827}
+.activity-social-slot .entity-social-button svg{width:15px;height:15px}
+.activity-social-slot .entity-like-count{font-size:9px}
 .hero-slide>.entity-social-actions{top:78px;right:20px}
 .social-share-layer{position:fixed;inset:0;z-index:4000;display:grid;place-items:center;padding:18px;background:#02101dcc}
 .social-share-layer[hidden]{display:none}
@@ -20,7 +26,7 @@
 .social-share-options .social-share-primary{grid-column:1/-1;border-color:#dda42f;background:#dda42f;color:#071827}
 .social-system-toast{position:fixed;left:50%;bottom:26px;z-index:4100;max-width:min(90vw,430px);transform:translate(-50%,18px);padding:12px 16px;border-radius:9px;background:#071a29;color:#fff;box-shadow:0 12px 35px #0008;font:700 12px/1.4 Inter,Arial,sans-serif;opacity:0;transition:.2s}
 .social-system-toast.is-visible{transform:translate(-50%,0);opacity:1}
-@media(max-width:767px){.entity-social-actions{top:9px;right:9px}.hero-slide>.entity-social-actions{top:74px;right:12px}.entity-social-button{min-width:44px;height:44px}.social-share-options{grid-template-columns:1fr}.social-share-options .social-share-primary{grid-column:auto}}
+@media(max-width:767px){.entity-social-actions{top:9px;right:9px}.hero-slide>.entity-social-actions{top:74px;right:12px}.entity-social-button{min-width:44px;height:44px}.activity-social-slot .entity-social-button{min-width:30px;width:30px;height:30px}.social-share-options{grid-template-columns:1fr}.social-share-options .social-share-primary{grid-column:auto}}
 @media(prefers-reduced-motion:reduce){.entity-social-button,.social-system-toast{transition:none}}
 .notification-panel{box-sizing:border-box}
 @media(max-width:767px){.notification-panel{left:12px;right:12px;width:auto!important}}

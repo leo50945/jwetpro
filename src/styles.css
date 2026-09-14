@@ -257,6 +257,12 @@ html,body{overflow-x:clip}
 #activity .activity-card:nth-child(2) .activity-icon{background:#edf8f0;color:#2d9a57}
 #activity .activity-card:nth-child(3) .activity-icon{background:#edf4fc;color:#2f6eb5}
 #activity .activity-content{min-width:0}
+#activity .activity-heading-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:12px;min-width:0}
+#activity .activity-heading-copy{min-width:0}
+#activity .activity-social-slot{display:flex;justify-content:flex-end;min-width:0}
+#activity .activity-heading-row .card-date{margin-bottom:28px}
+#activity .activity-social-slot:empty{display:none}
+@media(max-width:767px){#activity .activity-heading-row{gap:8px}#activity .card-top{flex-wrap:wrap;justify-content:flex-start}#activity .activity-heading-row .card-date{margin-bottom:20px}}
 #activity .activity-action{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:15px;padding:9px 11px;border:1px solid #d8e0e6;border-radius:5px;color:#18364d;font-size:9px;font-weight:800;letter-spacing:.04em;text-decoration:none}#activity .activity-action svg{width:14px;height:14px}#activity .activity-action.open{border-color:#2d9a5766;background:#edf8f0;color:#237d49}#activity .activity-action.live{border-color:#2f6eb566;background:#edf4fc;color:#285f9c}#activity .activity-action.done{background:#f1f3f5;color:#536473}#activity .activity-action:hover,#activity .activity-action:focus-visible{border-color:#c8891e;background:#fff8e9;color:#8b5c12;outline:3px solid #dca33133;outline-offset:2px}
 .championship-public-action{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;border:1px solid #d8e0e6;border-radius:5px;color:#18364d;font-size:9px;font-weight:800;letter-spacing:.04em;text-decoration:none}.championship-public-action svg{width:14px;height:14px}.championship-public-action.open{border-color:#2d9a5766;background:#edf8f0;color:#237d49}.championship-public-action.live{border-color:#2f6eb566;background:#edf4fc;color:#285f9c}.championship-public-action.done{background:#f1f3f5;color:#536473}.championship-public-action:hover,.championship-public-action:focus-visible{border-color:#c8891e;background:#fff8e9;color:#8b5c12;outline:3px solid #dca33133;outline-offset:2px}
 @media(max-width:767px){#activity .activity-card{padding-left:59px}#activity .activity-icon{left:17px;top:26px;width:32px;height:32px}}
