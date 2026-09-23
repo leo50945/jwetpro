@@ -563,7 +563,7 @@ const childGameFields = (series, seriesId, participants, gameId, gameNumber, rea
   };
 };
 
-exports.joinMopyonMatch = onCall({region: 'us-central1', cors: true, cpu: 0.5, maxInstances: 1, secrets: [rapfiServiceToken]}, async request => {
+exports.joinMopyonMatch = onCall({region: 'us-central1', cors: true, cpu: 0.25, maxInstances: 1, concurrency: 1, secrets: [rapfiServiceToken]}, async request => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'Authentication is required.');
   const matchId = String(request.data?.matchId || '');
   if (!/^[A-Za-z0-9_-]{1,150}$/.test(matchId)) throw new HttpsError('invalid-argument', 'A valid match id is required.');
@@ -1079,7 +1079,7 @@ exports.deleteDominoSimulationStates = onCall({region:'us-central1',cors:true},a
   return {deleted:dominoGames.length};
 });
 
-exports.joinDominoMatch = onCall({region:'us-central1',cors:true},async request=>{
+exports.joinDominoMatch = onCall({region:'us-central1',cors:true,cpu:0.25,maxInstances:1,concurrency:1},async request=>{
   if(!request.auth) throw new HttpsError('unauthenticated','Authentication is required.');
   const requestedId=String(request.data?.matchId||'');
   if(!/^[A-Za-z0-9_-]{1,150}$/.test(requestedId)) throw new HttpsError('invalid-argument','A valid match id is required.');

@@ -390,4 +390,5 @@ esolveOfficialTurnTimeouts : un tour Mopyon expiré est clôturé par forfait m�
 - Les transactions `joinMopyonMatch` et `joinDominoMatch` refusent désormais toute arrivée après l’échéance officielle et ne peuvent plus recréer une manche avec un délai réinitialisé.
 - Le délai d’entrée de la première manche clôt le match par forfait ; une absence après une manche déjà jouée ne compte qu’une manche et laisse le meilleur-de-trois continuer si nécessaire.
 - Le déclencheur Domino clôt maintenant aussi un double forfait sans tenter de lancer une série avec un vainqueur vide.
+- 2026-09-23 — Les fonctions `joinMopyonMatch` et `joinDominoMatch` sont limitées à une instance et 0,25 CPU avec concurrence 1 afin d’éviter les refus Cloud Run liés au quota CPU ; la preflight CORS reste autorisée pour le site local.
 
