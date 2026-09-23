@@ -1444,10 +1444,15 @@ exports.autoAdvanceCompletedDominoGame = onDocumentWritten({
   const after=event.data?.after?.exists?event.data.after.data():null;
   if(!after||after.kind==='series'||!matchGameIsDomino(after)||!after.seriesId)return;
   const completed=Boolean(after.winnerId)||after.draw===true;
-  const wasCompleted=Boolean(before?.winnerId)||before?.draw===true;
-  if(!completed||wasCompleted)return;
+  const doubleForfeit=after.forfeitReason==='double-attendance-timeout'||after.completionReason==='double-attendance-timeout';
+  const wasCompleted=Boolean(before?.winnerId)||before?.draw===true||before?.forfeitReason==='double-attendance-timeout';
+  if((!completed&&!doubleForfeit)||wasCompleted)return;
   const participants=Array.isArray(after.participantIds)?after.participantIds.filter(uid=>typeof uid==='string'):[];
   if(participants.length!==2)return;
+  if(doubleForfeit){
+    await db.collection('matches').doc(String(after.seriesId)).set({status:'completed',winnerId:null,winnerUid:null,forfeit:true,forfeitReason:'double-attendance-timeout',completionReason:'double-attendance-timeout',forfeitedUids:participants,bye:true,byeReason:'Les deux joueurs étaient absents après cinq minutes.',seriesScore:{p1:0,p2:0},gameIds:admin.firestore.FieldValue.arrayUnion(event.params.matchId),currentGameId:null,activeGameId:null,completedAt:admin.firestore.FieldValue.serverTimestamp(),updatedAt:admin.firestore.FieldValue.serverTimestamp()},{merge:true});
+    return;
+  }
   const realParticipant=participants.find(uid=>!isBotParticipant(after,uid,participants.find(other=>other!==uid)||''));
   const participantUid=realParticipant||participants[0];
   await advanceDominoSeriesForParticipant(event.params.matchId,participantUid);
