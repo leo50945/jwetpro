@@ -381,3 +381,10 @@ esolveOfficialTurnTimeouts : un tour Mopyon expiré est clôturé par forfait m�
 - Le balayage de présence couvre aussi les séries marquées live/ongoing sans manche enfant : un premier forfait de cinq minutes clôture bien la confrontation complète.
 - Le délai de 30 secondes (turn-timeout) est maintenant séparé du forfait de présence de cinq minutes : seul attendance-timeout élimine du championnat dans la progression.
 - Chaque nouvelle manche créée pour une série officielle reçoit désormais sa propre échéance serveur de présence de cinq minutes ; un retour tardif ne peut pas réinitialiser le délai.
+### 2026-09-23 — Forfaits persistants et double absence
+
+- Le balayage serveur résout désormais aussi les manches `scheduled`/`preview` dont le délai d’entrée de cinq minutes est expiré, y compris après fermeture ou actualisation du navigateur.
+- Les manches simulé-versus-simulé restent hors de toute logique d’absence et sont laissées à l’orchestrateur de simulation.
+- Un double forfait persiste les deux identifiants éliminés et clôt correctement la série enfant/parent.
+- L’orchestrateur de championnat fait avancer par bye le vainqueur de la confrontation adjacente lorsqu’une paire de vrais joueurs est doublement absente.
+

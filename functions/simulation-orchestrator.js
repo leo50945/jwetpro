@@ -269,17 +269,35 @@ module.exports=({admin,db,isAdmin})=>{
       if(championship.simulation!==true||championship.currentRound!==expectedRound)return null;
       const matches=await transaction.get(db.collection('matches').where('championshipId','==',championshipId));
       const series=matches.docs.filter(document=>document.data()?.kind==='series'&&document.data()?.round===expectedRound).sort((a,b)=>(a.data()?.bracketSlot||0)-(b.data()?.bracketSlot||0));
-      const round=roundDefinition(expectedRound);if(!round||series.length!==round.matches||series.some(document=>document.data()?.status!=='completed'||!document.data()?.winnerUid))return null;
-      const winners=series.map(document=>{const data=document.data(),player=data.player1?.uid===data.winnerUid?data.player1:data.player2;return{uid:data.winnerUid,name:data.winnerName||player?.name||'Joueur',seed:player?.seed??null,real:player?.real===true};});
+      const round=roundDefinition(expectedRound);if(!round||series.length!==round.matches||series.some(document=>document.data()?.status!=='completed'))return null;
+      // A double attendance timeout has no winner. Keep that result explicit, then
+      // let the winner of the adjacent bracket slot advance by bye.
+      const winners=series.map(document=>{const data=document.data()||{};if(!data.winnerUid&&!data.winnerId)return null;const winnerUid=String(data.winnerUid||data.winnerId),player=data.player1?.uid===winnerUid?data.player1:data.player2;return{uid:winnerUid,name:data.winnerName||player?.name||'Joueur',seed:player?.seed??null,real:player?.real===true};});
       const roundIndex=ROUNDS.findIndex(item=>item.key===expectedRound);
       if(roundIndex===ROUNDS.length-1){
-        const final=series[0].data(),runner=final.player1?.uid===final.winnerUid?final.player2:final.player1;
-        transaction.set(championshipRef,{...championshipCore(championship),status:'completed',currentRound:null,currentRoundLabel:null,championUid:winners[0].uid,championName:winners[0].name,completedAt:admin.firestore.FieldValue.serverTimestamp(),updatedAt:admin.firestore.FieldValue.serverTimestamp()},{merge:true});
-        transaction.set(db.collection('results').doc(`${championshipId}-result`),{championshipId,game:championship.game,number:championship.number||'',winnerUid:winners[0].uid,winnerName:winners[0].name,runnerUpUid:runner?.uid||'',runnerUpName:runner?.name||'',prize:Number(championship.prize)||0,status:'published',simulation:true,simulationRunId:championship.simulationRunId||'',createdAt:admin.firestore.FieldValue.serverTimestamp(),updatedAt:admin.firestore.FieldValue.serverTimestamp()},{merge:true});
-        return{completed:true};
+        const final=series[0].data(),champion=winners[0],runner=champion&&final.player1?.uid===champion.uid?final.player2:final.player1;
+        transaction.set(championshipRef,{...championshipCore(championship),status:'completed',currentRound:null,currentRoundLabel:null,championUid:champion?.uid||null,championName:champion?.name||null,completedAt:admin.firestore.FieldValue.serverTimestamp(),updatedAt:admin.firestore.FieldValue.serverTimestamp()},{merge:true});
+        transaction.set(db.collection('results').doc(`${championshipId}-result`),{championshipId,game:championship.game,number:championship.number||'',winnerUid:champion?.uid||null,winnerName:champion?.name||null,runnerUpUid:runner?.uid||'',runnerUpName:runner?.name||'',prize:Number(championship.prize)||0,status:'published',simulation:true,simulationRunId:championship.simulationRunId||'',createdAt:admin.firestore.FieldValue.serverTimestamp(),updatedAt:admin.firestore.FieldValue.serverTimestamp()},{merge:true});
+        return{completed:true,championUid:champion?.uid||null};
       }
       const next=ROUNDS[roundIndex+1];
-      for(let index=0;index<next.matches;index+=1){const ref=db.collection('matches').doc(seriesIdFor(championshipId,next.key,index));transaction.set(ref,seriesData(championship,championshipId,next,index,winners[index*2],winners[index*2+1]),{merge:false});}
+      for(let index=0;index<next.matches;index+=1){
+        const left=winners[index*2],right=winners[index*2+1],ref=db.collection('matches').doc(seriesIdFor(championshipId,next.key,index));
+        if(left&&right){
+          transaction.set(ref,seriesData(championship,championshipId,next,index,left,right),{merge:false});
+          continue;
+        }
+        const advancing=left||right;
+        if(!advancing){
+          transaction.set(ref,{kind:'series',format:'bo3',championshipId,game:championship.game,number:championship.number||'',round:next.key,roundLabel:next.label,bracketSlot:index,participantIds:[],participantNames:{},participantTypes:{},status:'completed',seriesScore:{p1:0,p2:0},gameIds:[],currentGameId:null,winnerUid:null,winnerId:null,winnerName:null,forfeit:true,forfeitReason:'double-attendance-timeout',completionReason:'double-attendance-timeout',bye:true,forfeitedUids:[],simulation:true,simulationRunId:championship.simulationRunId||'',startAt:championship.startAt||championship.startDate||admin.firestore.Timestamp.now(),scheduledAt:championship.startAt||championship.startDate||admin.firestore.Timestamp.now(),createdAt:admin.firestore.FieldValue.serverTimestamp(),updatedAt:admin.firestore.FieldValue.serverTimestamp()},{merge:false});
+          continue;
+        }
+        const byeUid=`bye-${championshipId}-${next.key}-${index+1}`;
+        const bye={uid:byeUid,name:'BYE',seed:null,real:false};
+        const completedBye=seriesData(championship,championshipId,next,index,left||advancing,right||bye);
+        completedBye.status='completed';completedBye.seriesScore={p1:left?2:0,p2:right?2:0};completedBye.winnerUid=advancing.uid;completedBye.winnerId=advancing.uid;completedBye.winnerName=advancing.name;completedBye.forfeit=true;completedBye.forfeitReason='bye';completedBye.completionReason='bye';completedBye.bye=true;completedBye.byeReason='Avance directe après double forfait de l’autre match.';completedBye.forfeitedUids=[];completedBye.gameIds=[];completedBye.currentGameId=null;
+        transaction.set(ref,completedBye,{merge:false});
+      }
       transaction.set(championshipRef,{...championshipCore(championship),status:'ongoing',currentRound:next.key,currentRoundLabel:next.label,updatedAt:admin.firestore.FieldValue.serverTimestamp()},{merge:true});
       return{completed:false,nextRound:next.key,automation:championship.botAutomationEnabled===true};
     });

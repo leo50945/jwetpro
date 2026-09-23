@@ -508,7 +508,7 @@ const turnTimeoutForfeitUpdates = (winnerId, forfeitedUid) => ({
   completedAt: admin.firestore.FieldValue.serverTimestamp(),
   updatedAt: admin.firestore.FieldValue.serverTimestamp()
 });
-const doubleAttendanceUpdates = (nextMatchId = '') => ({
+const doubleAttendanceUpdates = (nextMatchId = '', forfeitedUids = []) => ({
   status: 'completed',
   winnerId: null,
   draw: false,
@@ -516,6 +516,7 @@ const doubleAttendanceUpdates = (nextMatchId = '') => ({
   forfeitReason: 'double-attendance-timeout',
   completionReason: 'double-attendance-timeout',
   bye: true,
+  forfeitedUids: Array.isArray(forfeitedUids) ? forfeitedUids.filter(Boolean) : [],
   byeReason: 'Les deux joueurs étaient absents après cinq minutes; l’adversaire suivant avance par bye.',
   ...(nextMatchId ? {byeNextMatchId: nextMatchId} : {}),
   currentTurnUid: null,
@@ -944,7 +945,7 @@ exports.autoAdvanceCompletedMopyonGame = onDocumentWritten({
   const wasCompleted = Boolean(before?.winnerId) || before?.draw === true || before?.forfeitReason === 'double-attendance-timeout';
   if ((!completed && !doubleForfeit) || wasCompleted) return;
   if (doubleForfeit) {
-    await db.collection('matches').doc(String(after.seriesId)).set({status:'completed',winnerId:null,winnerUid:null,forfeit:true,forfeitReason:'double-attendance-timeout',completionReason:'double-attendance-timeout',forfeitedUids:Array.isArray(after.participantIds) ? after.participantIds : [],bye:true,byeReason:'Les deux joueurs étaient absents après cinq minutes.',seriesScore:{p1:0,p2:0},updatedAt:admin.firestore.FieldValue.serverTimestamp()},{merge:true});
+    await db.collection('matches').doc(String(after.seriesId)).set({status:'completed',winnerId:null,winnerUid:null,forfeit:true,forfeitReason:'double-attendance-timeout',completionReason:'double-attendance-timeout',forfeitedUids:Array.isArray(after.participantIds) ? after.participantIds : [],bye:true,byeReason:'Les deux joueurs étaient absents après cinq minutes.',seriesScore:{p1:0,p2:0},gameIds:admin.firestore.FieldValue.arrayUnion(event.params.matchId),currentGameId:null,activeGameId:null,completedAt:admin.firestore.FieldValue.serverTimestamp(),updatedAt:admin.firestore.FieldValue.serverTimestamp()},{merge:true});
     return;
   }
   const participants = Array.isArray(after.participantIds) ? after.participantIds.filter(uid => typeof uid === 'string') : [];
@@ -1561,7 +1562,7 @@ exports.resolveMopyonAttendanceTimeouts = onSchedule({region: 'us-central1', sch
     if (botIds.length === 1) {
       transaction.set(document.ref, {...timeoutForfeitUpdates(winnerId, forfeitedUid),winnerUid,winnerName:String(participantNames[winnerId] || 'Joueur'),forfeitedName:String(participantNames[forfeitedUid] || 'Joueur')}, {merge: true});
     } else {
-      transaction.set(document.ref, {...doubleAttendanceUpdates(String(data.nextMatchId || data.followingMatchId || '')),winnerUid:null,winnerName:null}, {merge: true});
+      transaction.set(document.ref, {...doubleAttendanceUpdates(String(data.nextMatchId || data.followingMatchId || ''), participants),winnerUid:null,winnerName:null}, {merge: true});
     }
   })));
   const dueSnapshot = await db.collection('matches').where('attendanceDeadlineAt', '<=', now).limit(100).get();
@@ -1570,13 +1571,17 @@ exports.resolveMopyonAttendanceTimeouts = onSchedule({region: 'us-central1', sch
     if (!snapshot.exists) return;
     const data = snapshot.data();
     const status = String(data.status || data.state || '').toLowerCase();
-    if (status !== 'waiting-opponent' || data.winnerId || data.draw || data.kind === 'series' || (!matchGameIsMopyon(data) && !matchGameIsDomino(data))) return;
+    if (!['scheduled', 'waiting-opponent', 'preview'].includes(status) || data.winnerId || data.draw || data.kind === 'series' || (!matchGameIsMopyon(data) && !matchGameIsDomino(data))) return;
     const deadlineMillis = timestampMillis(data.attendanceDeadlineAt);
     if (!Number.isFinite(deadlineMillis) || deadlineMillis > Date.now()) return;
     const participants = Array.isArray(data.participantIds) ? data.participantIds.filter(id => typeof id === 'string') : [];
     if (participants.length !== 2) return;
     const presence = data.presence && typeof data.presence === 'object' ? data.presence : {};
     const botIds = participants.filter(uid => isBotParticipant(data, uid));
+    // A bot-only manche is owned by the simulation orchestrator. Never put it
+    // through attendance resolution: bots are permanently present and must be
+    // simulated automatically, without a five-minute gate.
+    if (botIds.length === 2) return;
     // Simulated opponents are always considered present; only real players
     // must check in during the five-minute attendance window.
     const presentIds = [...new Set([...participants.filter(uid => Number.isFinite(timestampMillis(presence[uid]))), ...botIds])];
@@ -1602,7 +1607,7 @@ exports.resolveMopyonAttendanceTimeouts = onSchedule({region: 'us-central1', sch
       }
       // Two real players absent: both are eliminated and the next bracket
       // opponent advances by bye.
-      transaction.set(document.ref, doubleAttendanceUpdates(String(data.nextMatchId || data.followingMatchId || '')), {merge: true});
+      transaction.set(document.ref, doubleAttendanceUpdates(String(data.nextMatchId || data.followingMatchId || ''), participants), {merge: true});
       return;
     }
     if (presentIds.length !== 1) return;
