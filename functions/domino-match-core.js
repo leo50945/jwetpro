@@ -47,7 +47,16 @@ const orientTile = (tile, side, boardTiles) => {
   return tile.a === right ? {...tile} : {id:tile.id, a:tile.b, b:tile.a};
 };
 
-const starter = (hands, participantIds) => {
+const starter = (hands, participantIds, preferredUid = '') => {
+  if (preferredUid && participantIds.includes(preferredUid) && hands[preferredUid]?.length) {
+    const preferredHand = hands[preferredUid];
+    for (let value = MAX_PIP; value >= 0; value -= 1) {
+      const double = preferredHand.find(tile => tile.id === tileId(value, value));
+      if (double) return {uid:preferredUid, tileId:double.id};
+    }
+    const best = preferredHand.reduce((selected, tile) => !selected || tile.a + tile.b > selected.points ? {uid:preferredUid, tileId:tile.id, points:tile.a + tile.b} : selected, null);
+    if (best) return best;
+  }
   for (let value = MAX_PIP; value >= 0; value -= 1) {
     const id = tileId(value, value);
     const uid = participantIds.find(playerId => hands[playerId].some(tile => tile.id === id));
@@ -61,13 +70,13 @@ const starter = (hands, participantIds) => {
   return selected;
 };
 
-const createGameState = (participantIds, random = Math.random) => {
+const createGameState = (participantIds, random = Math.random, preferredUid = '') => {
   if (!Array.isArray(participantIds) || participantIds.length !== 2 || participantIds.some(uid => typeof uid !== 'string' || !uid)) {
     throw new Error('invalid-participants');
   }
   const deck = shuffled(createSet(), random);
   const hands = {[participantIds[0]]:deck.slice(0, 7), [participantIds[1]]:deck.slice(7, 14)};
-  const opening = starter(hands, participantIds);
+  const opening = starter(hands, participantIds, preferredUid);
   return {
     participantIds:[...participantIds],
     hands,

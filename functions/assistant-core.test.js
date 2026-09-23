@@ -56,7 +56,7 @@ test('la base integree contient les sources essentielles bilingues', () => {
     assert.ok(item.titleFr && item.titleHt && item.contentFr && item.contentHt);
   });
   const knowledgeIds = new Set(BUILT_IN_KNOWLEDGE.map(item => item.id));
-  ['account-creation-guide', 'championship-format', 'championship-rewards', 'championship-lifecycle', 'match-series-and-replay', 'match-attendance', 'training-modes', 'ranking-points-levels', 'public-archives'].forEach(id => assert.ok(knowledgeIds.has(id)));
+  ['account-creation-guide', 'championship-format', 'championship-rewards', 'championship-lifecycle', 'match-series-and-replay', 'match-attendance', 'match-incidents-and-recovery', 'training-modes', 'ranking-points-levels', 'public-archives'].forEach(id => assert.ok(knowledgeIds.has(id)));
   assert.match(BUILT_IN_KNOWLEDGE.find(item => item.id === 'account-creation-guide').contentFr, /ouverte à tout le monde/i);
   assert.match(BUILT_IN_KNOWLEDGE.find(item => item.id === 'account-creation-guide').contentFr, /aucune vérification d’e-mail/i);
   assert.match(BUILT_IN_KNOWLEDGE.find(item => item.id === 'match-series-and-replay').contentFr, /une seule ligne/i);
@@ -69,6 +69,9 @@ test('la base integree contient les sources essentielles bilingues', () => {
   assert.match(rewards, /25 HTG/i);
   assert.match(rewards, /prochain championnat publié/i);
   assert.match(rewards, /Mopyon ou Domino/i);
+  const incidents = BUILT_IN_KNOWLEDGE.find(item => item.id === 'match-incidents-and-recovery').contentFr;
+  assert.match(incidents, /60 secondes/i);
+  assert.match(incidents, /panne générale/i);
 });
 
 test('accepte les demandes JWETPRO en francais et en kreyol', () => {

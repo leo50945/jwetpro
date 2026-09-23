@@ -8,10 +8,13 @@ const {createAssistantService, callGroqChat, BUILT_IN_KNOWLEDGE, cleanText, dete
 const {BOARD_CELLS, isValidBoard, applyMove, chooseBotMove} = require('./mopyon-match-core');
 const {createGameState: createDominoGameState, applyAction: applyDominoAction, applyTimeout: applyDominoTimeout, playBotAction: playSingleDominoBotAction, publicState: publicDominoState} = require('./domino-match-core');
 const {roundKey:dominoRoundKey,victoryPoints:dominoVictoryPoints,playerLevelName,eliminationCoupon}=require('./domino-rewards-core');
+const {starterUidForGame} = require('./match-start-rules');
 
 admin.initializeApp();
 const groqApiKey = defineSecret('GROQ_API_KEY');
 const smartCutTicketSecret = defineSecret('SMARTCUT_TICKET_INTEGRATION_SECRET');
+const rapfiServiceToken = defineSecret('RAPFI_SERVICE_TOKEN');
+const RAPFI_SERVICE_URL = 'https://jwetpro-rapfi-307157893690.us-central1.run.app/move';
 const db = admin.firestore();
 const assistantService = createAssistantService({admin, db});
 Object.assign(exports, require('./jwetpro-tickets')({ admin, db, integrationSecret: smartCutTicketSecret }));
@@ -20,6 +23,23 @@ Object.assign(exports, require('./social-system')({admin,db}));
 const communityPrograms = require('./community-programs')({admin,db});
 Object.assign(exports, communityPrograms.functions);
 
+const chooseChampionshipBotMove = async (board, symbol) => {
+  try {
+    const response = await fetch(RAPFI_SERVICE_URL, {
+      method: 'POST',
+      headers: {'content-type': 'application/json', authorization: `Bearer ${rapfiServiceToken.value()}`},
+      body: JSON.stringify({board, symbol}),
+      signal: AbortSignal.timeout(10000)
+    });
+    if (!response.ok) throw new Error(`rapfi-http-${response.status}`);
+    const payload = await response.json();
+    if (Number.isInteger(payload.move) && board[payload.move] === '') return payload.move;
+    throw new Error('rapfi-invalid-move');
+  } catch (error) {
+    console.error('Rapfi service unavailable; using emergency fallback:', error?.message || error);
+    return chooseBotMove(board, symbol);
+  }
+};
 const isAdmin = async (context) => {
   if (!context.auth) return false;
   if (context.auth.token?.admin === true) return true;
@@ -54,7 +74,10 @@ exports.suggestCoordinatorReply = onCall({secrets: [groqApiKey], region: 'us-cen
   let reply;
   try {
     const {text} = await callGroqChat({
-      userPrompt: `Tu t’appelles Jean Estime et tu es l’assistant officiel de JWETPRO, une plateforme haïtienne de championnats de Mopyon et Domino. Rédige une réponse courte, claire, chaleureuse et professionnelle au dernier message de l'utilisateur. Ne promets jamais une action que tu ne peux pas confirmer. Si la question concerne un paiement, un résultat, une sanction ou un litige, indique que le dossier doit être vérifié par l'équipe. Réponds en français, sauf si le dernier message est clairement en kreyòl haïtien. Retourne uniquement le texte de la réponse, sans titre ni guillemets.\n\nConversation:\n${messages.map((message) => `${message.author}: ${message.text}`).join('\n')}`,
+      userPrompt: `Tu t’appelles Jean Estime et tu es l’assistant officiel de JWETPRO, une plateforme haïtienne de championnats de Mopyon et Domino. Rédige une réponse courte, claire, chaleureuse et professionnelle au dernier message de l'utilisateur. Ne promets jamais une action que tu ne peux pas confirmer. Si la question concerne un paiement, un résultat, une sanction ou un litige, indique que le dossier doit être vérifié par l'équipe. Réponds en français, sauf si le dernier message est clairement en kreyòl haïtien. Retourne uniquement le texte de la réponse, sans titre ni guillemets.
+
+Conversation:
+${messages.map((message) => `${message.author}: ${message.text}`).join('\n')}`,
       maxTokens: 500
     });
     reply = text.trim();
@@ -240,6 +263,7 @@ exports.startCommunitySimulation = onCall({secrets:[groqApiKey],region:'us-centr
   const now = Date.now();
   const requestedObservedSince = Number(request.data?.observedSince);
   const observedSince = Number.isFinite(requestedObservedSince) ? Math.max(now - 60 * 1000,Math.min(requestedObservedSince,now)) : now - 5000;
+  const contextHint = cleanText(request.data?.contextHint,40).toLowerCase();
   if (await hasRealGroupMessageSince(observedSince)) return {started:false,reason:'human-conversation'};
 
   const stateRef = db.collection('communitySimulation').doc('state');
@@ -280,7 +304,7 @@ exports.startCommunitySimulation = onCall({secrets:[groqApiKey],region:'us-centr
   });
   if (lease.blocked) return {started:false,reason:lease.reason,retryAfterMs:lease.retryAfterMs};
 
-  const scheduled = await communityPrograms.prepareProgramTimeline(today,lease.dailyProgramConversationKeys);
+  const scheduled = await communityPrograms.prepareProgramTimeline(today,lease.dailyProgramConversationKeys,contextHint);
   if (scheduled.programFound) {
     if (!scheduled.timeline.length) {
       await stateRef.set({active:false,lastEndedAt:admin.firestore.FieldValue.serverTimestamp()},{merge:true});
@@ -331,7 +355,17 @@ exports.startCommunitySimulation = onCall({secrets:[groqApiKey],region:'us-centr
 
   const usedToday = new Set(lease.dailyScenarioIds);
   const usedYesterday = new Set(lease.previousDayScenarioIds);
-  let scenarioCandidates = SIMULATION_SCENARIOS.filter(scenario => !usedToday.has(scenario.id) && !usedYesterday.has(scenario.id));
+  const contextualScenarioIds = {
+    'live-match': ['watch-live','good-luck','close-game'],
+    'championship': ['mopyon-who-joins','calendar-check','good-luck'],
+    'domino': ['domino-practice','domino-double','domino-blocked'],
+    'mopyon': ['mopyon-who-joins','mopyon-center','defense-tip'],
+    'replay': ['replay-learning','close-game','comeback'],
+    'welcome': ['first-time','newcomer-welcome','quick-hello']
+  };
+  const contextualPool = contextualScenarioIds[contextHint];
+  let scenarioCandidates = SIMULATION_SCENARIOS.filter(scenario => !usedToday.has(scenario.id) && !usedYesterday.has(scenario.id) && (!contextualPool || contextualPool.includes(scenario.id)));
+  if (!scenarioCandidates.length && contextualPool) scenarioCandidates = SIMULATION_SCENARIOS.filter(scenario => !usedToday.has(scenario.id) && contextualPool.includes(scenario.id));
   if (!scenarioCandidates.length) scenarioCandidates = SIMULATION_SCENARIOS.filter(scenario => !usedToday.has(scenario.id));
   const scenario = scenarioCandidates[Math.floor(Math.random() * scenarioCandidates.length)];
   if (!scenario) {
@@ -393,8 +427,13 @@ exports.startCommunitySimulation = onCall({secrets:[groqApiKey],region:'us-centr
   return {started:messagesPosted > 0,messagesPosted,scenarioId:scenario.id,retryAfterMs:SIMULATION_COOLDOWN_MS+5000};
 });
 
-const MATCH_ACCESS_WINDOW_MS = 15 * 60 * 1000;
+// The official room opens only five minutes before the scheduled start.  The
+// server remains authoritative; clients may display a countdown but cannot
+// extend this window.
+const MATCH_ACCESS_WINDOW_MS = 0;
 const OPPONENT_GRACE_PERIOD_MS = 5 * 60 * 1000;
+const MOPYON_TURN_MS = 30 * 1000;
+const DISCONNECT_GRACE_PERIOD_MS = 60 * 1000;
 const MATCH_DURATION_MS = 90 * 60 * 1000;
 const DOMINO_OPENING_MS = 5000;
 const DOMINO_BOT_MIN_DELAY_MS = 1200;
@@ -442,7 +481,7 @@ const isBotParticipant = (data, uid, realUid = '') => {
   if (record?.real === false) return true;
   if (record?.real === true) return false;
   if (record && (record.isBot === true || record.bot === true || record.simulated === true || record.isSimulation === true || ['bot', 'simulated', 'simulation'].includes(String(record.type || record.role || '').toLowerCase()))) return true;
-  return /^(?:bot|sim(?:ulated|ulation)?)[_-]/i.test(uid) || (data.simulation === true && uid !== realUid);
+  return /^(?:bot|sim(?:ulated|ulation)?)[_-]/i.test(uid);
 };
 const timeoutForfeitUpdates = (winnerId, forfeitedUid) => ({
   status: 'completed',
@@ -452,6 +491,33 @@ const timeoutForfeitUpdates = (winnerId, forfeitedUid) => ({
   forfeitReason: 'attendance-timeout',
   completionReason: 'attendance-timeout',
   forfeitedUid,
+  currentTurnUid: null,
+  completedAt: admin.firestore.FieldValue.serverTimestamp(),
+  updatedAt: admin.firestore.FieldValue.serverTimestamp()
+});
+const turnTimeoutForfeitUpdates = (winnerId, forfeitedUid) => ({
+  status: 'completed',
+  winnerId,
+  draw: false,
+  forfeit: true,
+  forfeitReason: 'turn-timeout',
+  completionReason: 'turn-timeout',
+  forfeitedUid,
+  currentTurnUid: null,
+  turnDeadlineAt: admin.firestore.FieldValue.delete(),
+  completedAt: admin.firestore.FieldValue.serverTimestamp(),
+  updatedAt: admin.firestore.FieldValue.serverTimestamp()
+});
+const doubleAttendanceUpdates = (nextMatchId = '') => ({
+  status: 'completed',
+  winnerId: null,
+  draw: false,
+  forfeit: true,
+  forfeitReason: 'double-attendance-timeout',
+  completionReason: 'double-attendance-timeout',
+  bye: true,
+  byeReason: 'Les deux joueurs étaient absents après cinq minutes; l’adversaire suivant avance par bye.',
+  ...(nextMatchId ? {byeNextMatchId: nextMatchId} : {}),
   currentTurnUid: null,
   completedAt: admin.firestore.FieldValue.serverTimestamp(),
   updatedAt: admin.firestore.FieldValue.serverTimestamp()
@@ -473,8 +539,9 @@ const participantDisplayName = (data, uid) => {
 const childGameFields = (series, seriesId, participants, gameId, gameNumber, realUid = '') => {
   const copiedFields = ['participantNames', 'playerNames', 'participantSocialIds', 'participants', 'players', 'player1', 'player2', 'botParticipantIds', 'simulatedParticipantIds', 'botParticipantId', 'simulatedParticipantId', 'participantTypes', 'simulation', 'simulated', 'isSimulation', 'simulationId', 'simulationRunId', 'championshipId', 'tournamentId', 'competitionId', 'championshipName', 'championshipTitle', 'stage', 'round', 'roundLabel', 'phase', 'bracketSlot', 'visibility'];
   const inherited = Object.fromEntries(copiedFields.filter(key => series[key] !== undefined).map(key => [key, series[key]]));
-  const firstParticipant = realUid && participants.includes(realUid) ? realUid : participants[0];
+  const firstParticipant = starterUidForGame(participants, gameNumber, seriesId) || (realUid && participants.includes(realUid) ? realUid : participants[0]);
   const secondParticipant = participants.find(uid => uid !== firstParticipant);
+  const gameStartAt = admin.firestore.Timestamp.now();
   return {
     ...inherited,
     kind: 'game',
@@ -483,7 +550,8 @@ const childGameFields = (series, seriesId, participants, gameId, gameNumber, rea
     gameNumber,
     number: series.number || '',
     participantIds: participants,
-    startAt: admin.firestore.Timestamp.now(),
+    startAt: gameStartAt,
+    attendanceDeadlineAt: admin.firestore.Timestamp.fromMillis(gameStartAt.toMillis() + OPPONENT_GRACE_PERIOD_MS),
     status: 'scheduled',
     board: Array(BOARD_CELLS).fill(''),
     moves: [],
@@ -494,7 +562,7 @@ const childGameFields = (series, seriesId, participants, gameId, gameNumber, rea
   };
 };
 
-exports.joinMopyonMatch = onCall({region: 'us-central1', cors: true}, async request => {
+exports.joinMopyonMatch = onCall({region: 'us-central1', cors: true, cpu: 0.5, maxInstances: 1, secrets: [rapfiServiceToken]}, async request => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'Authentication is required.');
   const matchId = String(request.data?.matchId || '');
   if (!/^[A-Za-z0-9_-]{1,150}$/.test(matchId)) throw new HttpsError('invalid-argument', 'A valid match id is required.');
@@ -504,11 +572,16 @@ exports.joinMopyonMatch = onCall({region: 'us-central1', cors: true}, async requ
     const snapshot = await transaction.get(requestedReference);
     if (!snapshot.exists) throw new HttpsError('not-found', 'Match not found.');
     const data = snapshot.data();
+    const championshipSnapshot = data.championshipId ? await transaction.get(db.collection('championships').doc(String(data.championshipId))) : null;
+    const championshipData = championshipSnapshot?.exists ? championshipSnapshot.data() : {};
     if (data.kind !== 'series') return matchId;
     if (!matchGameIsMopyon(data)) throw new HttpsError('failed-precondition', 'This is not a Mopyon match.');
     const participants = requireMatchParticipant(data, request.auth.uid);
     const opponentId = participants.find(id => id !== request.auth.uid);
-    if (!isBotParticipant(data, opponentId, request.auth.uid)) throw new HttpsError('failed-precondition', 'This confrontation is waiting for its first published game.');
+    const scheduledStart = championshipData.startAt || championshipData.startDate || data.startAt || data.scheduledAt || data.date;
+    const scheduledStartMillis = timestampMillis(scheduledStart);
+    if (!Number.isFinite(scheduledStartMillis)) throw new HttpsError('failed-precondition', 'The match start time has not been published.');
+    if (Date.now() < scheduledStartMillis) throw new HttpsError('failed-precondition', 'The match is not open yet.');
     if (data.winnerId || data.winnerUid || data.draw || String(data.status || '').toLowerCase() === 'completed') throw new HttpsError('failed-precondition', 'This confrontation is already over.');
 
     const existingGameId = String(data.currentGameId || data.activeGameId || data.gameId || '');
@@ -552,7 +625,7 @@ exports.joinMopyonMatch = onCall({region: 'us-central1', cors: true}, async requ
     const startMillis = timestampMillis(startAt);
     if (!Number.isFinite(startMillis)) throw new HttpsError('failed-precondition', 'The match start time has not been published.');
     const now = Date.now();
-    if (now < startMillis - MATCH_ACCESS_WINDOW_MS) throw new HttpsError('failed-precondition', 'The match room opens 15 minutes before kickoff.');
+    if (now < startMillis) throw new HttpsError('failed-precondition', 'The match is not open yet.');
     if (now > startMillis + MATCH_DURATION_MS && !MOPYON_LIVE_STATUSES.has(status)) throw new HttpsError('failed-precondition', 'The match access window has ended.');
 
     let board = isValidBoard(data.board) ? data.board : Array(BOARD_CELLS).fill('');
@@ -564,7 +637,7 @@ exports.joinMopyonMatch = onCall({region: 'us-central1', cors: true}, async requ
     const presence = data.presence && typeof data.presence === 'object' ? {...data.presence} : {};
     const joinedAt = admin.firestore.Timestamp.now();
     const opponentId = participants.find(id => id !== request.auth.uid);
-    const opponentIsBot = isBotParticipant(data, opponentId, request.auth.uid);
+    const opponentIsBot = isBotParticipant(data, opponentId, request.auth.uid) && !data.presence?.[opponentId];
     const opponentPresenceMillis = timestampMillis(presence[opponentId]);
     const waitingSinceMillis = timestampMillis(data.waitingForOpponentSince);
     const deadlineMillis = timestampMillis(data.attendanceDeadlineAt);
@@ -602,7 +675,7 @@ exports.joinMopyonMatch = onCall({region: 'us-central1', cors: true}, async requ
       // If the simulated player has the opening turn, play it immediately so the real player
       // enters an active board instead of waiting for an account that can never authenticate.
       if (currentTurnUid === opponentId && !data.winnerId && !data.draw) {
-        const botIndex = chooseBotMove(board, playerSymbols[opponentId]);
+        const botIndex = await chooseChampionshipBotMove(board, playerSymbols[opponentId]);
         if (botIndex >= 0) {
           const botResult = applyMove(board, botIndex, playerSymbols[opponentId]);
           board = botResult.board;
@@ -621,12 +694,17 @@ exports.joinMopyonMatch = onCall({region: 'us-central1', cors: true}, async requ
       }
     } else if (Number.isFinite(opponentPresenceMillis)) {
       updates.status = 'ongoing';
+      // A real opponent joining overrides stale bot metadata inherited from a simulation.
+      updates.botMatch = false;
+      updates.botParticipantId = admin.firestore.FieldValue.delete();
       updates.waitingForOpponentSince = admin.firestore.FieldValue.delete();
       updates.attendanceDeadlineAt = admin.firestore.FieldValue.delete();
       updates.waitingForOpponentUid = admin.firestore.FieldValue.delete();
       if (!data.startedAt) updates.startedAt = admin.firestore.FieldValue.serverTimestamp();
     } else {
-      const waitingSince = Number.isFinite(waitingSinceMillis) ? data.waitingForOpponentSince : joinedAt;
+      const waitingSince = Number.isFinite(waitingSinceMillis)
+        ? data.waitingForOpponentSince
+        : Number.isFinite(startMillis) ? admin.firestore.Timestamp.fromMillis(startMillis) : joinedAt;
       const attendanceDeadlineAt = Number.isFinite(deadlineMillis)
         ? data.attendanceDeadlineAt
         : admin.firestore.Timestamp.fromMillis(timestampMillis(waitingSince) + OPPONENT_GRACE_PERIOD_MS);
@@ -636,13 +714,25 @@ exports.joinMopyonMatch = onCall({region: 'us-central1', cors: true}, async requ
       updates.waitingForOpponentUid = opponentId;
     }
 
+    if (updates.status === 'ongoing' && !updates.winnerId && !updates.draw) {
+      const effectiveData = {...data, ...updates};
+      const activeTurnUid = updates.currentTurnUid || currentTurnUid;
+      if (activeTurnUid && !isBotParticipant(effectiveData, activeTurnUid, request.auth.uid)) {
+        const existingTurnDeadline = timestampMillis(data.turnDeadlineAt);
+        updates.turnDeadlineAt = data.currentTurnUid === activeTurnUid && Number.isFinite(existingTurnDeadline) && existingTurnDeadline > now
+          ? data.turnDeadlineAt
+          : admin.firestore.Timestamp.fromMillis(now + MOPYON_TURN_MS);
+      } else {
+        updates.turnDeadlineAt = admin.firestore.FieldValue.delete();
+      }
+    }
     transaction.set(reference, updates, {merge: true});
     const responseDeadline = timestampMillis(updates.attendanceDeadlineAt);
     return {matchId, status: updates.status, startsAt: startMillis, attendanceDeadlineAt: Number.isFinite(responseDeadline) ? responseDeadline : null, botMatch: opponentIsBot};
   });
 });
 
-exports.submitMopyonMove = onCall({region: 'us-central1', cors: true}, async request => {
+exports.submitMopyonMove = onCall({region: 'us-central1', cors: true, secrets: [rapfiServiceToken]}, async request => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'Authentication is required.');
   const matchId = String(request.data?.matchId || '');
   const index = request.data?.index;
@@ -661,6 +751,12 @@ exports.submitMopyonMove = onCall({region: 'us-central1', cors: true}, async req
     const status = String(data.status || data.state || '').toLowerCase();
     if (!MOPYON_LIVE_STATUSES.has(status) || data.winnerId || data.draw) throw new HttpsError('failed-precondition', 'The match is not in progress.');
     if (data.currentTurnUid !== request.auth.uid) throw new HttpsError('failed-precondition', 'It is not your turn.');
+    const turnDeadlineMillis = timestampMillis(data.turnDeadlineAt);
+    if (Number.isFinite(turnDeadlineMillis) && Date.now() >= turnDeadlineMillis) {
+      const timeoutWinnerId = participants.find(uid => uid !== request.auth.uid);
+      transaction.set(reference, turnTimeoutForfeitUpdates(timeoutWinnerId, request.auth.uid), {merge: true});
+      return {accepted: false, won: false, lost: true, draw: false, forfeit: true, reason: 'turn-timeout'};
+    }
     if (!isValidBoard(data.board)) throw new HttpsError('data-loss', 'The official board is invalid.');
     const symbol = data.playerSymbols?.[request.auth.uid] || (participants[0] === request.auth.uid ? 'X' : 'O');
 
@@ -672,7 +768,7 @@ exports.submitMopyonMove = onCall({region: 'us-central1', cors: true}, async req
     }
 
     const opponentId = participants.find(id => id !== request.auth.uid);
-    const opponentIsBot = isBotParticipant(data, opponentId, request.auth.uid);
+    const opponentIsBot = isBotParticipant(data, opponentId, request.auth.uid) && !data.presence?.[opponentId];
     const moves = Array.isArray(data.moves) ? data.moves.slice(-399) : [];
     moves.push({index, symbol, playerId: request.auth.uid, createdAt: admin.firestore.Timestamp.now()});
     let nextBoard = result.board;
@@ -685,7 +781,7 @@ exports.submitMopyonMove = onCall({region: 'us-central1', cors: true}, async req
     // impersonates the bot and cannot select or alter its move.
     if (opponentIsBot && !winnerId && !draw) {
       const botSymbol = data.playerSymbols?.[opponentId] || (participants[0] === opponentId ? 'X' : 'O');
-      const botIndex = chooseBotMove(nextBoard, botSymbol);
+      const botIndex = await chooseChampionshipBotMove(nextBoard, botSymbol);
       if (botIndex >= 0) {
         const botResult = applyMove(nextBoard, botIndex, botSymbol);
         nextBoard = botResult.board;
@@ -706,16 +802,47 @@ exports.submitMopyonMove = onCall({region: 'us-central1', cors: true}, async req
       status: winnerId || draw ? 'completed' : 'ongoing',
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     };
-    if (winnerId || draw) updates.completedAt = admin.firestore.FieldValue.serverTimestamp();
+    if (winnerId || draw) {
+      updates.completedAt = admin.firestore.FieldValue.serverTimestamp();
+      updates.turnDeadlineAt = admin.firestore.FieldValue.delete();
+    } else {
+      const effectiveData = {...data, ...updates};
+      updates.turnDeadlineAt = nextTurnUid && !isBotParticipant(effectiveData, nextTurnUid, request.auth.uid)
+        ? admin.firestore.Timestamp.fromMillis(Date.now() + MOPYON_TURN_MS)
+        : admin.firestore.FieldValue.delete();
+    }
     transaction.update(reference, updates);
     return {accepted: true, won: winnerId === request.auth.uid, lost: winnerId === opponentId, draw};
+  });
+});
+
+exports.claimMopyonTurnTimeout = onCall({region: 'us-central1', cors: true}, async request => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Authentication is required.');
+  const matchId = String(request.data?.matchId || '');
+  if (!/^[A-Za-z0-9_-]{1,150}$/.test(matchId)) throw new HttpsError('invalid-argument', 'A valid match id is required.');
+  const reference = db.collection('matches').doc(matchId);
+  return db.runTransaction(async transaction => {
+    const snapshot = await transaction.get(reference);
+    if (!snapshot.exists) throw new HttpsError('not-found', 'Match not found.');
+    const data = snapshot.data();
+    if (!matchGameIsMopyon(data) || data.kind === 'series') throw new HttpsError('failed-precondition', 'This is not a Mopyon manche.');
+    const participants = requireMatchParticipant(data, request.auth.uid);
+    const status = String(data.status || data.state || '').toLowerCase();
+    if (!MOPYON_LIVE_STATUSES.has(status) || data.winnerId || data.draw) throw new HttpsError('failed-precondition', 'The manche is not active.');
+    const currentTurnUid = String(data.currentTurnUid || '');
+    if (!currentTurnUid || isBotParticipant(data, currentTurnUid, request.auth.uid)) throw new HttpsError('failed-precondition', 'This turn is controlled by the simulated player.');
+    const deadlineMillis = timestampMillis(data.turnDeadlineAt);
+    if (!Number.isFinite(deadlineMillis) || Date.now() < deadlineMillis) throw new HttpsError('failed-precondition', 'The 30-second turn period has not elapsed yet.');
+    const winnerId = participants.find(uid => uid !== currentTurnUid);
+    transaction.set(reference, turnTimeoutForfeitUpdates(winnerId, currentTurnUid), {merge: true});
+    return {matchId, winnerId, forfeitedUid: currentTurnUid, forfeit: true, reason: 'turn-timeout'};
   });
 });
 
 // A series is the official match; its child game documents are only its manches. Advancing is a
 // separate, explicit action so players can read the result before opening the following manche.
 // The game id is recorded on the parent in the same transaction, making repeated clicks harmless.
-exports.advanceMopyonSeries = onCall({region: 'us-central1', cors: true}, async request => {
+const advanceMopyonSeriesHandler = async request => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'Authentication is required.');
   const gameId = String(request.data?.gameId || '');
   if (!/^[A-Za-z0-9_-]{1,150}$/.test(gameId)) throw new HttpsError('invalid-argument', 'A valid game id is required.');
@@ -757,6 +884,8 @@ exports.advanceMopyonSeries = onCall({region: 'us-central1', cors: true}, async 
       const officialWinnerUid = String(series.winnerUid || series.winnerId || winnerUid);
       const winnerName = participantDisplayName(series, officialWinnerUid);
       if (!seriesAlreadyComplete || !alreadyRecorded) {
+        const attendanceForfeit = game.forfeitReason === 'attendance-timeout' || game.completionReason === 'attendance-timeout';
+        const forfeitedUid = attendanceForfeit ? String(game.forfeitedUid || seriesParticipants.find(uid => uid !== officialWinnerUid) || '') : '';
         transaction.set(seriesReference, {
           gameIds,
           seriesScore: score,
@@ -764,6 +893,7 @@ exports.advanceMopyonSeries = onCall({region: 'us-central1', cors: true}, async 
           winnerUid: officialWinnerUid,
           winnerId: officialWinnerUid,
           winnerName,
+          ...(attendanceForfeit ? {forfeit: true, forfeitReason: 'attendance-timeout', completionReason: 'attendance-timeout', forfeitedUid, forfeitedName: participantDisplayName(series, forfeitedUid)} : {}),
           currentGameId: null,
           activeGameId: null,
           completedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -798,8 +928,30 @@ exports.advanceMopyonSeries = onCall({region: 'us-central1', cors: true}, async 
     }, {merge: true});
     return {seriesId, seriesComplete: false, nextGameId, seriesScore: score, winnerUid: null};
   });
-});
+};
+exports.advanceMopyonSeries = onCall({region: 'us-central1', cors: true}, advanceMopyonSeriesHandler);
 
+exports.autoAdvanceCompletedMopyonGame = onDocumentWritten({
+  document:'matches/{matchId}',
+  region:'us-central1',
+  retry:true
+}, async event => {
+  const before = event.data?.before?.exists ? event.data.before.data() : null;
+  const after = event.data?.after?.exists ? event.data.after.data() : null;
+  if (!after || after.kind === 'series' || !matchGameIsMopyon(after) || !after.seriesId) return;
+  const completed = Boolean(after.winnerId) || after.draw === true;
+  const doubleForfeit = after.forfeitReason === 'double-attendance-timeout' || after.completionReason === 'double-attendance-timeout';
+  const wasCompleted = Boolean(before?.winnerId) || before?.draw === true || before?.forfeitReason === 'double-attendance-timeout';
+  if ((!completed && !doubleForfeit) || wasCompleted) return;
+  if (doubleForfeit) {
+    await db.collection('matches').doc(String(after.seriesId)).set({status:'completed',winnerId:null,winnerUid:null,forfeit:true,forfeitReason:'double-attendance-timeout',completionReason:'double-attendance-timeout',forfeitedUids:Array.isArray(after.participantIds) ? after.participantIds : [],bye:true,byeReason:'Les deux joueurs étaient absents après cinq minutes.',seriesScore:{p1:0,p2:0},updatedAt:admin.firestore.FieldValue.serverTimestamp()},{merge:true});
+    return;
+  }
+  const participants = Array.isArray(after.participantIds) ? after.participantIds.filter(uid => typeof uid === 'string') : [];
+  if (participants.length !== 2) return;
+  const actorUid = participants.find(uid => !isBotParticipant(after, uid, participants.find(other => other !== uid) || '')) || participants[0];
+  await advanceMopyonSeriesHandler({data:{gameId:event.params.matchId},auth:{uid:actorUid}});
+});
 const dominoStateReference = matchId => db.collection('dominoMatchStates').doc(matchId);
 const publicDominoEvents = events => events.map(event => {
   const visible = {type:event.type, playerId:event.playerId, actionNumber:event.actionNumber, automated:event.automated === true};
@@ -825,6 +977,7 @@ const dominoChildGameFields = (series, seriesId, participants, gameNumber, state
     ...inherited,
     kind:'game',seriesId,seriesFormat:'bo3',game:'domino',type:'domino',gameNumber,
     number:series.number || '',participantIds:participants,startAt,
+    attendanceDeadlineAt: admin.firestore.Timestamp.fromMillis(timestampMillis(startAt) + OPPONENT_GRACE_PERIOD_MS),
     status:'scheduled',presence:{},moves:[],...publicDominoState(state),board:[],
     createdAt:admin.firestore.FieldValue.serverTimestamp(),updatedAt:admin.firestore.FieldValue.serverTimestamp()
   };
@@ -837,7 +990,7 @@ const createDominoGameInTransaction = async (transaction, seriesReference, serie
   const stateReference = dominoStateReference(gameId);
   const [gameSnapshot,stateSnapshot] = await Promise.all([transaction.get(gameReference),transaction.get(stateReference)]);
   if (!gameSnapshot.exists || !stateSnapshot.exists) {
-    const state = createDominoGameState(participants);
+    const state = createDominoGameState(participants, Math.random, starterUidForGame(participants, gameNumber, seriesReference.id));
     if (!gameSnapshot.exists) {
       transaction.create(gameReference,dominoChildGameFields(series,seriesReference.id,participants,gameNumber,state,startAt));
     } else {
@@ -903,9 +1056,15 @@ exports.joinDominoMatch = onCall({region:'us-central1',cors:true},async request=
     const snapshot=await transaction.get(requestedReference);
     if(!snapshot.exists) throw new HttpsError('not-found','Match not found.');
     const series=snapshot.data();
+    const championshipSnapshot=series.championshipId?await transaction.get(db.collection('championships').doc(String(series.championshipId))):null;
+    const championshipData=championshipSnapshot?.exists?championshipSnapshot.data():{};
     if(series.kind!=='series') return requestedId;
     if(!matchGameIsDomino(series)) throw new HttpsError('failed-precondition','This is not a Domino match.');
     const participants=requireMatchParticipant(series,request.auth.uid);
+    const scheduledStart=championshipData.startAt||championshipData.startDate||series.startAt||series.scheduledAt||series.date;
+    const scheduledStartMillis=timestampMillis(scheduledStart);
+    if(!Number.isFinite(scheduledStartMillis)) throw new HttpsError('failed-precondition','The match start time has not been published.');
+    if(Date.now()<scheduledStartMillis) throw new HttpsError('failed-precondition','The match is not open yet.');
     if(series.winnerId||series.winnerUid||String(series.status||'').toLowerCase()==='completed') throw new HttpsError('failed-precondition','This confrontation is already over.');
     const existing=String(series.currentGameId||series.activeGameId||'');
     if(existing){
@@ -935,14 +1094,14 @@ exports.joinDominoMatch = onCall({region:'us-central1',cors:true},async request=
     const startMillis=timestampMillis(data.startAt||data.scheduledAt||data.date);
     if(!Number.isFinite(startMillis)) throw new HttpsError('failed-precondition','The match start time has not been published.');
     const now=Date.now();
-    if(now<startMillis-MATCH_ACCESS_WINDOW_MS) throw new HttpsError('failed-precondition','The match room opens 15 minutes before kickoff.');
+    if(now<startMillis) throw new HttpsError('failed-precondition','The match is not open yet.');
     if(now>startMillis+MATCH_DURATION_MS&&!MOPYON_LIVE_STATUSES.has(status)) throw new HttpsError('failed-precondition','The match access window has ended.');
     const stateWasCreated=!stateSnapshot.exists;
     let state=stateWasCreated?createDominoGameState(participants):stateSnapshot.data();
     const presence=data.presence&&typeof data.presence==='object'?{...data.presence}:{};
     const joinedAt=admin.firestore.Timestamp.now();
     const opponentId=participants.find(uid=>uid!==request.auth.uid);
-    const opponentIsBot=isBotParticipant(data,opponentId,request.auth.uid);
+    const opponentIsBot=isBotParticipant(data,opponentId,request.auth.uid) && !presence[opponentId];
     const opponentPresenceMillis=timestampMillis(presence[opponentId]);
     const waitingSinceMillis=timestampMillis(data.waitingForOpponentSince);
     const deadlineMillis=timestampMillis(data.attendanceDeadlineAt);
@@ -967,7 +1126,7 @@ exports.joinDominoMatch = onCall({region:'us-central1',cors:true},async request=
       updates.status='ongoing';updates.waitingForOpponentSince=admin.firestore.FieldValue.delete();updates.attendanceDeadlineAt=admin.firestore.FieldValue.delete();updates.waitingForOpponentUid=admin.firestore.FieldValue.delete();
       if(!data.startedAt) updates.startedAt=admin.firestore.FieldValue.serverTimestamp();
     }else{
-      const waitingSince=Number.isFinite(waitingSinceMillis)?data.waitingForOpponentSince:joinedAt;
+      const waitingSince=Number.isFinite(waitingSinceMillis)?data.waitingForOpponentSince:Number.isFinite(startMillis)?admin.firestore.Timestamp.fromMillis(startMillis):joinedAt;
       updates.status='waiting-opponent';updates.waitingForOpponentSince=waitingSince;updates.attendanceDeadlineAt=Number.isFinite(deadlineMillis)?data.attendanceDeadlineAt:admin.firestore.Timestamp.fromMillis(timestampMillis(waitingSince)+OPPONENT_GRACE_PERIOD_MS);updates.waitingForOpponentUid=opponentId;
     }
     Object.assign(updates,publicDominoState(state),{board:state.boardTiles});
@@ -1122,6 +1281,7 @@ const advanceDominoSeriesForParticipant=async (gameIdValue,participantUid)=>{
       const winnerLeaderboardReference=db.collection('leaderboard').doc(officialWinner);
       const loserLeaderboardReference=loserUid?db.collection('leaderboard').doc(loserUid):null;
       const couponReference=loserIsReal&&championshipId?db.collection('jwetproCoupons').doc(`elimination_${championshipId}_${loserUid}`):null;
+      const playerCouponsQuery=loserIsReal?db.collection('jwetproCoupons').where('playerUid','==',loserUid):null;
       const loserCompletionReference=loserUid&&championshipId?db.collection('playerRewardEvents').doc(`championship_completion_${championshipId}_${loserUid}`):null;
       const winnerCompletionReference=winnerCompletionPoints&&championshipId?db.collection('playerRewardEvents').doc(`championship_completion_${championshipId}_${officialWinner}`):null;
       const reads=await Promise.all([
@@ -1129,12 +1289,13 @@ const advanceDominoSeriesForParticipant=async (gameIdValue,participantUid)=>{
         winnerProfileReference?transaction.get(winnerProfileReference):Promise.resolve(null),
         loserProfileReference?transaction.get(loserProfileReference):Promise.resolve(null),
         couponReference?transaction.get(couponReference):Promise.resolve(null),
+        playerCouponsQuery?transaction.get(playerCouponsQuery):Promise.resolve(null),
         loserCompletionReference?transaction.get(loserCompletionReference):Promise.resolve(null),
         winnerCompletionReference?transaction.get(winnerCompletionReference):Promise.resolve(null),
         transaction.get(winnerLeaderboardReference),
         loserLeaderboardReference?transaction.get(loserLeaderboardReference):Promise.resolve(null)
       ]);
-      const [rewardSnapshot,winnerProfileSnapshot,loserProfileSnapshot,couponSnapshot,loserCompletionSnapshot,winnerCompletionSnapshot,winnerLeaderboardSnapshot,loserLeaderboardSnapshot]=reads;
+      const [rewardSnapshot,winnerProfileSnapshot,loserProfileSnapshot,couponSnapshot,playerCouponsSnapshot,loserCompletionSnapshot,winnerCompletionSnapshot,winnerLeaderboardSnapshot,loserLeaderboardSnapshot]=reads;
       let rewards=rewardSnapshot.exists?(rewardSnapshot.data()?.rewards||{}):{};
       if(!rewardSnapshot.exists){
         const winnerCurrentPoints=Math.max(0,Number(winnerProfileSnapshot?.data()?.points??winnerLeaderboardSnapshot.data()?.points)||0);
@@ -1166,7 +1327,10 @@ const advanceDominoSeriesForParticipant=async (gameIdValue,participantUid)=>{
         if(loserCompletionReference&&!loserCompletionSnapshot?.exists) transaction.create(loserCompletionReference,{type:'championship-completion',championshipId,playerUid:loserUid,participationPoints:5,noAbandonPoints:loserCompletionPoints-5,pointsDelta:loserCompletionPoints,pointsTotal:loserPointsTotal,settledAtElimination:true,createdAt:admin.firestore.FieldValue.serverTimestamp()});
         if(winnerCompletionReference&&!winnerCompletionSnapshot?.exists) transaction.create(winnerCompletionReference,{type:'championship-completion',championshipId,playerUid:officialWinner,participationPoints:5,noAbandonPoints:5,pointsDelta:winnerCompletionPoints,pointsTotal:winnerPointsTotal,settledAtFinal:true,createdAt:admin.firestore.FieldValue.serverTimestamp()});
         if(couponReference&&!couponSnapshot?.exists){
-          transaction.create(couponReference,{playerUid:loserUid,sourceChampionshipId:championshipId,sourceSeriesId:seriesId,type:couponDefinition.type,value:couponDefinition.value,currency:'HTG',targetChampionshipId:'',status:'pending',personal:true,transferable:false,stackable:false,createdAt:admin.firestore.FieldValue.serverTimestamp(),updatedAt:admin.firestore.FieldValue.serverTimestamp()});
+          playerCouponsSnapshot?.docs?.forEach(existingCoupon=>{
+            if(existingCoupon.id!==couponReference.id) transaction.delete(existingCoupon.ref);
+          });
+          transaction.create(couponReference,{playerUid:loserUid,sourceChampionshipId:championshipId,sourceSeriesId:seriesId,type:couponDefinition.type,value:couponDefinition.value,currency:'HTG',targetChampionshipId:'',status:'pending',missedGames:{mopyon:false,domino:false},personal:true,transferable:false,stackable:false,createdAt:admin.firestore.FieldValue.serverTimestamp(),updatedAt:admin.firestore.FieldValue.serverTimestamp()});
         }
         transaction.create(rewardReference,{type:'domino-series',seriesId,championshipId,winnerUid:officialWinner,loserUid,round:roundKey,rewards,createdAt:admin.firestore.FieldValue.serverTimestamp()});
       }
@@ -1189,8 +1353,44 @@ exports.advanceDominoSeries = onCall({region:'us-central1',cors:true},async requ
   return advanceDominoSeriesForParticipant(request.data?.gameId,request.auth.uid);
 });
 
+// Resolves the five-minute pause between two manches when the winner does not continue.
+exports.claimSeriesAdvanceTimeout = onCall({region:'us-central1',cors:true},async request=>{
+  if(!request.auth) throw new HttpsError('unauthenticated','Authentication is required.');
+  const seriesId=String(request.data?.seriesId||''); if(!/^[A-Za-z0-9_-]{1,150}$/.test(seriesId)) throw new HttpsError('invalid-argument','A valid series id is required.');
+  const ref=db.collection('matches').doc(seriesId);
+  return db.runTransaction(async transaction=>{
+    const snap=await transaction.get(ref); if(!snap.exists) throw new HttpsError('not-found','Series not found.');
+    const series=snap.data()||{}, participants=requireMatchParticipant(series,request.auth.uid);
+    if(series.winnerUid||series.winnerId||String(series.status||'').toLowerCase()==='completed') return {seriesId,seriesComplete:true,winnerUid:series.winnerUid||series.winnerId||null};
+    const stamp=timestampMillis(series.updatedAt)||0; if(!stamp||Date.now()<stamp+OPPONENT_GRACE_PERIOD_MS) throw new HttpsError('failed-precondition','The five-minute transition period has not elapsed.');
+    const ids=Array.isArray(series.gameIds)?series.gameIds:[], previousId=String(ids[ids.length-1]||'');
+    const previous=previousId?await transaction.get(db.collection('matches').doc(previousId)):null; const forfeitedUid=String(previous?.data()?.winnerId||previous?.data()?.winnerUid||'');
+    if(!participants.includes(forfeitedUid)) throw new HttpsError('failed-precondition','The next manche is not ready for timeout.');
+    const winnerUid=participants.find(uid=>uid!==forfeitedUid)||'', winnerName=participantDisplayName(series,winnerUid), score={p1:forfeitedUid===participants[0]?0:2,p2:forfeitedUid===participants[1]?0:2};
+    const currentId=String(series.currentGameId||series.activeGameId||''); if(currentId) transaction.set(db.collection('matches').doc(currentId),{status:'completed',winnerId:winnerUid,winnerUid,winnerName,forfeit:true,forfeitedUid,forfeitReason:'advance-timeout',completionReason:'advance-timeout',completedAt:admin.firestore.FieldValue.serverTimestamp(),updatedAt:admin.firestore.FieldValue.serverTimestamp()},{merge:true});
+    transaction.set(ref,{status:'completed',winnerId:winnerUid,winnerUid,winnerName,seriesScore:score,forfeit:true,forfeitedUid,forfeitReason:'advance-timeout',completionReason:'advance-timeout',currentGameId:null,activeGameId:null,completedAt:admin.firestore.FieldValue.serverTimestamp(),updatedAt:admin.firestore.FieldValue.serverTimestamp()},{merge:true});
+    return {seriesId,seriesComplete:true,winnerUid,winnerName,forfeitedUid,forfeit:true,reason:'advance-timeout',seriesScore:score};
+  });
+});
 // A completed official Domino manche validates itself. The transaction above is idempotent, so
 // retries and a simultaneous client call cannot count the same manche or reward twice.
+exports.autoAdvanceCompletedMopyonGame = onDocumentWritten({
+  document:'matches/{matchId}',
+  region:'us-central1',
+  retry:true
+}, async event => {
+  const before = event.data?.before?.exists ? event.data.before.data() : null;
+  const after = event.data?.after?.exists ? event.data.after.data() : null;
+  if (!after || after.kind === 'series' || !matchGameIsMopyon(after) || !after.seriesId) return;
+  const completed = Boolean(after.winnerId) || after.draw === true;
+  const wasCompleted = Boolean(before?.winnerId) || before?.draw === true;
+  if (!completed || wasCompleted) return;
+  const participants = Array.isArray(after.participantIds) ? after.participantIds.filter(uid => typeof uid === 'string') : [];
+  if (participants.length !== 2) return;
+  const realParticipant = participants.find(uid => !isBotParticipant(after, uid, participants.find(other => other !== uid) || ''));
+  const participantUid = realParticipant || participants[0];
+  await advanceMopyonSeriesHandler({data:{gameId:event.params.matchId},auth:{uid:participantUid}});
+});
 exports.autoAdvanceCompletedDominoGame = onDocumentWritten({
   document:'matches/{matchId}',
   region:'us-central1',
@@ -1317,6 +1517,53 @@ exports.claimMopyonForfeit = onCall({region: 'us-central1', cors: true}, async r
 // attendance deadline is still resolved if the present player closes or reloads the page.
 exports.resolveMopyonAttendanceTimeouts = onSchedule({region: 'us-central1', schedule: 'every 1 minutes', timeoutSeconds: 60}, async () => {
   const now = admin.firestore.Timestamp.now();
+// A player who never opens the match has no child game document yet. Resolve
+  // those parent series directly once the official start plus five minutes has passed.
+  const seriesSnapshot = await db.collection('matches').where('kind', '==', 'series').limit(200).get();
+  await Promise.all(seriesSnapshot.docs.map(document => db.runTransaction(async transaction => {
+    const snapshot = await transaction.get(document.ref);
+    if (!snapshot.exists) return;
+    const data = snapshot.data();
+    const status = String(data.status || data.state || '').toLowerCase();
+    const completedForfeit = status === 'completed' && (data.forfeitReason === 'attendance-timeout' || data.completionReason === 'attendance-timeout' || data.forfeitReason === 'double-attendance-timeout' || data.completionReason === 'double-attendance-timeout');
+    if ((!['preview', 'scheduled', 'waiting-opponent', 'ongoing', 'live'].includes(status) && !completedForfeit) || (data.winnerId || data.winnerUid) && !completedForfeit || data.currentGameId) return;
+    const participants = Array.isArray(data.participantIds) ? data.participantIds.filter(id => typeof id === 'string') : [];
+    if (participants.length !== 2) return;
+    const startMillis = timestampMillis(data.startAt || data.scheduledAt || data.date);
+    if (!completedForfeit && (!Number.isFinite(startMillis) || Date.now() < startMillis + OPPONENT_GRACE_PERIOD_MS)) return;
+    const botIds = participants.filter(uid => isBotParticipant(data, uid));
+    if (botIds.length === 2) return;
+    const participantNames = data.participantNames && typeof data.participantNames === 'object' ? data.participantNames : {};
+    const replayRef = db.collection('matches').doc(`${document.id}-g1`);
+    const replaySnapshot = await transaction.get(replayRef);
+    const winnerId = botIds.length === 1 ? botIds[0] : null;
+    const forfeitedUid = botIds.length === 1 ? participants.find(uid => uid !== winnerId) : null;
+    const reason = botIds.length === 1 ? 'attendance-timeout' : 'double-attendance-timeout';
+    const replayData = {
+      kind:'game', seriesId:document.id, seriesFormat:'bo3', gameNumber:1,
+      game:data.game || data.type || 'mopyon', type:data.type || data.game || 'mopyon',
+      championshipId:data.championshipId || data.tournamentId || data.competitionId || '',
+      number:data.number || data.matchNumber || '', participantIds:participants,
+      participantNames, participantTypes:data.participantTypes || {},
+      player1:data.player1 || {uid:participants[0],displayName:participantNames[participants[0]] || 'Joueur 1'},
+      player2:data.player2 || {uid:participants[1],displayName:participantNames[participants[1]] || 'Joueur 2'},
+      status:'completed', winnerId, winnerUid:winnerId,
+      winnerName:winnerId ? String(participantNames[winnerId] || 'Joueur') : null,
+      forfeitedUid, forfeitedName:forfeitedUid ? String(participantNames[forfeitedUid] || 'Joueur') : null,
+      forfeit:true, forfeitReason:reason, completionReason:reason, moves:[],
+      startAt:data.startAt || data.scheduledAt || data.date || admin.firestore.Timestamp.now(),
+      scheduledAt:data.scheduledAt || data.startAt || data.date || admin.firestore.Timestamp.now(),
+      completedAt:admin.firestore.FieldValue.serverTimestamp(),
+      createdAt:admin.firestore.FieldValue.serverTimestamp(), updatedAt:admin.firestore.FieldValue.serverTimestamp(),
+      simulation:data.simulation === true, isSimulation:data.simulation === true
+    };
+    if (!replaySnapshot.exists) transaction.create(replayRef, replayData);
+    if (botIds.length === 1) {
+      transaction.set(document.ref, {...timeoutForfeitUpdates(winnerId, forfeitedUid),winnerUid,winnerName:String(participantNames[winnerId] || 'Joueur'),forfeitedName:String(participantNames[forfeitedUid] || 'Joueur')}, {merge: true});
+    } else {
+      transaction.set(document.ref, {...doubleAttendanceUpdates(String(data.nextMatchId || data.followingMatchId || '')),winnerUid:null,winnerName:null}, {merge: true});
+    }
+  })));
   const dueSnapshot = await db.collection('matches').where('attendanceDeadlineAt', '<=', now).limit(100).get();
   await Promise.all(dueSnapshot.docs.map(document => db.runTransaction(async transaction => {
     const snapshot = await transaction.get(document.ref);
@@ -1329,7 +1576,10 @@ exports.resolveMopyonAttendanceTimeouts = onSchedule({region: 'us-central1', sch
     const participants = Array.isArray(data.participantIds) ? data.participantIds.filter(id => typeof id === 'string') : [];
     if (participants.length !== 2) return;
     const presence = data.presence && typeof data.presence === 'object' ? data.presence : {};
-    const presentIds = participants.filter(uid => Number.isFinite(timestampMillis(presence[uid])));
+    const botIds = participants.filter(uid => isBotParticipant(data, uid));
+    // Simulated opponents are always considered present; only real players
+    // must check in during the five-minute attendance window.
+    const presentIds = [...new Set([...participants.filter(uid => Number.isFinite(timestampMillis(presence[uid]))), ...botIds])];
     if (presentIds.length === 2) {
       transaction.set(document.ref, {
         status: 'ongoing',
@@ -1341,10 +1591,87 @@ exports.resolveMopyonAttendanceTimeouts = onSchedule({region: 'us-central1', sch
       }, {merge: true});
       return;
     }
+    if (presentIds.length === 0) {
+      // If a real player faces a simulated opponent, the real player is the
+      // one who forfeits when nobody joins. The simulated opponent advances.
+      if (botIds.length === 1) {
+        const winnerId = botIds[0];
+        const forfeitedUid = participants.find(uid => uid !== winnerId);
+        transaction.set(document.ref, timeoutForfeitUpdates(winnerId, forfeitedUid), {merge: true});
+        return;
+      }
+      // Two real players absent: both are eliminated and the next bracket
+      // opponent advances by bye.
+      transaction.set(document.ref, doubleAttendanceUpdates(String(data.nextMatchId || data.followingMatchId || '')), {merge: true});
+      return;
+    }
     if (presentIds.length !== 1) return;
     const winnerId = presentIds[0];
     const forfeitedUid = participants.find(uid => uid !== winnerId);
-    if (isBotParticipant(data, forfeitedUid, winnerId)) return;
+    // A simulated opponent does not need to check in. Once the real player is
+    // present, the match may start normally.
+    if (isBotParticipant(data, forfeitedUid, winnerId)) {
+      transaction.set(document.ref, {
+        status: 'ongoing',
+        waitingForOpponentSince: admin.firestore.FieldValue.delete(),
+        attendanceDeadlineAt: admin.firestore.FieldValue.delete(),
+        waitingForOpponentUid: admin.firestore.FieldValue.delete(),
+        startedAt: data.startedAt || admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      }, {merge: true});
+      return;
+    }
+    const championshipId = String(data.championshipId || data.tournamentId || data.competitionId || '');
+    if (championshipId && forfeitedUid) {
+      const couponRef = db.collection('jwetproCoupons').doc('elimination_' + championshipId + '_' + forfeitedUid);
+      const existingCoupons = await transaction.get(db.collection('jwetproCoupons').where('playerUid','==',forfeitedUid));
+      const couponSnapshot = await transaction.get(couponRef);
+      existingCoupons.docs.forEach(existing => { if (existing.id !== couponRef.id) transaction.delete(existing.ref); });
+      if (!couponSnapshot.exists) transaction.create(couponRef,{playerUid:forfeitedUid,sourceChampionshipId:championshipId,sourceSeriesId:String(data.seriesId || document.id),type:'next-championship-discount',value:25,currency:'HTG',targetChampionshipId:'',status:'pending',missedGames:{mopyon:false,domino:false},personal:true,transferable:false,stackable:false,createdAt:admin.firestore.FieldValue.serverTimestamp(),updatedAt:admin.firestore.FieldValue.serverTimestamp()});
+    }
     transaction.set(document.ref, timeoutForfeitUpdates(winnerId, forfeitedUid), {merge: true});
   })));
+});
+
+
+// The turn deadline is authoritative and must be enforced even when both
+// browsers have left the match page. The client timer is only presentation.
+exports.resolveOfficialTurnTimeouts = onSchedule({region: 'us-central1', schedule: 'every 1 minutes', timeoutSeconds: 60}, async () => {
+  const now = admin.firestore.Timestamp.now();
+  const due = await db.collection('matches').where('turnDeadlineAt', '<=', now).limit(200).get();
+  await Promise.all(due.docs.map(document => db.runTransaction(async transaction => {
+    const snapshot = await transaction.get(document.ref);
+    if (!snapshot.exists) return;
+    const data = snapshot.data();
+    const status = String(data.status || data.state || '').toLowerCase();
+    const deadline = timestampMillis(data.turnDeadlineAt);
+    if (!Number.isFinite(deadline) || deadline > Date.now() || data.kind === 'series' ||
+        !MOPYON_LIVE_STATUSES.has(status) || data.winnerId || data.draw) return;
+    const participants = Array.isArray(data.participantIds) ? data.participantIds.filter(uid => typeof uid === 'string') : [];
+    const currentTurnUid = String(data.currentTurnUid || '');
+    if (participants.length !== 2 || !currentTurnUid || isBotParticipant(data, currentTurnUid)) return;
+    const winnerId = participants.find(uid => uid !== currentTurnUid) || null;
+    const names = data.participantNames && typeof data.participantNames === 'object' ? data.participantNames : {};
+    transaction.set(document.ref, {
+      ...turnTimeoutForfeitUpdates(winnerId, currentTurnUid),
+      winnerUid: winnerId,
+      winnerName: winnerId ? String(names[winnerId] || 'Joueur') : null,
+      forfeitedName: String(names[currentTurnUid] || 'Joueur')
+    }, {merge: true});
+  })));
+});
+
+// Dashboard cleanup helper for simulated championship accounts.
+exports.deleteSimulationAccounts = onCall({region: 'us-central1', cors: true, cpu: 0.5, maxInstances: 1}, async request => {
+  if (!(await isAdmin(request))) throw new HttpsError('permission-denied', 'Administrator access is required.');
+  const simulationRunId = String(request.data?.simulationRunId || '');
+  if (!simulationRunId) throw new HttpsError('invalid-argument', 'simulationRunId is required.');
+  const snapshot = await db.collection('users').where('simulationRunId', '==', simulationRunId).get();
+  const uids = snapshot.docs.map(doc => doc.id).filter(Boolean);
+  let deleted = 0;
+  for (let offset = 0; offset < uids.length; offset += 1000) {
+    const result = await admin.auth().deleteUsers(uids.slice(offset, offset + 1000));
+    deleted += Number(result.successCount || 0);
+  }
+  return {count: deleted, requested: uids.length};
 });

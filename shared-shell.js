@@ -62,7 +62,7 @@ if (!window.JwetproI18n && !document.querySelector('script[data-jwetpro-i18n]'))
 if (!document.querySelector('link[data-jwetpro-social-style]')) {
   const socialStyle = document.createElement('link');
   socialStyle.rel = 'stylesheet';
-  socialStyle.href = './src/social-system-v5.css';
+  socialStyle.href = './src/social-system-v5.css?v=20260921-recap-actions';
   socialStyle.dataset.jwetproSocialStyle = 'true';
   document.head.append(socialStyle);
 }

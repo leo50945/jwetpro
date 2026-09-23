@@ -62,6 +62,7 @@ const messagesContainer = document.querySelector('.community-messages');
 const communityMain = document.querySelector('.community-main');
 const privatePanel = document.querySelector('[data-private-conversations]');
 const privateList = document.querySelector('[data-private-list]');
+const communityComposerInput = document.querySelector('.community-composer input');
 const newMessagesButton = document.createElement('button');
 newMessagesButton.type = 'button';
 newMessagesButton.className = 'community-new-messages';
@@ -126,6 +127,15 @@ const cancelSimulationTimer = () => {
   clearTimeout(simulationTimer);
   simulationTimer = null;
 };
+const communityContextHint = () => {
+  const text = String(messagesContainer?.innerText || '').toLowerCase();
+  if (/(match|an dirèk|live|gade match)/i.test(text)) return 'live-match';
+  if (/(replay|rejoue|gade ankò)/i.test(text)) return 'replay';
+  if (/(chanpyona|championn|enskrips|inscription)/i.test(text)) return 'championship';
+  if (/(domino|doub|pyès)/i.test(text)) return 'domino';
+  if (/(mopyon|liy|bloke)/i.test(text)) return 'mopyon';
+  return '';
+};
 const stopSimulationForHumanActivity = () => {
   humanActivityObserved = true;
   cancelSimulationTimer();
@@ -140,7 +150,7 @@ const scheduleIdleSimulation = (delay = COMMUNITY_IDLE_DELAY_MS) => {
     if (!user || user.isAnonymous) return;
     simulationRequested = true;
     try {
-      const response = await firebase.app().functions('us-central1').httpsCallable('startCommunitySimulation')({observedSince:communityOpenedAt});
+      const response = await firebase.app().functions('us-central1').httpsCallable('startCommunitySimulation')({observedSince:communityOpenedAt,contextHint:communityContextHint()});
       const requestedDelay = Number(response.data?.retryAfterMs);
       const retryDelay = Number.isFinite(requestedDelay)
         ? Math.min(COMMUNITY_SIMULATION_RETRY_MAX_MS,Math.max(COMMUNITY_SIMULATION_RETRY_MIN_MS,requestedDelay))
@@ -165,6 +175,14 @@ document.addEventListener('visibilitychange',() => {
   }
   startPresenceHeartbeat();
   scheduleIdleSimulation();
+});
+
+// A real visitor's intent starts as soon as they focus or type in the composer.
+// Do not wait for Firestore to receive the message before cancelling the local
+// trigger: otherwise a scripted line could appear while the visitor is writing.
+communityComposerInput?.addEventListener('focus', stopSimulationForHumanActivity);
+communityComposerInput?.addEventListener('input', event => {
+  if (event.target.value.trim()) stopSimulationForHumanActivity();
 });
 
 const renderMessages = async snapshot => {

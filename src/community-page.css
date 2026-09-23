@@ -23,6 +23,18 @@
   .community-page-brand{font-size:14px}
   .community-page-brand b{font-size:23px}
 }
+/* Keep private-message navigation visible on desktop/tablet widths. The shared
+   modal stylesheet hides .community-sidebar up to 900px, but this page is a
+   full-screen chat and must expose the desktop private module. */
+@media (min-width:768px){
+  .community-page-body .community-dialog{display:grid!important;grid-template-columns:minmax(230px,300px) minmax(0,1fr)!important}
+  .community-page-body .community-sidebar{display:flex!important;flex-direction:column;min-width:0;min-height:0}
+  .community-page-body .community-label{display:block!important}
+  .community-page-body .community-rooms{display:grid!important}
+  .community-page-body .community-mobile-rooms{display:none!important}
+  .community-page-body .community-info{display:none!important}
+}
+
 @media(max-width:767px){
   .community-page-main{padding:0;width:100%}
   .community-page-main .community-dialog{width:100%;height:auto;min-height:calc(100vh - 65px)}
@@ -41,6 +53,14 @@ html:has(.community-page-body){height:100%;overflow:hidden}
 .community-page-main .community-dialog{grid-template-columns:minmax(210px,280px) minmax(0,1fr);width:100%;height:100%;min-height:0;max-height:none;border:0;border-radius:0}
 .community-page-footer{display:none!important}
 .community-page-body>footer,.community-page-body>.site-header,.community-page-body>.mobile-nav-backdrop{display:none!important}
+.community-dialog{display:grid;grid-template-columns:minmax(230px,300px) minmax(0,1fr);background:#071a2a;border:1px solid #1b3345;border-radius:14px;overflow:hidden;box-shadow:0 18px 50px #0005}
+.community-sidebar{display:flex;flex-direction:column;min-width:0;min-height:0;border-right:1px solid #1b3345;background:#061827}
+.community-sidebar .community-rooms{display:grid;gap:5px;padding:0 10px}
+.community-sidebar .community-room{display:flex;align-items:center;gap:10px;width:100%;min-height:58px;padding:9px 10px;border:1px solid transparent;border-radius:8px;background:transparent;color:#dce6ed;text-align:left;cursor:pointer}
+.community-sidebar .community-room:hover,.community-sidebar .community-room.is-active{border-color:#29465b;background:#102d42}
+.community-sidebar .community-room>span{display:grid;place-items:center;flex:0 0 28px;width:28px;height:28px;border-radius:7px;background:#0d2b40;color:#dca331;font-weight:900}
+.community-sidebar .community-room>div{min-width:0;display:grid;gap:4px}.community-sidebar .community-room strong{font-size:11px}.community-sidebar .community-room small{color:#8299a8;font-size:9px;line-height:1.35}.community-label{padding:22px 20px 9px;color:#8299a8;font-size:9px;font-weight:900;letter-spacing:.14em}
+.community-sidebar .private-conversations{display:block;flex:1;min-height:0;overflow:hidden}.community-sidebar .private-conversations[hidden]{display:none}
 .community-chat-back{display:none}
 .community-main,.community-messages{min-height:0}
 .community-page-body .community-mobile-brand{display:flex}

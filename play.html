@@ -15,7 +15,7 @@
     <meta property="og:image" content="https://jwetpro.com/og-jwetpro.png">
     <meta name="twitter:card" content="summary_large_image">
     <link rel="icon" href="./favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="./src/play.css?v=20260907-domino-rewards">
+    <link rel="stylesheet" href="./src/play.css?v=20260921-fullscreen-v1">
     <link rel="stylesheet" href="./src/play-empty-action.css?v=20260817">
     <link rel="stylesheet" href="./src/play-replay.css?v=20260908-domino-only">
     <title>Jouer au Mopyon et au Domino — JWETPRO</title>
@@ -112,15 +112,17 @@
               <div><i data-lucide="grid-3x3" aria-hidden="true"></i><span>Plateau 20 × 20</span></div>
               <span id="moveCounter">0 / 400</span>
             </header>
-            <div class="mopyon-board-frame">
-              <div id="board" class="board" role="grid" aria-label="Grille Mopyon 20 par 20"></div>
-            </div>
+              <div class="mopyon-board-frame" id="mopyon-board-frame">
+                <button id="mopyon-fullscreen" class="board-fullscreen-button" type="button" aria-label="Afficher le plateau en plein écran"><i data-lucide="maximize-2" aria-hidden="true"></i><span>Plein écran</span></button>
+                <div id="board" class="board" role="grid" aria-label="Grille Mopyon 20 par 20"></div>
+              </div>
             <p class="board-help"><i data-lucide="info" aria-hidden="true"></i>Alignez cinq symboles horizontalement, verticalement ou en diagonale.</p>
           </section>
         </div>
 
         <section id="domino-training" class="domino-training training-game-panel" role="region" aria-labelledby="domino-training-choice" hidden>
-          <div class="domino-frame-shell">
+          <div class="domino-frame-shell" id="domino-frame-shell">
+            <button id="domino-fullscreen" class="board-fullscreen-button" type="button" aria-label="Afficher la table Domino en plein écran"><i data-lucide="maximize-2" aria-hidden="true"></i><span>Plein écran</span></button>
             <div id="domino-frame-status" class="domino-frame-status" role="status"><span class="state-spinner"></span><strong>Préparation de la table Domino…</strong></div>
             <iframe id="domino-training-frame" title="Entraînement Domino contre le bot débutant" data-src="./dominocash/index.html?embed=1&amp;bot=weak&amp;v=20260903-beginner" allow="autoplay; fullscreen" allowfullscreen></iframe>
           </div>
@@ -159,8 +161,9 @@
             <div class="official-versus">VS</div>
             <div id="official-player-two" class="official-player"></div>
             <p id="official-turn" aria-live="polite">Synchronisation du match...</p>
+            <div id="official-turn-timer" class="official-turn-timer" role="timer" aria-live="polite" hidden>30 s</div>
           </aside>
-          <div class="official-board-wrap"><div id="official-board" class="official-board" role="grid" aria-label="Plateau du match officiel"></div></div>
+          <div class="official-board-wrap"><button id="official-fullscreen" class="board-fullscreen-button" type="button" aria-label="Afficher le match en plein écran"><i data-lucide="maximize-2" aria-hidden="true"></i><span>Plein écran</span></button><div id="official-board" class="official-board" role="grid" aria-label="Plateau du match officiel"></div></div>
         </div>
       </section>
 
@@ -169,7 +172,7 @@
           <div class="match-end-icon"><i data-lucide="trophy" aria-hidden="true"></i></div>
           <span class="match-end-kicker">MATCH TERMINÉ</span>
           <h3 id="match-end-title">Chargement du résultat...</h3>
-          <p id="match-end-subtitle"></p>
+          <p id="match-end-subtitle"></p><div id="match-end-advance-countdown" class="match-end-advance-countdown" hidden role="timer"><span>Temps pour rejoindre la prochaine manche</span><strong>05:00</strong></div>
           <div id="match-end-reward" class="match-end-reward" hidden></div>
           <div class="match-end-actions">
             <button id="match-end-next" class="play-button play-button-primary" type="button" hidden><i data-lucide="arrow-right" aria-hidden="true"></i>Passer à la manche suivante</button>
@@ -180,6 +183,25 @@
         </div>
       </div>
 
+      <div id="champion-modal" class="champion-modal" hidden role="dialog" aria-modal="true" aria-labelledby="champion-modal-title">
+        <div class="champion-card">
+          <button id="champion-modal-close" class="champion-close" type="button" aria-label="Fermer">×</button>
+          <div class="champion-seal"><i data-lucide="crown" aria-hidden="true"></i></div>
+          <span class="champion-kicker">CHAMPION JWETPRO</span>
+          <h2 id="champion-modal-title">Félicitations !</h2>
+          <p id="champion-modal-subtitle"></p>
+          <div class="champion-certificate">
+            <span>CERTIFICAT DE VICTOIRE</span>
+            <strong id="champion-certificate-name"></strong>
+            <b id="champion-certificate-title"></b>
+            <small id="champion-certificate-date"></small>
+          </div>
+          <div class="champion-actions">
+            <button id="champion-share" class="play-button play-button-primary" type="button"><i data-lucide="share-2" aria-hidden="true"></i>Partager mon certificat</button>
+            <button id="champion-modal-done" class="play-button play-button-quiet" type="button">Continuer</button>
+          </div>
+        </div>
+      </div>
       <section id="match-replay-view" class="match-replay-view" hidden aria-labelledby="match-replay-title">
         <header class="replay-view-header">
           <a class="replay-back" href="./activity.html" aria-label="Retour aux activites"><i data-lucide="arrow-left" aria-hidden="true"></i></a>
@@ -196,7 +218,7 @@
             <div class="replay-progress" aria-hidden="true"><span id="match-replay-progress-bar"></span></div>
             <strong id="match-replay-progress">Coup 0 / 0</strong>
           </aside>
-          <div class="replay-board-wrap"><div id="match-replay-board" class="official-board replay-board" role="grid" aria-label="Replay Mopyon sur un plateau 20 par 20"></div><div id="match-replay-domino-board" class="domino-replay-board" role="group" aria-label="Replay Domino" hidden></div></div>
+          <div class="replay-board-wrap"><button id="replay-fullscreen" class="board-fullscreen-button" type="button" aria-label="Afficher le replay en plein écran"><i data-lucide="maximize-2" aria-hidden="true"></i><span>Plein écran</span></button><div id="match-replay-board" class="official-board replay-board" role="grid" aria-label="Replay Mopyon sur un plateau 20 par 20"></div><div id="match-replay-domino-board" class="domino-replay-board" role="group" aria-label="Replay Domino" hidden></div></div>
         </div>
         <nav class="replay-controls" aria-label="Commandes du replay">
           <button id="match-replay-start" type="button" aria-label="Revenir au debut"><i data-lucide="skip-back" aria-hidden="true"></i></button>
@@ -226,7 +248,7 @@
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
     <script src="./shared-shell.js?v=20260909-social-v3"></script>
     <script src="./mopyonpam/script.js?v=20260816"></script>
-    <script src="./src/play.js?v=20260908-full-domino-replay"></script>
+    <script src="./src/play.js?v=20260922-join-cors-v2"></script>
     <script src="./src/share.js?v=20260905-sharing"></script>
   </body>
 </html>

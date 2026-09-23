@@ -1,5 +1,38 @@
 # Changelog
 
+- 2026-09-19 : le module « Messages privés » dispose maintenant d’une vraie colonne desktop avec sa liste de conversations, en plus de son affichage mobile.
+- 2026-09-19 : les règles globales qui masquaient « SALONS », « Groupe » et « Messages privés » sont maintenant neutralisées sur la page communauté desktop.
+- 2026-09-19 : l’animation communautaire s’arrête dès qu’un visiteur ouvre ou utilise la zone de saisie, avant même l’envoi du message, afin d’éviter qu’un message simulé apparaisse pendant qu’il écrit.
+- 2026-09-19 : la simulation communautaire transmet maintenant le contexte détecté (match live, replay, championnat, Domino ou Mopyon) et privilégie les conversations programmées qui portent le même contexte.
+- 2026-09-20 : le profil public affiche explicitement l’action « Suivre » avec un état accessible « Abonné » ou « Suivre en retour », et conserve cet état après actualisation du profil.
+- 2026-09-20 : l’authentification Google est maintenant visible dans la fenêtre de connexion et initialise automatiquement le profil JWETPRO lors de la première connexion Google.
+
+- 2026-09-16 : les comptes à rebours du hero sont maintenant actualisés chaque seconde et affichent les secondes restantes pour un suivi en temps réel.
+
+- 2026-09-16 : les identifiants simulés sans projection sociale sont maintenant reconnus comme des profils privés, au lieu de renvoyer un état « profil indisponible ».
+
+- 2026-09-16 : l’espace inférieur du hero mobile est maintenant utilisé comme panneau de contexte du match (statut officiel et format meilleur de trois manches), avec une hauteur stable et une navigation intégrée.
+
+- 2026-09-16 : le hero mobile s’adapte maintenant à la hauteur réelle de chaque diapositive, notamment les matchs à venir/en cours, sans laisser de zone vide sous le visuel.
+
+- 2026-09-16 : les actions sociales des cartes de matchs utilisent maintenant une disposition intégrée au flux de la carte, avec un fond clair et une marge dédiée pour éviter tout recouvrement des joueurs.
+
+- 2026-09-16 : la page `progress.html` utilise désormais le statut d’inscription du joueur connecté (participant public ou ticket payé) pour remplacer « S’inscrire au championnat » par « Voir le championnat ».
+
+- 2026-09-16 : la section « Progression du championnat » vérifie aussi l’inscription personnelle payée dans `championshipTicketRegistrations`, même avant la synchronisation publique des participants. Le bouton devient alors immédiatement « VOIR LE CHAMPIONNAT ».
+
+- 2026-09-16 : les CTA d’un championnat déjà rejoint par le joueur connecté affichent désormais « VOIR LE CHAMPIONNAT » au lieu de proposer une nouvelle inscription. Cette règle est appliquée au héros, au calendrier, à l’activité et aux cartes de jeu, après résolution de l’authentification.
+
+- 2026-09-16 : la carte du prochain championnat réserve désormais un espace inférieur suffisant pour afficher clairement le prix d’entrée, le gain et l’action d’inscription, sans découpe du contenu.
+
+- 2026-09-16 : toute la ligne d’un joueur dans le classement est désormais cliquable et accessible au clavier pour ouvrir son profil; les liens internes de l’avatar et du nom restent compatibles avec le tri des colonnes.
+
+- 2026-09-16 : les joueurs du classement sont accessibles via leur profil social; un profil réel privé affiche désormais un état privé explicite, et les profils simulés restent toujours privés même si une ancienne donnée les déclarait publics.
+
+- 2026-09-15 : les cartes d’activité de la page d’accueil ne sont plus limitées à une hauteur fixe sur mobile; le statut, les actions sociales et le bouton d’inscription restent entièrement visibles et accessibles.
+
+- 2026-09-15 : la carte « Progression du championnat » adopte une mise en page mobile-first finale : titre et statut adaptatifs, métriques en grille lisible, libellés autorisés à revenir à la ligne et bouton d’inscription pleine largeur sans débordement sur les petits écrans.
+
 - 2026-09-13 : les actions J’aime et Partager disposent désormais d’une cible tactile minimale de 44 × 44 px sur mobile. La feuille immuable `social-system-v5.css` contourne le cache CDN sur toutes les pages, avec un test anti-régression dédié.
 
 - 2026-09-13 : le protocole de déploiement social reflète désormais l’état réel de production, les versions de cache `social-v4`/`social-favorites`, l’étape de backfill encore requise et la dépendance DNS de `share.jwetpro.com`.
@@ -225,3 +258,126 @@
 - Ajout d'un moteur serveur versionné qui entrelace jusqu'à trois discussions, évite de rejouer une discussion le même jour et choisit la plus grande date enregistrée lorsque la date exacte est absente.
 - Ajout des réponses ciblées dans Community, avec bouton « Répondre », aperçu avant envoi et citation persistante dans les 15 derniers messages chargés.
 - Refonte de la page Community en messagerie plein écran : document non défilable, historique seul défilable, en-tête mobile compact, composeur fixé dans le viewport et suppression du footer.
+
+- 2026-09-16 : les cartes de championnat de la page Activité appliquent également le CTA personnalisé pour un joueur déjà inscrit (« VOIR LE CHAMPIONNAT »).
+
+- 2026-09-16 : le script de progression est versionné avec le correctif CTA d’inscription afin d’éviter qu’un ancien cache conserve le bouton de paiement.
+
+- 2026-09-16 : les actions J’aime/Partager des cartes de matchs publiques sont désormais intégrées dans le flux de la carte au lieu de recouvrir les noms des joueurs sur mobile.
+
+- 2026-09-16 : les profils simulés affichent désormais un état « Profil privé » au lieu d’un message indiquant que le profil est inexistant.
+
+- 2026-09-20 : le profil n’affiche plus les coupons utilisés ou expirés et limite l’affichage à un seul coupon actif. Le nettoyage serveur supprime automatiquement les doublons et les anciens coupons, y compris lors de l’émission d’une nouvelle récompense.
+- 2026-09-20 : un coupon suit désormais séparément le prochain championnat Mopyon et le prochain championnat Domino. Un championnat manqué désactive le coupon pour son jeu uniquement ; après un championnat manqué dans chaque jeu, le coupon est supprimé. La règle est également publiée dans le guide et la base de connaissances de l’assistant.
+- 2026-09-20 : ajout d’un mode plateau plein écran dans play.html, avec affichage mobile agrandi, conseil localisé au chargement et suggestion du mode paysage pour Domino.
+- 2026-09-20 : le conseil plein écran de play.html propose désormais « Ne plus afficher ce message », mémorisé séparément pour Mopyon et Domino.
+- 2026-09-20 : correction de la modale de fin de match : Mopyon ne reste plus bloqué sur la validation d’un reçu Domino et le bouton de sortie devient « Terminer » pour une rencontre achevée.
+- 2026-09-20 : correction du lobby Mopyon : la première manche est maintenant préparée pour deux joueurs réels, puis chacun rejoint le même plateau officiel en temps réel.
+- 2026-09-20 : les championnats simulés ne classent plus automatiquement un compte réel comme bot ; seuls les participants explicitement marqués simulés déclenchent les coups automatiques.
+- 2026-09-20 : neutralisation des marqueurs bot obsolètes dès que le second compte réel rejoint la manche Mopyon ; les coups automatiques sont désormais impossibles dans une rencontre entre deux vrais utilisateurs.
+
+## 2026-09-20 — Minuteur de tour Mopyon
+- Ajout d’un délai serveur de 30 secondes par tour pour les manches Mopyon, visible par les deux joueurs et appliqué aussi aux adversaires simulés.
+- À expiration, la manche est clôturée par forfait de temps avec le joueur actif déclaré perdant; le délai est renouvelé après chaque coup.
+
+## 2026-09-20 — Certificat de champion
+- Ajout d’une modal de félicitations pour le vainqueur d’un championnat terminé.
+- Le certificat affiche le champion, le championnat, la date et le score, avec partage natif ou copie d’un lien public vers la progression.
+
+## 2026-09-20 — Moteur Rapfi pour le bot Mopyon
+- Le bot Mopyon utilise désormais le build WebAssembly Rapfi côté serveur pour analyser les positions et choisir des coups plus compétitifs.
+- Un repli sécurisé vers le moteur JavaScript existant est conservé si le moteur WASM dépasse son délai ou ne peut pas se charger.
+- Le moteur est exécuté côté Functions, sans exposer le calcul du bot au navigateur.
+
+## 2026-09-20 — Retour visuel des coups Mopyon
+- Le pion du joueur est maintenant affiché immédiatement après le clic, avant la réponse du bot.
+- Le dernier coup officiel est signalé visuellement et reste visible après synchronisation.
+
+## 2026-09-21 — Stabilité du bot Mopyon officiel
+- L’exécution Rapfi a été retirée temporairement des Functions après un dépassement du quota CPU Cloud Run qui empêchait `submitMopyonMove` de répondre correctement.
+- Les matchs officiels utilisent de nouveau le moteur JavaScript léger; le build Rapfi est conservé hors du package Functions pour une future intégration dédiée.
+- La fonction `submitMopyonMove` a été redéployée avec succès en `us-central1`.
+- Correctif complémentaire : import explicite de `chooseBotMove` dans `index.js`, supprimant l’erreur `ReferenceError` qui retournait un 500 lors d’un coup contre un participant simulé.
+
+## 2026-09-21 — Rapfi pour les championnats
+- Ajout d’un service Cloud Run `jwetpro-rapfi` dédié au moteur Rapfi, avec une instance maximale et un délai de calcul borné.
+- `joinMopyonMatch` et `submitMopyonMove` utilisent Rapfi pour les adversaires simulés des championnats; le moteur d’entraînement local reste inchangé.
+- Le jeton d’accès est stocké dans Firebase Secret Manager, sans être conservé dans le dépôt.
+
+## 2026-09-21 — Synchronisation de clôture des championnats
+- `syncChampionshipTicketNow` est limité à 0,5 CPU, une instance et 30 secondes afin d’éviter les échecs de démarrage liés au quota Cloud Run du projet.
+- La fonction a été redéployée et vérifiée avec ces limites.
+- Déploiement du callable `deleteSimulationAccounts` manquant au dashboard; le nettoyage des comptes simulés ne dépend plus d’un endpoint absent.
+
+## 2026-09-21 — Plein écran pour les matchs officiels et replays
+- Ajout d’un bouton plein écran au plateau des matchs de championnat Mopyon/Domino.
+- Ajout du même contrôle dans le lecteur de replay, avec orientation paysage proposée pour Domino.
+- Les contrôles ciblent uniquement la surface de jeu afin de garder les informations secondaires hors écran.
+
+## 2026-09-21 — Résultats multi-manches sur la progression
+- La page `progress.html` affiche désormais un résultat par confrontation (série), et non une ligne par manche.
+- Les noms des joueurs simulés sont récupérés depuis la série ou les données publiques des manches.
+- Le score final de la série, le détail de chaque manche et un lien unique vers le replay complet sont affichés.
+
+- 2026-09-21: resultats regroupes par rencontre; noms, score de serie et replay complet des manches affiches.\n
+- 2026-09-21: actions coeur/partage des cartes de resultats placees dans une colonne reservee, responsive mobile-first.\n
+- 2026-09-21: tous les replays sont recuperes et groupes par etape dans des sections repliables par defaut.\n
+- 2026-09-21: les matchs officiels respectent maintenant startAt; l acces est bloque avant l heure programmee et le delai de presence de 5 minutes commence apres le debut officiel.\n
+- 2026-09-21: hero et page Play utilisent maintenant l heure officielle du championnat pour le compte a rebours et le bouton d entree.\n
+- 2026-09-21: Ajout du callable admin rescheduleChampionshipStart pour avancer la date d ouverture des simulations completes, avec propagation aux series non terminees.
+
+- 2026-09-21: Le delai d attendance est maintenant affiche dans l hero et Mes matchs; le forfait automatique conserve un coupon de 25 HTG et affiche un modal au retour du joueur.
+
+- 2026-09-21: Le compte a rebours de presence de 5 minutes est ancre sur l heure officielle; acces bloque apres expiration et forfait serveur applique aux matchs reels.
+
+- 2026-09-21 : correction du héros des matchs planifiés ; après l’heure officielle + 5 minutes, le bouton d’entrée est désactivé et affiche DELAI ECOULE. Correction d’une erreur JavaScript qui empêchait le rendu du héros.
+
+- 2026-09-21 : le compte à rebours de présence démarre désormais à l'heure officielle de chaque match, y compris face à un adversaire simulé ; dans Mes matchs, l'action devient Delai ecoule après cinq minutes.
+
+- 2026-09-21 : progress.html propage désormais les forfaits de présence : le joueur absent est rayé des participants, le tableau affiche le vainqueur par forfait de temps et le résultat rappelle l'absence de cinq minutes.
+
+- 2026-09-21 : ajout du trigger utoAdvanceCompletedMopyonGame ; une manche Mopyon terminée par forfait met maintenant à jour automatiquement la série, le score et le vainqueur du championnat.
+
+- 2026-09-21 : prise en charge du double forfait de présence : les deux joueurs sont éliminés, le match parent est clôturé sans vainqueur et le tableau affiche le motif.
+
+- 2026-09-21 : le dashboard ne lance plus une synchronisation Smart Cut callable à chaque chargement local ; les triggers serveur restent la source de synchronisation et évitent les erreurs CORS causées par le quota Cloud Run.
+
+- 2026-09-21 : fermeture automatique renforcée des simulations : le dashboard appelle repairSimulationBracket dès que le 32e joueur est enregistré, afin d’éviter une course entre triggers Firestore ; le trigger parent vérifie aussi la capacité atteinte.
+
+- 2026-09-21 : le balayage d attendance distingue maintenant un vrai joueur absent d un adversaire simule ; apres cinq minutes, le joueur reel est marque forfait et progress.html peut le rayer, tandis que deux vrais absents restent un double forfait.
+
+- 2026-09-21 : les adversaires simules sont maintenant consideres presents par le balayage d attendance ; seul un vrai joueur absent est marque forfait apres cinq minutes.
+
+- 2026-09-21 : les series jamais rejointes sont maintenant resolues directement apres l heure officielle + 5 minutes ; le joueur reel absent est elimine meme si aucune manche enfant n a encore ete creee.
+
+- 2026-09-21 : un document de manche de replay est cree pour chaque forfait d attendance, y compris les series deja terminees ; le replay affiche le joueur forfait et la raison.
+
+- 2026-09-21 : le dashboard et les pages publiques utilisent maintenant le vocabulaire championnat planifie ; le bouton devient Planifier le championnat et les mentions visibles de simulation sont remplacees par championnat ou automatique. Les indicateurs techniques Firebase restent inchanges pour compatibilite.
+- 2026-09-21 : ajout d un fallback de cloture dans le dashboard : si le callable repairSimulationBracket est temporairement indisponible (quota Cloud Run/CORS), le tableau 32 joueurs est genere directement avec les droits administrateur.
+- 2026-09-22 : alternance officielle du joueur qui commence une confrontation : joueur 1 en premiere manche, joueur 2 en deuxieme, tirage automatique en troisieme; applique aux matchs reels et automatiques, Domino et Mopyon.\n- 2026-09-22 : la modale entre deux manches affiche un compte a rebours de cinq minutes; a expiration, le serveur peut cloturer la transition par forfait.\n
+- 2026-09-22 — Le délai officiel de 30 secondes reste visible dans l’hero et Mes matchs après navigation; le serveur conserve le forfait à l’expiration.
+
+- 2026-09-22 — La lecture publique des matchs utilise désormais une requête isibility=public compatible avec les règles Firestore; les statuts sont filtrés côté client pour éviter les refus de permission qui perturbaient l’hero.
+
+- 2026-09-22 — Restauration du CTA détaillé de la hero championnat avec le prix d’inscription; le correctif du minuteur ne supprime plus les informations de la carte.
+
+- 2026-09-22 — Correction du bloc statut des matchs planifiés dans la hero : la balise fermée manquante n’engloutit plus les joueurs, le plateau et les contrôles.
+
+- 2026-09-22 — Ajout d’un balayage serveur 
+esolveOfficialTurnTimeouts : un tour Mopyon expiré est clôturé par forfait même si aucun joueur ne reste sur la page play.
+
+- 2026-09-22 — Un timeout de 30 secondes clôt désormais uniquement la manche en cours; la confrontation continue jusqu’à deux manches gagnées et la modal l’explique explicitement. La règle est publiée dans le guide et la base de connaissances de l’assistant.
+
+- 2026-09-22 — La base de connaissances de l’assistant précise aussi l’alternance du joueur débutant entre les manches 1, 2 et 3.
+
+- 2026-09-22 — Suppression des mentions visibles d’adversaire automatique/simulé dans play.html et les replays; joinMopyonMatch redéployé avec 0,5 CPU et une instance maximale pour respecter le quota Cloud Run.
+## 2026-09-22 — Élimination visible après délai d’absence
+- La progression écoute désormais les matchs waiting-opponent et les états forfaités.
+- Un délai d’absence de cinq minutes arrivé à échéance est interprété côté lecture comme un forfait même avant le prochain passage du job serveur ; le participant absent est rayé dans Patisipan yo.
+- Les joueurs simulés restent considérés présents pour cette déduction, et le résultat de forfait conserve le gagnant/les deux forfaits dans le tableau.
+- La date limite de présence reprend aussi le même fallback que l’hero (début planifié + cinq minutes) quand le champ explicite est absent, sans requalifier un match déjà terminé.
+- 2026-09-22 — Le parent d’une série reçoit désormais le motif et l’identité du joueur forfait après expiration de la présence ; un double forfait conserve les deux identifiants. Les fonctions Mopyon concernées ont été redéployées.
+- La requête de progression respecte maintenant les règles Firestore : les statuts publics sont filtrés dans la requête autorisée, et les matchs waiting-opponent privés sont chargés uniquement pour le participant connecté.
+- Le balayage de présence couvre aussi les séries marquées live/ongoing sans manche enfant : un premier forfait de cinq minutes clôture bien la confrontation complète.
+- Le délai de 30 secondes (turn-timeout) est maintenant séparé du forfait de présence de cinq minutes : seul attendance-timeout élimine du championnat dans la progression.
+- Chaque nouvelle manche créée pour une série officielle reçoit désormais sa propre échéance serveur de présence de cinq minutes ; un retour tardif ne peut pas réinitialiser le délai.

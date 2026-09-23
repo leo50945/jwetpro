@@ -83,7 +83,7 @@
           { fieldFilter: { field: { fieldPath: field }, op: 'EQUAL', value: firestoreScalar(value) } },
           { fieldFilter: { field: { fieldPath: 'status' }, op: 'EQUAL', value: { stringValue: status } } }
         ] } },
-        limit: 50
+        limit: 200
       } })
     });
     if (!response.ok) return [];
@@ -132,7 +132,8 @@
     const socialIds=asObject(match.participantSocialIds);
     if (arrays?.length) return arrays.slice(0, 2).map(normalizePlayer).map(player=>({...player,socialPlayerId:firstValue(player.socialPlayerId,socialIds[participantId(player)])}));
     const ids = asArray(match.participantIds).slice(0, 2);
-    const values = [firstValue(match.player1, match.firstPlayer, ids[0]), firstValue(match.player2, match.secondPlayer, ids[1])];
+    const names = asObject(match.participantNames);
+    const values = [firstValue(match.player1, match.firstPlayer, names[ids[0]], names.p1, ids[0]), firstValue(match.player2, match.secondPlayer, names[ids[1]], names.p2, ids[1])];
     return values.filter(value => value !== undefined).map(normalizePlayer).map(player=>({...player,socialPlayerId:firstValue(player.socialPlayerId,socialIds[participantId(player)])}));
   };
 
@@ -140,8 +141,8 @@
     const roundField = String(firstValue(match.round, '')).toLowerCase();
     if (STAGES.some(stage => stage.key === roundField)) return roundField;
     const source = String(firstValue(match.stage, match.phase, match.roundName, match.roundLabel, match.bracketStage, match.matchType, '')).toLocaleLowerCase('fr').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-    if (/16\s*eme|seizieme|1\s*\/\s*16/.test(source)) return '16e';
-    if (/8\s*eme|huit|1\s*\/\s*8/.test(source)) return '8e';
+    if (/16\s*eme|seizieme|round[-_ ]?of[-_ ]?16|1\s*\/\s*16/.test(source)) return '16e';
+    if (/8\s*eme|huit|round[-_ ]?of[-_ ]?8|1\s*\/\s*8/.test(source)) return '8e';
     if (/quarter|quart/.test(source)) return 'quart';
     if (/semi|demi/.test(source)) return 'demi';
     if (/final/.test(source)) return 'finale';
@@ -150,7 +151,24 @@
   };
   const stageIndex = match => Math.max(0, STAGES.findIndex(stage => stage.key === stageKey(match)));
   const matchPosition = match => Number(firstValue(match.position, match.bracketPosition, match.bracketSlot, match.matchNumber, match.number, 0)) || 0;
-  const matchMoves = match => asArray(firstValue(match.moves, match.moveHistory, match.history, match.actions));
+  const matchMoves = match => match?.kind === 'series' && Array.isArray(match.games) ? match.games.flatMap(game => asArray(firstValue(game.moves, game.moveHistory, game.history, game.actions))) : asArray(firstValue(match.moves, match.moveHistory, match.history, match.actions));
+  const seriesChildren = match => Array.isArray(match?.games) ? match.games.filter(Boolean) : [];
+  const seriesReplayMoves = match => seriesChildren(match).flatMap(game => matchMoves(game));
+  const seriesScore = match => {
+    const stored = match?.seriesScore && typeof match.seriesScore === 'object' ? match.seriesScore : {};
+    if (Number.isFinite(Number(stored.p1)) || Number.isFinite(Number(stored.p2))) return { p1: Number(stored.p1) || 0, p2: Number(stored.p2) || 0 };
+    const score = { p1: 0, p2: 0 };
+    seriesChildren(match).forEach(game => { const players = matchPlayers(game); const winner = winnerIdentity(game); const first = players[0] && ((winner.id && participantId(players[0]) === winner.id) || (winner.name && playerName(players[0]).toLocaleLowerCase('fr') === winner.name.toLocaleLowerCase('fr'))); const second = players[1] && ((winner.id && participantId(players[1]) === winner.id) || (winner.name && playerName(players[1]).toLocaleLowerCase('fr') === winner.name.toLocaleLowerCase('fr'))); if (first) score.p1 += 1; else if (second) score.p2 += 1; });
+    return score;
+  };
+  const buildSeriesMatches = matches => {
+    const series = matches.filter(match => match.kind === 'series').map(match => ({ ...match, games: [] }));
+    const grouped = new Map(series.map(match => [match.id, match]));
+    matches.filter(match => match.kind === 'game' || firstValue(match.seriesId, match.parentSeriesId, match.matchSeriesId, '')).forEach(game => { const id = String(firstValue(game.seriesId, game.parentSeriesId, game.matchSeriesId, '') || ''); if (!id) return; if (!grouped.has(id)) grouped.set(id, { id, kind: 'series', games: [] }); grouped.get(id).games.push(game); });
+    grouped.forEach(match => { match.games.sort((a, b) => Number(firstValue(a.gameNumber, a.mancheNumber, a.position, 0)) - Number(firstValue(b.gameNumber, b.mancheNumber, b.position, 0))); const first = match.games[0]; if (first) { if (!match.participants) match.participants = first.participants; if (!match.participantIds) match.participantIds = first.participantIds; if (!match.participantNames) match.participantNames = first.participantNames; } });
+    const legacy = matches.filter(match => match.kind !== 'game' && match.kind !== 'series' && !firstValue(match.seriesId, match.parentSeriesId, match.matchSeriesId, ''));
+    return [...grouped.values(), ...legacy].filter(match => match.kind !== 'series' || seriesChildren(match).length);
+  };
   const matchSocialAttributes = match => match.kind === 'game' || (match.kind !== 'series' && firstValue(match.seriesId,match.parentSeriesId,match.matchSeriesId,'')) ? ' data-social-disabled="true"' : ` data-social-kind="match" data-social-id="${escapeHTML(match.id)}"`;
   const winnerIdentity = match => {
     const winner = firstValue(match.winner, match.winnerPlayer, {});
@@ -164,6 +182,7 @@
     return Boolean((winner.id && participantId(player) === winner.id) || (winner.name && playerName(player).toLocaleLowerCase('fr') === winner.name.toLocaleLowerCase('fr')));
   };
   const scoreFor = (match, player, index) => {
+    if (match?.kind === 'series') { const series = seriesScore(match); return index === 0 ? series.p1 : series.p2; }
     const scores = firstValue(match.scores, match.score, {});
     if (scores && typeof scores === 'object' && !Array.isArray(scores)) {
       const value = firstValue(scores[participantId(player)], scores[playerName(player)], scores[index], scores[String(index)]);
@@ -286,6 +305,15 @@
     return participants.find(player => resolvedId && participantId(player) === resolvedId) || participants.find(player => resolvedName && playerName(player).toLocaleLowerCase('fr') === resolvedName.toLocaleLowerCase('fr')) || (resolvedName || resolvedId ? { id: resolvedId, displayName: resolvedName || 'Champion' } : null);
   };
 
+  const renderResultSections = gameMatches => {
+    const sections = STAGES.map(stage => {
+      const stageMatches = gameMatches.filter(match => stageKey(match) === stage.key).sort((a, b) => matchPosition(a) - matchPosition(b));
+      if (!stageMatches.length) return '';
+      return `<details class="recap-result-stage"><summary><span><strong>${escapeHTML(stage.label)}</strong><small>${stageMatches.length} rencontre${stageMatches.length > 1 ? 's' : ''}</small></span><b>${stage.short}</b></summary><div class="recap-result-stage-list">${stageMatches.map(matchCard).join('')}</div></details>`;
+    }).join('');
+    return sections || emptyState('Resultats non publies', 'Les resultats detailles de ce championnat ne sont pas encore disponibles.');
+  };
+
   const renderPage = (championship, participants, matches) => {
     const hero=document.querySelector('.recap-hero');
     if(hero){hero.dataset.socialKind='championship';hero.dataset.socialId=championship.id;window.JwetproSocial?.decorate?.(hero)}
@@ -296,7 +324,7 @@
     byId('recap-title').textContent = title;
     byId('recap-date').textContent = formatDate(firstValue(championship.startAt, championship.startDate, championship.date));
     byId('recap-participant-count').textContent = `${participants.length} / ${EXPECTED_PLAYERS}`;
-    const gameMatches = matches.some(match => match.kind === 'series') ? matches.filter(match => match.kind !== 'series') : matches;
+    const gameMatches = buildSeriesMatches(matches);
     byId('recap-match-count').textContent = String(gameMatches.length);
     byId('recap-prize').textContent = formatMoney(firstValue(championship.prize, championship.reward, championship.prizeAmount));
     byId('participants-count-badge').textContent = `${participants.length} / ${EXPECTED_PLAYERS}`;
@@ -306,11 +334,11 @@
       : '<span class="recap-champion-avatar">—</span><div><span>CHAMPION</span><strong>Non publié</strong></div>';
     byId('recap-participants').innerHTML = participants.length ? participants.map(participantCard).join('') : emptyState('Liste non publiée', 'Les participants de cet ancien championnat ne sont pas encore disponibles.');
     renderBracket(matches);
-    const replayCount = gameMatches.filter(match => matchMoves(match).length).length;
+    const replayCount = gameMatches.filter(match => seriesReplayMoves(match).length || matchMoves(match).length).length;
     byId('replay-count').textContent = `${replayCount} REPLAY${replayCount > 1 ? 'S' : ''}`;
-    byId('recap-matches').innerHTML = gameMatches.length ? gameMatches.map(matchCard).join('') : emptyState('Résultats non publiés', 'Le tableau existe, mais les matchs détaillés de ce championnat ne sont pas encore disponibles.');
+    byId('recap-matches').innerHTML = renderResultSections(gameMatches);
     window.JwetproSocial?.decorate?.(document.querySelector('#recap-content'));
-    state.matches = matches;
+    state.matches = gameMatches;
     byId('recap-loading').hidden = true;
     byId('recap-content').hidden = false;
   };

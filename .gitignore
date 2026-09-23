@@ -8,3 +8,5 @@ dominocash/dist/
 **/firebase-debug.log
 *.log
 .tmp-*
+
+rapfi-service/.rapfi-token

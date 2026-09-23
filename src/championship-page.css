@@ -19,3 +19,17 @@
 @media(max-width:767px){.championship-recap-main{width:calc(100% - 28px);padding:92px 0 54px}.recap-hero{grid-template-columns:1fr;padding:25px 20px 0}.recap-champion{min-width:0}.recap-facts{margin:22px -20px 0;padding:0 20px}.recap-facts>div{padding:14px 0}.recap-facts>div+div{padding-left:10px}.recap-facts dd{font-size:11px}.recap-section{margin-top:18px;padding:17px 13px}.recap-section-head{align-items:start}.recap-section-head h2{font-size:18px}.recap-section-head>span{font-size:7px}.recap-participants{grid-template-columns:1fr 1fr;gap:6px}.recap-participant{grid-template-columns:30px minmax(0,1fr);min-height:52px;padding:8px}.recap-participant-avatar{width:30px;height:30px}.recap-bracket{grid-template-columns:1fr;overflow:visible}.bracket-stage{min-width:0}.bracket-stage-matches{display:grid;grid-template-columns:1fr 1fr}.bracket-stage:nth-child(n+3) .bracket-stage-matches{grid-template-columns:1fr}.recap-match{grid-template-columns:1fr;gap:10px}.recap-match>:last-child{grid-column:auto}.recap-match-versus{grid-template-columns:minmax(0,1fr) 20px minmax(0,1fr)}.replay-stage{min-height:300px;padding:10px}.replay-board{border-width:4px}.replay-controls{flex-wrap:wrap}}
 @media(max-width:420px){.recap-participants{grid-template-columns:1fr}.recap-facts{grid-template-columns:1fr}.recap-facts>div,.recap-facts>div+div{padding:11px 0;border-right:0;border-bottom:1px solid #ffffff1d}.recap-facts>div:last-child{border-bottom:0}.bracket-stage-matches{grid-template-columns:1fr}}
 @media(prefers-reduced-motion:reduce){.recap-spinner{animation:none}.championship-recap-page *{scroll-behavior:auto!important}}
+
+.recap-result-stage{border:1px solid #dbe4e9;border-radius:9px;background:#fbfcfd;overflow:hidden;}
+.recap-result-stage+.recap-result-stage{margin-top:10px;}
+.recap-result-stage>summary{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:58px;padding:12px 15px;cursor:pointer;list-style:none;color:#10283d;}
+.recap-result-stage>summary::-webkit-details-marker{display:none;}
+.recap-result-stage>summary:focus-visible{outline:3px solid #d7a13a66;outline-offset:-3px;}
+.recap-result-stage>summary>span{display:grid;gap:4px;min-width:0;}
+.recap-result-stage>summary strong{font-size:12px;}
+.recap-result-stage>summary small{color:#788b97;font-size:9px;font-weight:700;}
+.recap-result-stage>summary>b{display:grid;place-items:center;min-width:42px;height:26px;padding:0 8px;border-radius:999px;background:#edf2f5;color:#617886;font-size:9px;}
+.recap-result-stage[open]>summary{border-bottom:1px solid #dbe4e9;background:#f6f9fa;}
+.recap-result-stage[open]>summary>b{background:#dca331;color:#071827;}
+.recap-result-stage-list{display:grid;gap:8px;padding:10px;}
+.recap-result-stage-list>.recap-match{border-color:#e1e8ec;background:#fff;}

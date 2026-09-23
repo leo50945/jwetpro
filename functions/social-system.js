@@ -91,6 +91,11 @@ module.exports = ({admin, db}) => {
         await snapshot.ref.set(projected,{merge:true});
         return {id:socialId,ref:snapshot.ref,data:projected};
       }
+      // Les identifiants de simulation peuvent ne pas encore avoir de projection
+      // socialProfiles. Ils restent néanmoins des profils connus, toujours privés.
+      if (/(simulation|simulated|sim[-_]|bot[-_]|demo[-_])/i.test(socialId)) {
+        return {id:socialId,ref:snapshot.ref,data:{displayName:'Joueur simulé',playerType:'simulated',profilePublic:false,active:true,followerCount:0}};
+      }
       throw new HttpsError('not-found', 'Profil introuvable.');
     }
     if (snapshot.data()?.active === false) throw new HttpsError('not-found', 'Profil introuvable.');
@@ -143,7 +148,9 @@ module.exports = ({admin, db}) => {
         viewer={authenticated:true,following:snapshots[0]?.exists===true,followedBy:snapshots[1]?.exists===true,mutual:snapshots[0]?.exists===true&&snapshots[1]?.exists===true,blocked:snapshots.slice(2).some(item=>item?.exists),blockedByViewer:snapshots[2]?.exists===true,blockedViewer:snapshots[3]?.exists===true,self:actorSocialId===socialId};
       }
     }
-    const detailed=data.profilePublic===true||data.playerType==='simulated';
+    // Simulated players are directory identities only. Their profile page must
+    // remain private even when a legacy document still carries profilePublic:true.
+    const detailed=data.profilePublic===true&&data.playerType!=='simulated';
     return {profile:{socialId,displayName:data.displayName||'Joueur JWETPRO',avatarUrl:data.avatarUrl||'',imageName:data.imageName||'',playerType:data.playerType||'real',profilePublic:data.profilePublic===true,followerCount:Math.max(0,Number(data.followerCount)||0),level:detailed?data.level||'Débutant':null,points:detailed?Math.max(0,Number(data.points)||0):null,matchesPlayed:detailed?Math.max(0,Number(data.matchesPlayed)||0):null,wins:detailed?Math.max(0,Number(data.wins)||0):null},viewer};
   });
 

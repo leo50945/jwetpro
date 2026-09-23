@@ -8,6 +8,7 @@
     'match-series-and-replay',
     'social-sharing'
   ]);
+  const MIN_CONTENT_VERSIONS = Object.freeze({ 'championship-rewards': 3, 'match-series-and-replay': 3 });
 
   const fieldText = (record, language, field) => {
     const suffix = language === 'ht' ? 'Ht' : 'Fr';
@@ -15,7 +16,7 @@
   };
 
   const renderKnowledge = (id, record, language) => {
-    if (!record || record.enabled === false || Number(record.contentVersion || 0) < 2) return;
+    if (!record || record.enabled === false || Number(record.contentVersion || 0) < Math.max(2, Number(MIN_CONTENT_VERSIONS[id] || 0))) return;
     const title = fieldText(record, language, 'title');
     const content = fieldText(record, language, 'content');
     if (!title || !content) return;

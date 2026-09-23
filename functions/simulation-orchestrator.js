@@ -6,6 +6,7 @@ const {
   ENGINE_VERSION,seriesProfiles,simulateMopyonGame,simulateDominoGame,hashText,fingerprintSimilarity
 }=require('./simulation-bot-core');
 const {playerLevelName}=require('./domino-rewards-core');
+const {starterUidForGame} = require('./match-start-rules');
 
 const REGION='us-central1';
 const BRACKET_SIZE=32;
@@ -50,7 +51,7 @@ module.exports=({admin,db,isAdmin})=>{
     participantTypes:{[player1.uid]:player1.real===true?'real':'simulated',[player2.uid]:player2.real===true?'real':'simulated'},
     botParticipantIds:[player1,player2].filter(participantIsBot).map(player=>player.uid),
     status:'preview',seriesScore:{p1:0,p2:0},gameIds:[],currentGameId:null,winnerUid:null,winnerName:null,
-    scheduledAt:admin.firestore.Timestamp.fromMillis(Date.now()+index*2*60*1000),
+    startAt:championship.startAt||championship.startDate||admin.firestore.Timestamp.now(),scheduledAt:championship.startAt||championship.startDate||admin.firestore.Timestamp.now(),
     simulation:true,simulationRunId:championship.simulationRunId||'',
     createdAt:admin.firestore.FieldValue.serverTimestamp(),updatedAt:admin.firestore.FieldValue.serverTimestamp()
   });
@@ -210,7 +211,8 @@ module.exports=({admin,db,isAdmin})=>{
       gameNumber+=1;let result=null,accepted=false;
       for(let variant=0;variant<12;variant+=1){
         const gameSeed=hashText(`${job.seed}:g${gameNumber}:v${variant}`).slice(0,24);
-        result=series.game==='domino'?simulateDominoGame({participantIds,participantNames,seed:gameSeed,profiles}):simulateMopyonGame({participantIds,participantNames,seed:gameSeed,startingPlayerId:participantIds[(gameNumber-1)%2],profiles});
+        const startingPlayerId=starterUidForGame(participantIds,gameNumber,job.seriesId);
+        result=series.game==='domino'?simulateDominoGame({participantIds,participantNames,seed:gameSeed,profiles,startingPlayerId,gameNumber,seriesId:job.seriesId}):simulateMopyonGame({participantIds,participantNames,seed:gameSeed,startingPlayerId,profiles});
         const tooSimilar=knownFingerprints.some(fingerprint=>fingerprintSimilarity(fingerprint,result.fingerprint)>=.82);
         if(!knownSignatures.has(result.signature)&&!tooSimilar){knownSignatures.add(result.signature);knownFingerprints.push(result.fingerprint);accepted=true;break;}
       }
@@ -291,7 +293,38 @@ module.exports=({admin,db,isAdmin})=>{
     return progressSimulationRound(after.championshipId,after.round);
   });
 
-  return{autoCloseSimulationRegistration,repairSimulationBracket,enqueueSimulationBotMatches,processSimulationBotJob,advanceSimulationAfterSeriesCompleted};
+  const rescheduleChampionshipStart=onCall({region:REGION,cors:true,maxInstances:1,concurrency:1,memory:'256MiB',timeoutSeconds:60},async request=>{
+    if(!(await isAdmin(request)))throw new HttpsError('permission-denied','Administrator access is required.');
+    const championshipId=String(request.data?.championshipId||'');
+    const requestedStart=String(request.data?.startAt||'');
+    if(!validId(championshipId)||!requestedStart)throw new HttpsError('invalid-argument','A valid championship and start date are required.');
+    const startMillis=Date.parse(requestedStart);
+    if(!Number.isFinite(startMillis)||startMillis<=Date.now())throw new HttpsError('invalid-argument','The new opening time must be in the future.');
+    const championshipRef=db.collection('championships').doc(championshipId);
+    const championshipSnapshot=await championshipRef.get();
+    if(!championshipSnapshot.exists)throw new HttpsError('not-found','Championship not found.');
+    const championship=championshipSnapshot.data()||{};
+    if(championship.simulation!==true)throw new HttpsError('failed-precondition','Only simulation championships can be rescheduled here.');
+    if(championship.status==='completed'||championship.status==='cancelled')throw new HttpsError('failed-precondition','This championship is already closed.');
+    const registeredCount=Number(championship.registeredCount)||0;
+    const capacity=Math.min(BRACKET_SIZE,Math.max(1,Number(championship.maxPlayers)||BRACKET_SIZE));
+    if(registeredCount<capacity)throw new HttpsError('failed-precondition','Close all registrations before changing the opening time.');
+    const startAt=timestampFromMillis(admin,startMillis);
+    const now=admin.firestore.FieldValue.serverTimestamp();
+    await championshipRef.set({startAt,scheduledAt:startAt,updatedAt:now,scheduleChangedAt:now,scheduleChangedBy:request.auth?.uid||null},{merge:true});
+    const matches=await db.collection('matches').where('championshipId','==',championshipId).get();
+    const batch=db.batch();let updatedMatches=0;
+    matches.docs.forEach(document=>{
+      const data=document.data()||{};
+      if(data.kind==='series'&&data.status!=='completed'){
+        batch.set(document.ref,{startAt,scheduledAt:startAt,updatedAt:now},{merge:true});updatedMatches+=1;
+      }
+    });
+    if(updatedMatches)await batch.commit();
+    return{championshipId,startAt:startAt.toDate().toISOString(),updatedMatches};
+  });
+
+  return{autoCloseSimulationRegistration,repairSimulationBracket,enqueueSimulationBotMatches,processSimulationBotJob,advanceSimulationAfterSeriesCompleted,rescheduleChampionshipStart};
 };
 
 module.exports._test={BRACKET_SIZE,MAX_DRAW_GAMES,ROUNDS,seedOrder,seriesIdFor,seriesIsBotOnly,selectBotSeries,roundDefinition};

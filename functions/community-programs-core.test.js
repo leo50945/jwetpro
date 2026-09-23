@@ -37,6 +37,15 @@ test('interleaves discussions and resolves stable reply snapshots',() => {
   assert.equal(reply.replyTo.authorName,COMMUNITY_PERSONAS[0]);
 });
 
+test('prioritizes a programmed conversation matching the current context',() => {
+  const normalized = normalizeCommunityProgram({conversations:[
+    {id:'general',contexts:['general'],messages:[{id:'g1',author:COMMUNITY_PERSONAS[0],text:'Tout moun la?'}]},
+    {id:'live',contexts:['live-match'],messages:[{id:'l1',author:COMMUNITY_PERSONAS[1],text:'M ap swiv match la.'}]}
+  ]}).conversations;
+  const result = buildCommunityTimeline({actualDay:'2026-09-07',sourceDay:'2026-09-07',revision:'r1',conversations:normalized,contextHint:'live-match'});
+  assert.deepEqual(result.timeline.map(line => line.conversationId),['live']);
+});
+
 test('uses the exact day, otherwise the greatest stored day',() => {
   const records = [
     {id:'2026-09-01',data:{enabled:true,activeRevision:'a'}},

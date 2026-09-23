@@ -368,3 +368,6 @@
     min-width: 620px;
   }
 }
+.performance-table tbody tr.ranking-player-row{cursor:pointer;transition:background-color .16s ease}
+.performance-table tbody tr.ranking-player-row:hover{background:#f7fafc}
+.performance-table tbody tr.ranking-player-row:focus-visible{outline:3px solid #dca331;outline-offset:-3px;background:#fffaf0}

@@ -16,18 +16,22 @@
   const officialSection = $('#official-match');
   const officialBoard = $('#official-board');
   const matchEndModal = $('#match-end-modal');
+  const championModal = $('#champion-modal');
+  let championModalShownFor = '';
   const matchEndTitle = $('#match-end-title');
   const matchEndSubtitle = $('#match-end-subtitle');
   const matchEndReplay = $('#match-end-replay');
   const matchEndNext = $('#match-end-next');
+  const matchEndAdvanceCountdown = $('#match-end-advance-countdown');
   const replayMancheSelector = $('#replay-manche-selector');
   const replayView = $('#match-replay-view');
   const replayBoard = $('#match-replay-board');
   const replayDominoBoard = $('#match-replay-domino-board');
   const replayBoardWrap = replayDominoBoard?.parentElement;
   const matchCount = $('#match-count');
-  const ACCESS_WINDOW_MS = 15 * 60 * 1000;
+  const ACCESS_WINDOW_MS = 0;
   const OPPONENT_GRACE_PERIOD_MS = 5 * 60 * 1000;
+  const DISCONNECT_GRACE_PERIOD_MS = 60 * 1000;
   const MATCH_DURATION_MS = 90 * 60 * 1000;
   const BOARD_CELLS = 400;
   const pageQuery = new URLSearchParams(window.location.search);
@@ -41,6 +45,7 @@
   let currentMatches = [];
   let rawPlayerMatches = [];
   let completedChampionshipIds = new Set();
+  let championshipStartTimes = new Map();
   let matchesUnsubscribe = null;
   let championshipsUnsubscribe = null;
   let currentLiveMatches = [];
@@ -58,8 +63,11 @@
   let attendanceTimer = null;
   let forfeitClaimPending = false;
   let officialMovePending = false;
+  let officialOptimisticMove = null;
   let seriesAdvancePending = false;
   let seriesSyncedGameId = null;
+  let roundAdvanceTimer = null;
+  let roundAdvanceDeadline = 0;
   let pendingFinishedGameId = null;
   let spectatorMode = false;
   let activeTrainingGame = 'mopyon';
@@ -86,6 +94,54 @@
   let officialDominoOpeningComplete = false;
   let officialDominoBotTimer = null;
   let officialDominoBotPending = false;
+  let mopyonTurnTimer = null;
+  let mopyonTimeoutPending = false;
+
+  const playLanguage = () => localStorage.getItem('jwetpro-language') === 'ht' ? 'ht' : 'fr';
+  const playCopy = (fr, ht) => playLanguage() === 'ht' ? ht : fr;
+  const fullscreenTarget = game => game === 'domino' ? $('#domino-frame-shell') : $('#mopyon-board-frame');
+  const enterGameFullscreen = async game => {
+    const target = fullscreenTarget(game);
+    if (!target) return;
+    try {
+      if (document.fullscreenElement === target) { await document.exitFullscreen?.(); return; }
+      if (target.requestFullscreen) await target.requestFullscreen();
+      if (game === 'domino' && screen.orientation?.lock) {
+        try { await screen.orientation.lock('landscape'); } catch (_) { /* orientation lock is optional */ }
+      }
+    } catch (error) {
+      console.warn('Plein écran indisponible:', error);
+    }
+  };
+  const toggleFullscreenTarget = async (target, landscape = false) => {
+    if (!target) return;
+    try {
+      if (document.fullscreenElement === target) { await document.exitFullscreen?.(); return; }
+      if (target.requestFullscreen) await target.requestFullscreen();
+      if (landscape && screen.orientation?.lock) {
+        try { await screen.orientation.lock('landscape'); } catch (_) { /* optional */ }
+      }
+    } catch (error) {
+      console.warn('Plein écran indisponible:', error);
+    }
+  };
+  const showFullscreenTip = game => {
+    const key = `jwetpro-play-fullscreen-tip-${game}`;
+    if (localStorage.getItem(key) === 'hidden') return;
+    const domino = game === 'domino';
+    const modal = document.createElement('div');
+    modal.className = 'play-fullscreen-tip';
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    modal.innerHTML = `<div class="play-fullscreen-dialog"><div class="play-fullscreen-icon">${icon(domino ? 'smartphone' : 'maximize-2')}</div><p class="play-fullscreen-kicker">JWETPRO</p><h2>${playCopy(domino ? 'Profitez mieux du Domino' : 'Profitez mieux du Mopyon', domino ? 'Jwe Domino pi byen' : 'Jwe Mopyon pi byen')}</h2><p>${playCopy(domino ? 'Pour une table confortable, ouvrez le jeu en plein écran et tournez votre téléphone en mode paysage.' : 'Pour voir toutes les cases clairement, ouvrez le plateau en plein écran.', domino ? 'Pou wè tab la pi byen, mete telefòn nan an peyizaj epi ouvri jwèt la an plen ekran.' : 'Pou wè tout kaz yo byen, ouvri tablo a an plen ekran.')}</p><div class="play-fullscreen-actions"><button class="play-fullscreen-confirm" type="button">${playCopy(domino ? 'Plein écran + paysage' : 'Ouvrir en plein écran', domino ? 'Plen ekran + peyizaj' : 'Ouvri an plen ekran')}</button><button class="play-fullscreen-dismiss" type="button">${playCopy('Continuer ici', 'Kontinye isit la')}</button></div><button class="play-fullscreen-never" type="button">${playCopy('Ne plus afficher ce message', 'Pa montre mesaj sa ankò')}</button></div>`;
+    document.body.append(modal);
+    window.renderIcons?.();
+    const close = () => modal.remove();
+    modal.querySelector('.play-fullscreen-confirm')?.addEventListener('click', async () => { await enterGameFullscreen(game); close(); });
+    modal.querySelector('.play-fullscreen-dismiss')?.addEventListener('click', close);
+    modal.querySelector('.play-fullscreen-never')?.addEventListener('click', () => { localStorage.setItem(key, 'hidden'); close(); });
+    modal.addEventListener('click', event => { if (event.target === modal) close(); });
+  };
 
   const resetOfficialDominoFrame = () => {
     officialDominoFrame = null;
@@ -216,14 +272,18 @@
     if (record?.real === false) return true;
     if (record?.real === true) return false;
     if (record && (record.isBot === true || record.bot === true || record.simulated === true || record.isSimulation === true || ['bot','simulated','simulation'].includes(String(record.type || record.role || '').toLowerCase()))) return true;
-    return /^(?:bot|sim(?:ulated|ulation)?)[_-]/i.test(uid) || (data.simulation === true && uid !== realUid);
+    return /^(?:bot|sim(?:ulated|ulation)?)[_-]/i.test(uid);
   };
 
   const attendanceDeadline = data => {
     const explicit = toDate(data.attendanceDeadlineAt)?.getTime();
     if (Number.isFinite(explicit)) return explicit;
     const waitingSince = toDate(data.waitingForOpponentSince)?.getTime();
-    return Number.isFinite(waitingSince) ? waitingSince + OPPONENT_GRACE_PERIOD_MS : Number.NaN;
+    if (Number.isFinite(waitingSince)) return waitingSince + OPPONENT_GRACE_PERIOD_MS;
+    // Chaque match planifie ouvre une fenetre de presence de cinq minutes a partir
+    // de l'heure officielle, y compris lorsqu'un adversaire simule est present.
+    const scheduled = toDate(data.startAt || data.scheduledAt || data.date)?.getTime();
+    return Number.isFinite(scheduled) ? scheduled + OPPONENT_GRACE_PERIOD_MS : Number.NaN;
   };
 
   const matchTitle = (data, id) => {
@@ -268,6 +328,13 @@
   };
 
   trainingGameButtons.forEach(button => button.addEventListener('click',() => setTrainingGame(button.dataset.trainingGame)));
+  $('#mopyon-fullscreen')?.addEventListener('click', () => enterGameFullscreen('mopyon'));
+  $('#domino-fullscreen')?.addEventListener('click', () => enterGameFullscreen('domino'));
+  $('#official-fullscreen')?.addEventListener('click', () => toggleFullscreenTarget($('.official-board-wrap'), document.querySelector('#official-match')?.classList.contains('is-domino-match')));
+  $('#replay-fullscreen')?.addEventListener('click', () => toggleFullscreenTarget($('.replay-board-wrap'), replaySeries?.game === 'domino'));  document.addEventListener('fullscreenchange', () => {
+    const active = Boolean(document.fullscreenElement);
+    document.querySelectorAll('.board-fullscreen-button span').forEach(label => { label.textContent = active ? playCopy('Quitter', 'Kite') : playCopy('Plein écran', 'Plen ekran'); });
+  });
   dominoFrame?.addEventListener('load',() => {
     if (dominoFrame.getAttribute('src')?.includes('dominocash/')) dominoFrameStatus.hidden = true;
   });
@@ -281,6 +348,7 @@
   };
 
   const closeOfficialMatch = () => {
+    stopMopyonTurnTimer();
     officialUnsubscribe?.();
     officialUnsubscribe = null;
     viewingOfficialMatchId = null;
@@ -311,6 +379,7 @@
 
   if (pageQuery.get('game') === 'domino') setTrainingGame('domino');
   if (pageQuery.get('game') === 'mopyon') setTrainingGame('mopyon');
+  showFullscreenTip(pageQuery.get('game') === 'domino' ? 'domino' : 'mopyon');
   if (pageQuery.get('view') === 'matches') activateTab('matches');
 
   document.querySelectorAll('.difficulty-choice').forEach(button => button.addEventListener('click',() => {
@@ -333,24 +402,24 @@
   const getMatchAction = match => {
     if (match.data.kind === 'series') {
       const status = normalizeStatus(match.data.status || match.data.state);
-      return isCompleted(status) || match.data.winnerId || match.data.winnerUid
-        ? {label:'Revoir le replay',enabled:true,kind:'result'}
-        : {label:'Rejoindre le match',enabled:true,kind:'join'};
+      if (isCompleted(status) || match.data.winnerId || match.data.winnerUid) return {label:'Revoir le replay',enabled:true,kind:'result'};
+      const scheduledStart = match.startAt?.getTime();
+      if (!Number.isFinite(scheduledStart) || Date.now() < scheduledStart) return {label:'A venir',enabled:false,kind:'wait'};
+      const attendanceEnd = attendanceDeadline(match.data);
+      if (Number.isFinite(attendanceEnd) && Date.now() >= attendanceEnd) return {label:'Delai ecoule',enabled:false,kind:'wait'};
+      return {label:'Rejoindre le match',enabled:true,kind:'join'};
     }
     const status = normalizeStatus(match.data.status || match.data.state);
     const now = Date.now();
     const start = match.startAt?.getTime();
     if (isCompleted(status)) return {label:'Voir le replay',enabled:true,kind:'result'};
+    if (!Number.isFinite(start) || now < start) return {label:'A venir',enabled:false,kind:'wait'};
     // The five-minute attendance period starts when the first real player enters the room.
+    const turnDeadline = toDate(match.data.turnDeadlineAt)?.getTime();
+    if (match.data.currentTurnUid === currentUser?.uid && Number.isFinite(turnDeadline) && now >= turnDeadline) return {label:"Delai ecoule",enabled:false,kind:"wait"};
     const deadline = attendanceDeadline(match.data);
-    if (Number.isFinite(deadline) && now >= deadline) {
-      const opponentId = participantIds(match.data).find(id => id !== currentUser?.uid);
-      const selfPresent = Boolean(match.data.presence?.[currentUser?.uid]);
-      const opponentPresent = opponentId ? Boolean(match.data.presence?.[opponentId]) : false;
-      if (selfPresent && !opponentPresent && !isBotParticipant(match.data,opponentId)) return {label:'Valider le forfait',enabled:true,kind:'forfeit'};
-    }
+    if (Number.isFinite(deadline) && now >= deadline) return {label:'Delai ecoule',enabled:false,kind:'wait'};
     if (isLive(status)) return {label:'Rejoindre le match',enabled:true,kind:'join'};
-    if (!start) return {label:'Horaire a confirmer',enabled:false,kind:'wait'};
     if (now >= start - ACCESS_WINDOW_MS && now <= start + MATCH_DURATION_MS) return {label:'Rejoindre le match',enabled:true,kind:'join'};
     return {label:'A venir',enabled:false,kind:'wait'};
   };
@@ -361,8 +430,14 @@
       const scoreLabel = score && Number.isFinite(Number(score.p1)) && Number.isFinite(Number(score.p2)) ? `${Number(score.p1)} - ${Number(score.p2)}` : 'Terminé';
       return `<div class="match-series-score"><span>Score final</span><b>${escapeHtml(scoreLabel)}</b></div>`;
     }
+    const turnDeadline = toDate(match.data.turnDeadlineAt)?.getTime();
+    if (match.data.currentTurnUid === currentUser?.uid && Number.isFinite(turnDeadline) && isLive(normalizeStatus(match.data.status || match.data.state))) {
+      const parts = durationParts(turnDeadline - Date.now());
+      const remaining = Math.max(0, parts.minutes * 60 + parts.seconds);
+      return `<div class="countdown turn-countdown" data-turn-countdown="${escapeHtml(match.id)}"><div><b data-unit="seconds">${String(remaining).padStart(2,'0')}</b><span>sec pour jouer</span></div></div>`;
+    }
     const deadline = attendanceDeadline(match.data);
-    if (Number.isFinite(deadline) && match.data.presence?.[currentUser?.uid]) {
+    if (Number.isFinite(deadline) && Number.isFinite(match.startAt?.getTime?.()) && Date.now() >= match.startAt.getTime() && Date.now() < deadline) {
       const parts = durationParts(deadline - Date.now());
       return `<div class="countdown attendance-countdown" data-attendance-countdown="${escapeHtml(match.id)}"><div><b data-unit="minutes">${String(parts.minutes).padStart(2,'0')}</b><span>min</span></div><div><b data-unit="seconds">${String(parts.seconds).padStart(2,'0')}</b><span>sec</span></div></div>`;
     }
@@ -406,6 +481,13 @@
       if (root && match.startAt) {
         const parts = durationParts(match.startAt.getTime() - Date.now());
         Object.entries(parts).forEach(([unit,value]) => { const target=root.querySelector(`[data-unit="${unit}"]`); if(target) target.textContent=unit==='days'?value:String(value).padStart(2,'0'); });
+      }
+      const turnRoot = matchList.querySelector(`[data-turn-countdown="${CSS.escape(match.id)}"]`);
+      const turnDeadline = toDate(match.data.turnDeadlineAt)?.getTime();
+      if (turnRoot && Number.isFinite(turnDeadline)) {
+        const remaining = Math.max(0, Math.ceil((turnDeadline - Date.now()) / 1000));
+        const target = turnRoot.querySelector('[data-unit="seconds"]');
+        if (target) target.textContent = String(remaining).padStart(2,'0');
       }
       const attendanceRoot = matchList.querySelector(`[data-attendance-countdown="${CSS.escape(match.id)}"]`);
       const deadline = attendanceDeadline(match.data);
@@ -483,6 +565,8 @@
       })
       .sort((a,b) => (a.startAt?.getTime() || Number.MAX_SAFE_INTEGER) - (b.startAt?.getTime() || Number.MAX_SAFE_INTEGER));
     renderMatches();
+    const late = currentMatches.find(match => match.data.forfeitedUid === currentUser?.uid && (match.data.forfeitReason === 'attendance-timeout' || match.data.completionReason === 'attendance-timeout'));
+    if (late) showLateAttendanceModal(late);
   };
 
   const loadPlayerMatches = () => {
@@ -503,6 +587,7 @@
     rawPlayerMatches = [];
     completedChampionshipIds = new Set();
     championshipsUnsubscribe = db.collection('championships').limit(200).onSnapshot(snapshot => {
+      championshipStartTimes = new Map(snapshot.docs.map(doc => { const data = doc.data(); const start = toDate(data.startAt || data.startDate); return [doc.id, start?.getTime() || 0]; }));
       completedChampionshipIds = new Set(snapshot.docs.filter(doc => {
         const data = doc.data();
         const status = normalizeStatus(data.status || data.state);
@@ -511,8 +596,21 @@
       rebuildPlayerMatches();
     },error => console.warn('Championship status read skipped:',error?.code || error?.message));
     matchesUnsubscribe = db.collection('matches').where('participantIds','array-contains',currentUser.uid).limit(200).onSnapshot(snapshot => {
-      rawPlayerMatches = snapshot.docs.map(doc => ({id:doc.id,data:doc.data(),startAt:toDate(doc.data().startAt || doc.data().scheduledAt || doc.data().date)})).filter(match => isMopyon(match.data) || isDomino(match.data));
-      rebuildPlayerMatches();
+      const baseMatches = snapshot.docs.map(doc => ({id:doc.id,data:doc.data()}));
+      const seriesWithGames = baseMatches.filter(match => match.data.kind === 'series' && (match.data.currentGameId || match.data.activeGameId)).slice(0,50);
+      Promise.all(seriesWithGames.map(match => db.collection('matches').doc(String(match.data.currentGameId || match.data.activeGameId)).get().catch(() => null))).then(childSnapshots => {
+        const childBySeries = new Map();
+        childSnapshots.forEach(childSnapshot => { if (childSnapshot?.exists) { const child = childSnapshot.data() || {}; if (child.seriesId) childBySeries.set(String(child.seriesId), child); } });
+        rawPlayerMatches = baseMatches.map(match => {
+          const child = childBySeries.get(match.id);
+          const data = child ? {...match.data,status:child.status || match.data.status,presence:child.presence || match.data.presence,waitingForOpponentSince:child.waitingForOpponentSince || match.data.waitingForOpponentSince,attendanceDeadlineAt:child.attendanceDeadlineAt || match.data.attendanceDeadlineAt,currentTurnUid:child.currentTurnUid || match.data.currentTurnUid,turnDeadlineAt:child.turnDeadlineAt || match.data.turnDeadlineAt,forfeitReason:child.forfeitReason || match.data.forfeitReason,forfeitedUid:child.forfeitedUid || match.data.forfeitedUid,winnerId:child.winnerId || match.data.winnerId} : match.data;
+          const matchStart = toDate(data.startAt || data.scheduledAt || data.date)?.getTime() || 0;
+          const championshipStart = championshipStartTimes.get(String(data.championshipId || data.tournamentId || data.competitionId || '')) || 0;
+          const effectiveStart = Math.max(matchStart, championshipStart);
+          return {id:match.id,data,startAt:effectiveStart ? new Date(effectiveStart) : null};
+        }).filter(match => isMopyon(match.data) || isDomino(match.data));
+        rebuildPlayerMatches();
+      });
     },error => {
       console.error('Player matches read failed:',error);
       renderState('Matchs indisponibles',`Nous ne pouvons pas charger vos matchs pour le moment. [${error?.code || 'erreur'}] ${error?.message || ''}`,'triangle-alert');
@@ -575,8 +673,8 @@
     const ids = participantIds(seriesData);
     if (!alreadyRecorded && game.data.winnerId === ids[0]) score.p1 += 1;
     if (!alreadyRecorded && game.data.winnerId === ids[1]) score.p2 += 1;
-    if (game.data.forfeitReason === 'attendance-timeout' && game.data.winnerId === ids[0]) score.p1 = Math.max(2,score.p1);
-    if (game.data.forfeitReason === 'attendance-timeout' && game.data.winnerId === ids[1]) score.p2 = Math.max(2,score.p2);
+    if ((game.data.forfeitReason === 'attendance-timeout') && game.data.winnerId === ids[0]) score.p1 = Math.max(2,score.p1);
+    if ((game.data.forfeitReason === 'attendance-timeout') && game.data.winnerId === ids[1]) score.p2 = Math.max(2,score.p2);
     return score;
   };
   const projectedSeriesScoreLabel = (seriesData,game) => {
@@ -596,8 +694,44 @@
     return {gameOver,seriesId,seriesData,matchTrulyOver:Boolean(seriesData) && seriesOver,mancheOverOnly:!seriesData || !seriesOver};
   };
 
+  const showLateAttendanceModal = match => {
+    const key = 'jwetpro-attendance-forfeit-' + match.id;
+    if (!matchEndModal || !currentUser || sessionStorage.getItem(key) === 'shown') return;
+    sessionStorage.setItem(key,'shown');
+    matchEndModal.querySelector('.match-end-card')?.classList.add('is-loss');
+    matchEndModal.querySelector('.match-end-kicker').textContent = 'FORFAIT DE TEMPS';
+    matchEndTitle.textContent = 'Match perdu par forfait';
+    matchEndSubtitle.textContent = 'Vous avez rejoint le match trop tard : le delai de presence de cinq minutes est ecoule.';
+    const rewardNode=$('#match-end-reward');
+    if (rewardNode) { rewardNode.textContent = 'Votre coupon de reduction pour le prochain championnat est conserve dans votre profil.'; rewardNode.hidden=false; }
+    matchEndReplay.href = './play.html?replay=' + encodeURIComponent(match.id);
+    matchEndReplay.innerHTML = icon('play-circle') + 'Voir le replay du match';
+    matchEndNext.hidden=true;
+    const shareButton=$('#match-end-share'); if(shareButton) shareButton.hidden=true;
+    const closeButton=$('#match-end-close'); if(closeButton) closeButton.textContent='Terminer';
+    matchEndModal.hidden=false;
+    window.renderIcons?.();
+  };
   const hideMatchEndModal = () => { if (matchEndModal) matchEndModal.hidden = true; };
 
+  const hideChampionModal = () => { if (championModal) championModal.hidden = true; };
+  const showChampionModal = ({championshipId, championshipName, winnerName, scoreLabel}) => {
+    if (!championModal || !currentUser?.uid || !championshipId || championModalShownFor === championshipId) return;
+    const storageKey = `jwetpro-champion-certificate-${championshipId}-${currentUser.uid}`;
+    if (sessionStorage.getItem(storageKey) === 'shown') return;
+    championModalShownFor = championshipId;
+    sessionStorage.setItem(storageKey, 'shown');
+    $('#champion-modal-title').textContent = `Félicitations ${winnerName || 'champion'} !`;
+    $('#champion-modal-subtitle').textContent = `Vous remportez ${championshipName || 'ce championnat'}${scoreLabel ? ` avec un score final de ${scoreLabel}.` : '.'}`;
+    $('#champion-certificate-name').textContent = winnerName || currentUser.displayName || 'Champion JWETPRO';
+    $('#champion-certificate-title').textContent = championshipName || 'Champion JWETPRO';
+    $('#champion-certificate-date').textContent = new Intl.DateTimeFormat('fr-FR',{day:'numeric',month:'long',year:'numeric'}).format(new Date());
+    const shareUrl = `${window.location.origin}${window.location.pathname.replace(/play\.html$/, 'progress.html')}?id=${encodeURIComponent(championshipId)}`;
+    const shareButton = $('#champion-share');
+    if (shareButton) shareButton.dataset.shareUrl = shareUrl;
+    championModal.hidden = false;
+    window.renderIcons?.();
+  };
   const pointsProgressText = total => {
     const points=Math.max(0,Number(total)||0);
     const next=[['Intermédiaire',50],['Confirmé',150],['Expert',300],['Élite',600]].find(([,threshold])=>points<threshold);
@@ -617,6 +751,27 @@
     }
   };
 
+  const stopRoundAdvanceTimer = () => { window.clearInterval(roundAdvanceTimer); roundAdvanceTimer = null; roundAdvanceDeadline = 0; if(matchEndAdvanceCountdown){ matchEndAdvanceCountdown.hidden = true; matchEndAdvanceCountdown.classList.remove('is-urgent'); } };
+  const startRoundAdvanceTimer = deadline => {
+    stopRoundAdvanceTimer();
+    roundAdvanceDeadline = Number(deadline) || (Date.now() + 5 * 60 * 1000);
+    if(!matchEndAdvanceCountdown) return;
+    matchEndAdvanceCountdown.hidden = false;
+    const tick = () => {
+      const total = Math.max(0, Math.ceil((roundAdvanceDeadline - Date.now()) / 1000));
+      const strong = matchEndAdvanceCountdown.querySelector('strong');
+      if(strong) strong.textContent = String(Math.floor(total / 60)).padStart(2,'0') + ':' + String(total % 60).padStart(2,'0');
+      matchEndAdvanceCountdown.classList.toggle('is-urgent', total <= 60);
+      if(total > 0) return;
+      stopRoundAdvanceTimer();
+      if(matchEndNext){ matchEndNext.disabled = true; matchEndNext.textContent = 'Délai écoulé'; }
+      if(matchEndSubtitle) matchEndSubtitle.textContent = 'Le délai de cinq minutes est écoulé. Le match sera clôturé par forfait.';
+      const seriesId = String(officialLastGame?.data?.seriesId || ''); if(functions && seriesId) functions.httpsCallable('claimSeriesAdvanceTimeout')({seriesId}).catch(error => console.error('Round transition timeout failed:', error));
+    };
+    tick();
+    roundAdvanceTimer = window.setInterval(tick,1000);
+  };
+
   const showMatchEndModal = ({winnerName,winnerId,draw,replayId,scoreLabel,forfeit,mancheOnly=false,canAdvance=false,shareable=false,reward=null}) => {
     if (!matchEndModal) return;
     const playerIsParticipant=participantIds(officialLastGame?.data||{}).includes(currentUser?.uid);
@@ -630,7 +785,7 @@
       : playerLost ? `Vous avez perdu ${mancheOnly?'cette manche':'le match'}`
       : winnerName ? `${winnerName} remporte ${mancheOnly ? 'la manche' : 'le match'}` : (mancheOnly ? 'Manche terminée' : 'Match terminé');
     matchEndSubtitle.textContent = forfeit
-      ? 'L’adversaire a perdu par forfait de temps après cinq minutes d’absence.'
+      ? ((officialLastGame?.data?.forfeitReason === 'turn-timeout') ? 'Le délai de 30 secondes est écoulé : vous perdez cette manche. Le match continue jusqu’à deux manches gagnées.' : 'L’adversaire a perdu par forfait de temps après cinq minutes d’absence.')
       : mancheOnly
         ? `${scoreLabel ? `Score de la rencontre : ${scoreLabel}. ` : ''}Le match continue jusqu’à deux manches gagnées.`
         : scoreLabel ? `Score final de la rencontre : ${scoreLabel}.` : 'Cette rencontre officielle est maintenant terminée.';
@@ -641,7 +796,8 @@
       const hasTotal=Number.isFinite(Number(reward?.pointsTotal));
       if(!mancheOnly&&pointsDelta>0) rewardText=`+${pointsDelta} points crédités${hasTotal?` — Total : ${Number(reward.pointsTotal)} points.${pointsProgressText(reward.pointsTotal)}`:'.'}`;
       if(!mancheOnly&&playerLost&&reward?.coupon) rewardText+=`${rewardText?' ':''}${reward.coupon.label||'Votre coupon'} est gagné et enregistré dans « Mes coupons » de votre profil.`;
-      if(!mancheOnly&&(playerWon||playerLost)&&!reward) rewardText='Validation de vos points et récompenses en cours…';
+      // Only Domino waits for a series reward receipt; Mopyon must finish immediately.
+      if(!mancheOnly&&isDomino(officialLastGame?.data||{})&&(playerWon||playerLost)&&!reward) rewardText='Validation de vos points et récompenses en cours…';
       rewardNode.textContent=rewardText;
       rewardNode.hidden=!rewardText;
     }
@@ -649,7 +805,10 @@
     matchEndReplay.innerHTML = `${icon('play-circle')}${mancheOnly ? 'Revoir cette manche' : 'Voir le replay du match'}`;
     matchEndNext.hidden = !canAdvance;
     matchEndNext.disabled = false;
+    if(mancheOnly && canAdvance) startRoundAdvanceTimer(officialSeriesData?.advanceDeadlineAt?.toMillis?.() || (Number(officialSeriesData?.advanceDeadlineAt?.seconds) * 1000) || (Date.now() + 5 * 60 * 1000)); else stopRoundAdvanceTimer();
     matchEndNext.innerHTML = `${icon('arrow-right')}${forfeit ? 'Finaliser le match' : 'Passer à la manche suivante'}`;
+    const closeButton=$('#match-end-close');
+    if(closeButton) closeButton.textContent=mancheOnly?'Fermer':'Terminer';
     const shareButton = $('#match-end-share');
     if (shareButton) {
       shareButton.hidden = Boolean(!shareable || mancheOnly || draw || !winnerId || winnerId !== currentUser?.uid || !replayId);
@@ -672,7 +831,7 @@
       const participantCanAdvance = !spectatorMode && participantIds(data).includes(currentUser?.uid);
       const projectedScore = projectedSeriesScore(info.seriesData,match);
       const matchEndsWithThisManche = Boolean(projectedScore && (projectedScore.p1 >= 2 || projectedScore.p2 >= 2)) || data.forfeitReason === 'attendance-timeout';
-      showMatchEndModal({winnerName,winnerId:data.winnerId,draw:Boolean(data.draw),replayId:matchEndsWithThisManche ? info.seriesId : match.id,scoreLabel:projectedScore ? `${projectedScore.p1} - ${projectedScore.p2}` : null,forfeit:data.forfeitReason === 'attendance-timeout',mancheOnly:!matchEndsWithThisManche,canAdvance:participantCanAdvance && !matchEndsWithThisManche});
+      showMatchEndModal({winnerName,winnerId:data.winnerId,draw:Boolean(data.draw),replayId:matchEndsWithThisManche ? info.seriesId : match.id,scoreLabel:projectedScore ? `${projectedScore.p1} - ${projectedScore.p2}` : null,forfeit:(data.forfeitReason === 'attendance-timeout' || data.forfeitReason === 'turn-timeout'),mancheOnly:!matchEndsWithThisManche,canAdvance:participantCanAdvance && !matchEndsWithThisManche});
       // Persist the manche result immediately. The next board is prepared server-side but remains
       // closed until the player explicitly chooses “Passer à la manche suivante” in this modal.
       if (participantCanAdvance && functions && seriesSyncedGameId !== match.id) {
@@ -692,8 +851,10 @@
       ? (info.seriesData.winnerName || (info.seriesData.winnerUid && participantName(data,info.seriesData.winnerUid)) || participantName(data,data.winnerId) || 'Le vainqueur')
       : (participantName(data,data.winnerId) || 'Le vainqueur');
     const reward=officialSeriesReward?.seriesId===info.seriesId?officialSeriesReward:null;
-    showMatchEndModal({winnerName,winnerId:info.seriesData?.winnerUid || data.winnerId,draw:Boolean(data.draw),replayId:info.seriesId || match.id,scoreLabel:seriesScoreLabel(info.seriesData),forfeit:data.forfeitReason === 'attendance-timeout',shareable:true,reward});
-    if(info.seriesId&&!spectatorMode&&participantIds(data).includes(currentUser?.uid)&&!reward) loadOfficialSeriesReward(info.seriesId);
+    showMatchEndModal({winnerName,winnerId:info.seriesData?.winnerUid || data.winnerId,draw:Boolean(data.draw),replayId:info.seriesId || match.id,scoreLabel:seriesScoreLabel(info.seriesData),forfeit:(data.forfeitReason === 'attendance-timeout' || data.forfeitReason === 'turn-timeout'),shareable:true,reward});    const finalWinnerId = info.seriesData?.winnerUid || data.winnerId;
+    const championshipId = String(info.seriesData?.championshipId || info.seriesData?.tournamentId || data.championshipId || data.tournamentId || '');
+    if (!spectatorMode && finalWinnerId === currentUser?.uid && championshipId) showChampionModal({championshipId,championshipName:info.seriesData?.championshipName || info.seriesData?.championshipTitle || data.championshipName || data.championshipTitle || 'Championnat JWETPRO',winnerName,scoreLabel:seriesScoreLabel(info.seriesData)});
+    if(info.seriesId&&isDomino(data)&&!spectatorMode&&participantIds(data).includes(currentUser?.uid)&&!reward) loadOfficialSeriesReward(info.seriesId);
   };
 
   const watchOfficialSeries = seriesId => {
@@ -721,11 +882,24 @@
     officialDominoHand = [];
     officialDominoHandMatchId = null;
     officialDominoHandPending = false;
+    officialOptimisticMove = null;
     selectedOfficialDominoTileId = '';
     resetOfficialDominoFrame();
     hideMatchEndModal();
   };
 
+  championModal?.addEventListener('click',event => { if (event.target === championModal) hideChampionModal(); });
+  $('#champion-modal-close')?.addEventListener('click',hideChampionModal);
+  $('#champion-modal-done')?.addEventListener('click',hideChampionModal);
+  $('#champion-share')?.addEventListener('click',async event => {
+    const shareUrl = event.currentTarget.dataset.shareUrl;
+    if (!shareUrl) return;
+    const shareData = {title:'Certificat de champion JWETPRO',text:'Je suis champion JWETPRO !',url:shareUrl};
+    try {
+      if (navigator.share) await navigator.share(shareData);
+      else { await navigator.clipboard.writeText(shareUrl); event.currentTarget.innerHTML = `${icon('check')}Lien copié`; window.renderIcons?.(); }
+    } catch (error) { if (error?.name !== 'AbortError') console.warn('Partage du certificat impossible:',error); }
+  });
   matchEndModal?.addEventListener('click',event => { if (event.target === matchEndModal) hideMatchEndModal(); });
   $('#match-end-close')?.addEventListener('click',hideMatchEndModal);
   $('#match-end-share')?.addEventListener('click',event => {
@@ -774,6 +948,39 @@
     window.clearInterval(attendanceTimer);
     attendanceTimer = null;
     forfeitClaimPending = false;
+  };
+
+  const stopMopyonTurnTimer = () => {
+    window.clearInterval(mopyonTurnTimer);
+    mopyonTurnTimer = null;
+    mopyonTimeoutPending = false;
+    const timer = $('#official-turn-timer');
+    if (timer) { timer.hidden = true; timer.classList.remove('is-danger'); }
+  };
+
+  const startMopyonTurnTimer = match => {
+    stopMopyonTurnTimer();
+    const data = match?.data || {};
+    const timer = $('#official-turn-timer');
+    if (!timer || spectatorMode || !isMopyon(data) || data.winnerId || data.draw || !isLive(normalizeStatus(data.status || data.state))) return;
+    const deadline = toDate(data.turnDeadlineAt)?.getTime();
+    if (!Number.isFinite(deadline)) return;
+    const update = async () => {
+      const remaining = Math.max(0, deadline - Date.now());
+      const seconds = Math.ceil(remaining / 1000);
+      const yours = data.currentTurnUid === currentUser?.uid;
+      timer.hidden = false;
+      timer.textContent = `${yours ? 'Votre tour' : 'Tour adverse'} · ${seconds} s`;
+      timer.classList.toggle('is-danger', remaining <= 10000);
+      if (remaining <= 0 && !mopyonTimeoutPending && functions) {
+        mopyonTimeoutPending = true;
+        try { await functions.httpsCallable('claimMopyonTurnTimeout')({matchId: match.id}); }
+        catch (error) { if (!['functions/failed-precondition','failed-precondition'].includes(error?.code)) console.warn('Le forfait de tour n’a pas été appliqué:', error?.code || error?.message); }
+        finally { mopyonTimeoutPending = false; }
+      }
+    };
+    update();
+    mopyonTurnTimer = window.setInterval(update, 250);
   };
 
   const claimAttendanceForfeit = async matchId => {
@@ -951,6 +1158,7 @@
       && !data.winnerId && !data.draw && Boolean(data.presence?.[currentUser.uid])
       && opponentId && !data.presence?.[opponentId] && !isBotParticipant(data,opponentId);
     if (waitingForRealOpponent) {
+      stopMopyonTurnTimer();
       renderAttendanceWaiting(match,opponentId);
       return;
     }
@@ -965,14 +1173,16 @@
     $('#official-match-title').textContent = matchTitle(data,match.id);
     const endInfo = officialMatchEndInfo(data);
     $('#official-match-status').textContent = endInfo.matchTrulyOver
-      ? (data.forfeitReason === 'attendance-timeout' ? 'Forfait de temps' : data.draw ? 'Match nul' : 'Match terminé')
+      ? (data.forfeitReason === 'double-attendance-timeout' ? 'Bye automatique' : (data.forfeitReason === 'attendance-timeout' || data.forfeitReason === 'turn-timeout') ? 'Forfait de temps' : data.draw ? 'Match nul' : 'Match terminé')
       : endInfo.gameOver
         ? (data.draw ? 'Manche nulle' : 'Manche terminée')
         : liveStatus ? 'En direct' : 'Synchronisation';
     const currentPlayer = participantName(data,data.currentTurnUid) || 'Le joueur actif';
     const scoreText = seriesScoreLabel(endInfo.seriesData);
     $('#official-turn').textContent = endInfo.matchTrulyOver
-      ? (data.forfeitReason === 'attendance-timeout'
+      ? (data.forfeitReason === 'double-attendance-timeout'
+          ? 'Les deux joueurs étaient absents après cinq minutes. L’adversaire suivant avance automatiquement par bye.'
+          : (data.forfeitReason === 'attendance-timeout' || data.forfeitReason === 'turn-timeout')
           ? `${participantName(data,data.forfeitedUid) || 'L’adversaire'} perd le match par forfait de temps.`
           : data.draw ? 'La partie se termine sur un match nul.' : `${participantName(data,data.winnerId) || 'Le vainqueur'} remporte le match.`)
       : endInfo.gameOver
@@ -985,15 +1195,23 @@
           ? `${currentPlayer} doit jouer.`
           : canPlay ? 'À vous de jouer.' : 'Tour de votre adversaire.';
     if (dominoMatch) {
+      stopMopyonTurnTimer();
       renderOfficialDominoBoard(match,canPlay);
       return;
     }
+    startMopyonTurnTimer(match);
     const board = Array.isArray(data.board) && data.board.length === BOARD_CELLS ? data.board : Array(BOARD_CELLS).fill('');
     resetOfficialDominoFrame();
     officialBoard.classList.remove('domino-live-board','domino-official-table','domino-embed-board');
     officialBoard.setAttribute('role','grid');
     officialBoard.setAttribute('aria-label','Plateau Mopyon du match en direct');
-    officialBoard.innerHTML = board.map((value,index) => `<button class="official-cell ${value ? value.toLowerCase() : ''}" type="button" role="gridcell" data-official-index="${index}" aria-label="Ligne ${Math.floor(index/20)+1}, colonne ${index%20+1}${value?`, ${escapeHtml(value)}`:', vide'}" ${canPlay&&!value?'':'disabled'}>${escapeHtml(value)}</button>`).join('');
+    if (officialOptimisticMove?.matchId === match.id && board[officialOptimisticMove.index] === officialOptimisticMove.symbol) officialOptimisticMove = null;
+    const pendingMove = officialOptimisticMove?.matchId === match.id ? officialOptimisticMove : null;
+    const latestMove = Array.isArray(data.moves) ? [...data.moves].reverse().find(move => Number.isInteger(Number(move?.index)) && Number(move.index) >= 0 && Number(move.index) < BOARD_CELLS) : null;
+    const latestIndex = pendingMove?.index ?? (latestMove ? Number(latestMove.index) : -1);
+    const displayBoard = board.slice();
+    if (pendingMove && !displayBoard[pendingMove.index]) displayBoard[pendingMove.index] = pendingMove.symbol;
+    officialBoard.innerHTML = displayBoard.map((value,index) => `<button class="official-cell ${value ? value.toLowerCase() : ''}${index === latestIndex ? ' last-move' : ''}${pendingMove?.index === index ? ' pending-move' : ''}" type="button" role="gridcell" data-official-index="${index}" aria-label="Ligne ${Math.floor(index/20)+1}, colonne ${index%20+1}${value ? `, ${escapeHtml(value)}` : ', vide'}${index === latestIndex ? ', dernier coup' : ''}" ${canPlay&&!value&&!pendingMove?'':'disabled'}>${escapeHtml(value)}</button>`).join('');
     officialBoard.querySelectorAll('[data-official-index]:not(:disabled)').forEach(cell => cell.addEventListener('click',() => submitOfficialMove(match.id,Number(cell.dataset.officialIndex))));
   };
 
@@ -1090,13 +1308,13 @@
       if (!gameId) {
         const ids = participantIds(data);
         const opponentId = ids.find(id => id !== currentUser?.uid);
-        const canPrepareMopyonBot = isMopyon(data) && isBotParticipant(data,opponentId,currentUser?.uid || '');
+        const canPrepareMopyon = isMopyon(data);
         const canPrepareDomino = isDomino(data);
-        if (!canPrepareMopyonBot && !canPrepareDomino) return;
+        if (!canPrepareMopyon && !canPrepareDomino) return;
         openingGame = true;
         $('#official-match-status').textContent = 'Préparation';
-        $('#official-turn').textContent = canPrepareDomino ? 'Création sécurisée de la première manche Domino…' : 'Création de la première manche contre le joueur simulé…';
-        officialBoard.innerHTML = `<div class="play-state"><span class="state-spinner"></span><strong>Ouverture du plateau…</strong><p>${canPrepareDomino ? 'Le plateau Domino officiel est en préparation.' : 'Votre adversaire simulé est en cours de connexion.'}</p></div>`;
+        $('#official-turn').textContent = canPrepareDomino ? 'Création sécurisée de la première manche Domino…' : '';
+        officialBoard.innerHTML = `<div class="play-state"><span class="state-spinner"></span><strong>Ouverture du plateau…</strong><p>${canPrepareDomino ? 'Le plateau Domino officiel est en préparation.' : 'Le plateau officiel est en préparation.'}</p></div>`;
         try {
           const preparation = await functions.httpsCallable(canPrepareDomino ? 'joinDominoMatch' : 'joinMopyonMatch')({matchId:match.id});
           const preparedId = String(preparation.data?.matchId || '');
@@ -1126,15 +1344,25 @@
   };
 
   const submitOfficialMove = async (matchId,index) => {
-    if (officialMovePending) return;
+    if (officialMovePending || !officialLastGame?.data || !Number.isInteger(index)) return;
+    const symbol = officialLastGame.data.playerSymbols?.[currentUser?.uid] || 'X';
+    officialOptimisticMove = {matchId,index,symbol};
     officialMovePending = true;
+    const optimisticCell = officialBoard.querySelector(`[data-official-index="${index}"]`);
+    if (optimisticCell) {
+      optimisticCell.textContent = symbol;
+      optimisticCell.classList.add(symbol.toLowerCase(),'last-move','pending-move');
+      optimisticCell.disabled = true;
+    }
     officialBoard.querySelectorAll('button').forEach(button => {button.disabled=true;});
     try {
       const submitMove = functions.httpsCallable('submitMopyonMove');
       await submitMove({matchId,index});
     } catch (error) {
+      officialOptimisticMove = null;
       console.error('Official move failed:',error);
       $('#official-turn').textContent = 'Ce coup n’a pas ete accepte. Le plateau va etre resynchronise.';
+      if (officialLastGame) renderOfficialBoard(officialLastGame);
     } finally {
       officialMovePending = false;
     }
@@ -1259,7 +1487,10 @@
 
   const replayResultText = () => {
     const data = replayMatch?.data || {};
-    if (data.forfeitReason === 'attendance-timeout' || (data.forfeit === true && data.completionReason === 'attendance-timeout')) {
+    if (data.forfeitReason === 'double-attendance-timeout' || (data.forfeit === true && data.completionReason === 'double-attendance-timeout')) {
+      return 'Les deux joueurs étaient absents après cinq minutes. L’adversaire suivant avance automatiquement par bye.';
+    }
+    if ((data.forfeitReason === 'attendance-timeout' || data.forfeitReason === 'turn-timeout') || (data.forfeit === true && data.completionReason === 'attendance-timeout')) {
       const forfeited = replayMatch?.players.find(player => player.id && player.id === data.forfeitedUid);
       return `${forfeited?.name || 'Le joueur absent'} a perdu par forfait de temps après cinq minutes d’absence.`;
     }
@@ -1277,7 +1508,7 @@
     replayBoard.innerHTML = board.map((value,cellIndex) => `<button class="official-cell ${value ? value.toLowerCase() : ''}${cellIndex === lastMove ? ' last-move' : ''}" type="button" role="gridcell" aria-label="Ligne ${Math.floor(cellIndex/20)+1}, colonne ${cellIndex%20+1}${value ? `, ${value}` : ', vide'}" disabled>${escapeHtml(value)}</button>`).join('');
     $('#match-replay-progress').textContent = `Coup ${replayIndex} / ${replayMoves.length}`;
     $('#match-replay-progress-bar').style.width = `${replayMoves.length ? replayIndex / replayMoves.length * 100 : 0}%`;
-    $('#match-replay-status').textContent = replayIndex === replayMoves.length ? replayResultText() : replayIndex ? `Coup ${replayIndex} : ${replayMoves[replayIndex-1].symbol} vient de jouer.` : replayMatch?.simulation ? 'Cette séquence est un replay simulé de la partie.' : 'Le match va commencer.';
+    $('#match-replay-status').textContent = replayIndex === replayMoves.length ? replayResultText() : replayIndex ? `Coup ${replayIndex} : ${replayMoves[replayIndex-1].symbol} vient de jouer.` : replayMatch?.simulation ? 'La séquence enregistrée va commencer.' : 'Le match va commencer.';
     $('#match-replay-start').disabled = replayIndex === 0;
     $('#match-replay-back').disabled = replayIndex === 0;
     $('#match-replay-forward').disabled = replayIndex === replayMoves.length;
@@ -1381,7 +1612,7 @@
     const matchIsDomino = isDomino(data);
     const players = replayPlayers(data);
     const simulationMatch = isSimulation(data,game.id);
-    const attendanceForfeit = data.forfeitReason === 'attendance-timeout' || (data.forfeit === true && data.completionReason === 'attendance-timeout');
+    const attendanceForfeit = (data.forfeitReason === 'attendance-timeout' || data.forfeitReason === 'turn-timeout') || (data.forfeit === true && data.completionReason === 'attendance-timeout');
     let moves = matchIsDomino ? normalizeDominoReplayMoves(data) : normalizeReplayMoves(data);
     if (!moves.length && simulationMatch && !matchIsDomino && !attendanceForfeit) moves = simulatedReplayMoves(data,game.id,players);
     if (!moves.length && !attendanceForfeit) {
@@ -1404,9 +1635,9 @@
     }
     const titleData = replaySeries?.data || data;
     $('#match-replay-title').textContent = `${String(titleData.game || titleData.type || 'Mopyon').toUpperCase()} #${titleData.number || titleData.matchNumber || replaySeries?.id || game.id}`;
-    const source = simulationMatch ? 'REPLAY SIMULÉ' : 'REPLAY OFFICIEL';
+    const source = 'REPLAY OFFICIEL';
     $('#match-replay-source').textContent=source;
-    $('#match-replay-source').classList.toggle('is-simulated',source === 'REPLAY SIMULÉ');
+    $('#match-replay-source').classList.toggle('is-simulated',false);
     $('#match-replay-player-one').innerHTML=replayPlayerMarkup(players[0],!matchIsDomino);
     $('#match-replay-player-two').innerHTML=replayPlayerMarkup(players[1],!matchIsDomino);
     renderReplayFrame(0);

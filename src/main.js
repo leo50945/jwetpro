@@ -21,6 +21,7 @@ const matchToDate = value => { if (!value) return null; const date = value?.toDa
 let homepageStartedMatches = [];
 let homepageFeaturedChampionship = null;
 let homepageChampionshipRecords = [];
+const homepageRegisteredChampionshipIds = new Set();
 let homepageMatchRecords = [];
 let homepagePersonalMatches = [];
 let homepagePersonalMatchesRequest = 0;
@@ -145,7 +146,7 @@ const rulesContent = {
       ['Format du championnat', ['32 joueurs participent au tableau final.', 'Le championnat comporte cinq tours : seizièmes de finale, huitièmes de finale, quarts de finale, demi-finales et finale.', 'Chaque confrontation constitue un seul match joué au meilleur de trois manches.', 'Le premier joueur qui gagne deux manches remporte le match.', 'Une manche fait toujours partie de son match et n’est jamais comptée comme un match indépendant.', 'Les adversaires sont attribués automatiquement par JwetPro.', 'Il est interdit de choisir ou d’échanger son adversaire.', 'Le gagnant de chaque match avance au tour suivant.']],
       ['Règles du Morpion', ['Deux joueurs s’affrontent : X contre O.', 'Les joueurs jouent chacun leur tour.', 'Le joueur qui commence est déterminé par JwetPro.', 'Un symbole ne peut être placé que sur une case libre.', 'Une fois un coup validé, il ne peut plus être déplacé ou annulé.', 'Le premier joueur qui aligne exactement 5 symboles consécutifs gagne la partie.', 'L’alignement peut être horizontal, vertical ou diagonal.', 'Si aucune victoire n’est obtenue et qu’aucun coup légal ne permet de poursuivre la partie, le match est déclaré nul.']],
       ['Qualification', ['Le gagnant est qualifié pour le tour suivant.', 'Lorsqu’un match ne produit pas de gagnant direct, le départage publié avant le championnat est appliqué.', 'Le champion ne sera jamais choisi au hasard.']],
-      ['Temps, absence et déconnexion', ['Chaque joueur doit être présent à l’heure indiquée pour son match.', 'Dans un match entre deux joueurs réels, l’arrivée du premier joueur déclenche un délai de présence de 5 minutes pour son adversaire.', 'Si l’adversaire n’a pas rejoint la salle à la fin des 5 minutes, il perd automatiquement par forfait de temps et ce motif apparaît dans le résultat et le replay.', 'Cette règle de forfait ne s’applique pas à un adversaire simulé : la partie commence immédiatement contre le bot dès l’arrivée du joueur réel.', 'En cas de courte déconnexion après le début de la partie, JwetPro tente de permettre au joueur de reprendre la partie.', 'Une déconnexion ne permet pas d’annuler volontairement un mauvais coup ou de recommencer une partie.', 'Les abandons volontaires répétés peuvent entraîner des sanctions.']],
+      ['Temps, absence et déconnexion', ['Chaque joueur doit être présent à l’heure indiquée pour son match.', 'Dans un match entre deux joueurs réels, l’arrivée du premier joueur déclenche un délai de présence de 5 minutes pour son adversaire.', 'Si l’adversaire n’a pas rejoint la salle à la fin des 5 minutes, il perd automatiquement par forfait de temps et ce motif apparaît dans le résultat et le replay.', 'Cette règle de forfait ne s’applique pas à un adversaire automatique : la partie commence immédiatement contre le bot dès l’arrivée du joueur réel.', 'En cas de courte déconnexion après le début de la partie, JwetPro tente de permettre au joueur de reprendre la partie.', 'Une déconnexion ne permet pas d’annuler volontairement un mauvais coup ou de recommencer une partie.', 'Les abandons volontaires répétés peuvent entraîner des sanctions.']],
       ['Jeu équitable', ['Utiliser un bot ou un programme pour choisir ses coups est interdit.', 'Les multi-comptes et le partage de compte sont interdits.', 'Il est interdit de recevoir une aide extérieure pendant un match officiel.', 'Il est interdit d’organiser volontairement une victoire ou une défaite.', 'L’exploitation d’un bug ou d’une faille est interdite.', 'JwetPro peut examiner les parties suspectes et suspendre un résultat lorsqu’une vérification est nécessaire.']],
       ['Spectateurs et matchs en direct', ['Les matchs officiels peuvent être suivis directement sur JwetPro.', 'Les spectateurs peuvent voir le plateau, les coups joués, l’état du match, la progression du championnat et les résultats.', 'Un spectateur ne doit jamais pouvoir intervenir dans une partie ou transmettre une aide à un joueur pendant son match.']],
       ['Récompenses et coupons', ['Le champion remporte 2 000 HTG après validation définitive des résultats.', 'Le deuxième reçoit un coupon couvrant gratuitement une inscription.', 'Chacun des autres participants reçoit un coupon de réduction de 25 HTG.', 'Chaque coupon est personnel, non transférable, non cumulable et utilisable une seule fois uniquement pour le prochain championnat publié, qu’il soit Mopyon ou Domino. Il expire ensuite.']],
@@ -205,7 +206,7 @@ if (calendarSection && Array.isArray(d.calendar) && d.calendar.length) {
   const calendarIcon = item => /domino/i.test(item[1]) ? './src/images/iconedomino.png' : './src/images/logogomoku.png';
   const calendarAlt = item => /domino/i.test(item[1]) ? 'Icône Domino' : 'Icône Mopyon';
   const statusClass = item => item[4] === 'open' ? 'open' : 'soon';
-  calendarSection.querySelector('.container').innerHTML = `<div class="calendar-heading"><h2 class="section-title"><span class="calendar-heading-icon">${I('Trophy')}</span>CALENDRIER DES CHAMPIONNATS</h2><a class="arrow-link" href="#calendar">VOIR TOUS LES CHAMPIONNATS ${I('ChevronRight')}</a></div><div class="calendar-layout"><article class="calendar-feature"><div class="calendar-feature-label">${I('Star')} PROCHAIN CHAMPIONNAT</div><div class="calendar-feature-main"><div class="calendar-feature-date"><b>${featured[0].split(' ')[0]}</b><span>${featured[0].split(' ')[1] || 'MAI'}</span></div><div class="calendar-feature-copy"><div class="calendar-game-icon"><img src="${calendarIcon(featured)}" alt="${calendarAlt(featured)}"></div><div><h3>${featured[1]}</h3><p>${featured[2]}</p><span class="status ${statusClass(featured)}">${featured[3]}</span></div></div></div><div class="calendar-feature-footer"><div><span>${I('Coins')} ENTRÉE</span><b>${d.next.entry}</b></div><div><span>${I('Trophy')} GAIN</span><b>${d.next.prize}</b></div><a href="#games">VOIR LE CHAMPIONNAT ${I('ChevronRight')}</a></div></article><div class="calendar-timeline">${upcoming.map((item,index)=>`<article class="calendar-timeline-item"><span class="calendar-timeline-dot ${index?'':'active'}"></span><div class="calendar-timeline-date"><b>${item[0].split(' ')[0]}</b><span>${item[0].split(' ')[1] || 'MAI'}</span></div><div class="calendar-timeline-icon"><img src="${calendarIcon(item)}" alt="${calendarAlt(item)}"></div><div class="calendar-timeline-copy"><h3>${item[1]}</h3><p>${item[2]}</p></div><span class="status ${statusClass(item)}">${item[3]}</span>${I('ChevronRight')}</article>`).join('')}</div></div>`;
+  calendarSection.querySelector('.container').innerHTML = `<div class="calendar-heading"><h2 class="section-title"><span class="calendar-heading-icon">${I('Trophy')}</span>CALENDRIER DES CHAMPIONNATS</h2><a class="arrow-link" href="#calendar">VOIR TOUS LES CHAMPIONNATS ${I('ChevronRight')}</a></div><div class="calendar-layout"><article class="calendar-feature"><div class="calendar-feature-head"><div class="calendar-feature-label">${I('Star')} PROCHAIN CHAMPIONNAT</div><div class="calendar-feature-social-slot" data-social-actions-slot aria-label="Actions sociales du championnat"></div></div><div class="calendar-feature-main"><div class="calendar-feature-date"><b>${featured[0].split(' ')[0]}</b><span>${featured[0].split(' ')[1] || 'MAI'}</span></div><div class="calendar-feature-copy"><div class="calendar-game-icon"><img src="${calendarIcon(featured)}" alt="${calendarAlt(featured)}"></div><div><h3>${featured[1]}</h3><p>${featured[2]}</p><span class="status ${statusClass(featured)}">${featured[3]}</span></div></div></div><div class="calendar-feature-footer"><div><span>${I('Coins')} ENTRÉE</span><b>${d.next.entry}</b></div><div><span>${I('Trophy')} GAIN</span><b>${d.next.prize}</b></div><a href="#games">VOIR LE CHAMPIONNAT ${I('ChevronRight')}</a></div></article><div class="calendar-timeline">${upcoming.map((item,index)=>`<article class="calendar-timeline-item"><span class="calendar-timeline-dot ${index?'':'active'}"></span><div class="calendar-timeline-date"><b>${item[0].split(' ')[0]}</b><span>${item[0].split(' ')[1] || 'MAI'}</span></div><div class="calendar-timeline-icon"><img src="${calendarIcon(item)}" alt="${calendarAlt(item)}"></div><div class="calendar-timeline-copy"><h3>${item[1]}</h3><p>${item[2]}</p></div><span class="status ${statusClass(item)}">${item[3]}</span>${I('ChevronRight')}</article>`).join('')}</div></div>`;
 }
 const processHead = document.querySelector('#process .section-head');
 if (processHead && !processHead.querySelector('.process-intro')) processHead.insertAdjacentHTML('beforeend','<p class="process-intro">Une compétition pensée pour être simple à rejoindre, suivre et comprendre.</p>');
@@ -577,6 +578,9 @@ loginPage.querySelector('.login-intro')?.remove();
 loginPage.querySelector('#forgot-password')?.setAttribute('hidden', '');
 loginPage.querySelector('.auth-divider')?.setAttribute('hidden', '');
 loginPage.querySelector('#google-login')?.setAttribute('hidden', '');
+// Google authentication is available for both sign-in and first-time account creation.
+loginPage.querySelector('.auth-divider')?.removeAttribute('hidden');
+loginPage.querySelector('#google-login')?.removeAttribute('hidden');
 loginPage.querySelectorAll('#auth-password, #auth-confirm-password').forEach(passwordInput => { const passwordField = document.createElement('div'); passwordField.className = 'password-field'; passwordInput.replaceWith(passwordField); passwordField.append(passwordInput); passwordField.insertAdjacentHTML('beforeend', `<button class="password-toggle" type="button" aria-label="Afficher le mot de passe" aria-pressed="false">${I('Eye')}</button>`); });
 renderIcons();
 
@@ -893,7 +897,11 @@ const renderProfileCoupons = documents => {
   const container=profilePage.querySelector('.profile-coupon-list');
   if(!container)return;
   const statusLabels={pending:'En attente du prochain championnat',available:'Disponible',reserved:'Réservé pour votre paiement',used:'Utilisé',expired:'Expiré'};
-  const coupons=documents.map(document=>({id:document.id,...document.data()})).sort((a,b)=>(b.createdAt?.toMillis?.()||0)-(a.createdAt?.toMillis?.()||0));
+  const activeStatuses=new Set(['pending','available','reserved']);
+  const coupons=documents.map(document=>({id:document.id,...document.data()}))
+    .filter(coupon=>activeStatuses.has(String(coupon.status||'pending')))
+    .sort((a,b)=>(b.createdAt?.toMillis?.()||b.updatedAt?.toMillis?.()||0)-(a.createdAt?.toMillis?.()||a.updatedAt?.toMillis?.()||0))
+    .slice(0,1);
   container.innerHTML=coupons.length?coupons.map(coupon=>`<article class="profile-coupon is-${profileEscape(coupon.status||'pending')}">${I(coupon.type==='free_entry'?'TicketCheck':'BadgePercent')}<div><strong>${coupon.type==='free_entry'?'Inscription gratuite':`Réduction de ${Number(coupon.value)||25} HTG`}</strong><span>${profileEscape(coupon.targetChampionshipName||'Prochain championnat publié')}</span><small>${profileEscape(statusLabels[coupon.status]||coupon.status||'En attente')}</small></div></article>`).join(''):'<p class="profile-empty-state">Aucun coupon disponible.</p>';
   window.renderIcons?.();
 };
@@ -940,6 +948,26 @@ if (window.firebase) {
       throw error;
     }
   };
+  const ensureGooglePlayerProfile = async user => {
+    const reference = firestore.collection('users').doc(user.uid);
+    const existing = await reference.get();
+    if (existing.exists) return;
+    const baseName = cleanUsername(user.displayName || String(user.email || '').split('@')[0] || `joueur${user.uid.slice(0,6)}`) || `joueur${user.uid.slice(0,6)}`;
+    const username = baseName.slice(0,24);
+    const displayName = user.displayName || username;
+    await reference.set({
+      firstName: displayName,
+      lastName: '',
+      username,
+      email: user.email || '',
+      photoURL: user.photoURL || '',
+      role: 'user', status: 'active', authUid: user.uid,
+      profilePublic: true,
+      notificationPreferences: {matchReminders:true,results:true,championships:true},
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }, {merge:true});
+  };
   const headerAccount = document.querySelector('.login-button');
   const defaultHeaderAccount = headerAccount?.innerHTML || '';
   const leaderboardProjection = data => {
@@ -961,6 +989,7 @@ if (window.firebase) {
     homepageCouponsUnsubscribe = null;
     homepageCoupons = [];
     currentAuthUser = user && !user.isAnonymous ? user : null;
+    homepageRegisteredChampionshipIds.clear();
     homepageCurrentProfile = null;
     if (!headerAccount) return;
     if (!user || user.isAnonymous) {
@@ -971,6 +1000,11 @@ if (window.firebase) {
       headerAccount.innerHTML = defaultHeaderAccount;
       headerAccount.setAttribute('aria-label', 'Connexion');
       renderHomepageHeroCarousel();
+      if (homepageChampionshipRecords.length) {
+        renderChampionshipActivity(homepageChampionshipRecords);
+        updateGameCards(homepageChampionshipRecords);
+        if (homepageFeaturedChampionship) renderDatabaseChampionships(homepageChampionshipRecords, homepageFeaturedChampionship.id);
+      }
       loadPublicMatches();
       if (['#login','#profile','#signup'].includes(window.location.hash)) showLoginPage(window.location.hash === '#signup' ? 'signup' : 'login');
       return;
@@ -988,6 +1022,14 @@ if (window.firebase) {
       }
     } catch (error) { console.warn('Profil utilisateur indisponible:', error); }
     homepageCurrentProfile = {uid:user.uid,name:displayName,photoURL:/^https:\/\//.test(avatarUrl) ? avatarUrl : '',imageName:/^[A-Za-z0-9._-]+$/.test(profileImageName) ? profileImageName : ''};
+    loadRegisteredChampionshipIds(user, homepageChampionshipRecords);
+    // Les championnats peuvent avoir été rendus avant la résolution de l'authentification.
+    // Repeindre les CTA dès que l'utilisateur est connu pour refléter son inscription.
+    if (homepageChampionshipRecords.length) {
+      renderChampionshipActivity(homepageChampionshipRecords);
+      updateGameCards(homepageChampionshipRecords);
+      if (homepageFeaturedChampionship) renderDatabaseChampionships(homepageChampionshipRecords, homepageFeaturedChampionship.id);
+    }
     window.firebase?.app?.().functions('us-central1').httpsCallable('releaseExpiredCouponReservations')({}).catch(()=>null);
     homepageCouponsUnsubscribe=firestore.collection('jwetproCoupons').where('playerUid','==',user.uid).onSnapshot(snapshot=>{
       if(currentAuthUser?.uid!==user.uid)return;
@@ -1028,6 +1070,11 @@ if (window.firebase) {
     }
   };
   auth.onAuthStateChanged(setHeaderAccount);
+  auth.onAuthStateChanged(async user => {
+    if (!user || !user.providerData?.some(provider => provider.providerId === 'google.com')) return;
+    try { await ensureGooglePlayerProfile(user); }
+    catch (error) { console.error('Google profile initialization failed:', error); }
+  });
   authElements.form.addEventListener('submit', async (event) => {
     event.preventDefault();
     const email = authElements.email.value.trim();
@@ -1086,6 +1133,33 @@ const championshipAction = (status, championshipId = '') => status === 'registra
     : status === 'completed'
       ? {label:'REVOIR LE CHAMPIONNAT',href:championshipId ? `./championship.html?id=${encodeURIComponent(championshipId)}` : './activity.html'}
       : {label:'VOIR LE CHAMPIONNAT',href:progressHref(championshipId)};
+const championshipIsRegisteredByCurrentUser = record => {
+  const uid = currentAuthUser?.uid;
+  if (!uid || !record) return false;
+  if (homepageRegisteredChampionshipIds.has(String(record.id))) return true;
+  const values = [record.participantIds, record.registeredPlayerIds, record.playerIds, record.participants, record.registeredPlayers, record.registrations].flatMap(value => Array.isArray(value) ? value : value && typeof value === 'object' ? Object.values(value) : []);
+  return values.some(value => String(typeof value === 'object' ? value?.uid || value?.userId || value?.playerUid || value?.authUid || value?.id || '' : value) === uid);
+};
+const loadRegisteredChampionshipIds = async (user, records) => {
+  if (!user?.uid || !Array.isArray(records) || !records.length || !window.firebase?.firestore) return;
+  const db = firebase.firestore();
+  const checks = await Promise.all(records.map(record => {
+    const intentId = `${record.id}__${user.uid}`;
+    return db.collection('championshipTicketRegistrations').doc(intentId).get()
+      .then(snapshot => ({id:record.id, paid:snapshot.exists && ['paid','credited'].includes(String(snapshot.data()?.status || '').toLowerCase())}))
+      .catch(() => ({id:record.id, paid:false}));
+  }));
+  if (currentAuthUser?.uid !== user.uid) return;
+  checks.filter(item => item.paid).forEach(item => homepageRegisteredChampionshipIds.add(item.id));
+  if (checks.some(item => item.paid)) {
+    renderChampionshipActivity(homepageChampionshipRecords);
+    updateGameCards(homepageChampionshipRecords);
+    if (homepageFeaturedChampionship) renderDatabaseChampionships(homepageChampionshipRecords, homepageFeaturedChampionship.id);
+  }
+};
+const championshipActionForCurrentUser = (record, status = record?.status) => championshipIsRegisteredByCurrentUser(record) && status === 'registration-open'
+  ? {label:'VOIR LE CHAMPIONNAT',href:progressHref(record.id)}
+  : championshipAction(status, record?.id);
 const championshipIsInProgress = record => {
   const status = String(record?.status || '').toLowerCase();
   if (['completed','finished','cancelled'].includes(status)) return false;
@@ -1123,11 +1197,24 @@ const championshipRecord = doc => {
   const createdAt = championshipDate(data.createdAt);
   const updatedAt = championshipDate(data.updatedAt);
   const activityAt = status === 'completed' && start ? new Date(start.getTime() + CHAMPIONSHIP_DURATION_MS) : status === 'ongoing' ? start : status === 'registration-closed' ? (registrationEnd || updatedAt || createdAt || start) : (createdAt || updatedAt || start);
-  return {id:doc.id,game:data.game === 'domino' ? 'DOMINO' : 'Mopyon',number:data.number || data.championshipNumber || doc.id,date:start,dateLabel:start ? start.toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'}) : data.date || 'Date à confirmer',time:start ? start.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}) : data.time || 'Heure à confirmer',entryFee:Number(data.entryFee),prize:Number(data.prize),maxPlayers:Number(data.maxPlayers) || standard.maxPlayers,rounds:Number(data.rounds) > 0 ? Number(data.rounds) : 4,status,activityAt,participantCount,matchesPlayed:numeric(data.matchesPlayed,data.completedMatches),totalMatches:numeric(data.totalMatches,data.matchesTotal),currentRound:numeric(data.currentRound,data.round),matchesInProgress:numeric(data.matchesInProgress,data.activeMatches),completion:numeric(data.completion,data.progressPercent,data.progress)};
+  const participantField = value => Array.isArray(value) || (value && typeof value === 'object') ? value : [];
+  return {id:doc.id,game:data.game === 'domino' ? 'DOMINO' : 'Mopyon',number:data.number || data.championshipNumber || doc.id,date:start,dateLabel:start ? start.toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'}) : data.date || 'Date à confirmer',time:start ? start.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}) : data.time || 'Heure à confirmer',entryFee:Number(data.entryFee),prize:Number(data.prize),maxPlayers:Number(data.maxPlayers) || standard.maxPlayers,rounds:Number(data.rounds) > 0 ? Number(data.rounds) : 4,status,activityAt,participantCount,matchesPlayed:numeric(data.matchesPlayed,data.completedMatches),totalMatches:numeric(data.totalMatches,data.matchesTotal),currentRound:numeric(data.currentRound,data.round),matchesInProgress:numeric(data.matchesInProgress,data.activeMatches),completion:numeric(data.completion,data.progressPercent,data.progress),participantIds:participantField(data.participantIds),registeredPlayerIds:participantField(data.registeredPlayerIds),playerIds:participantField(data.playerIds),participants:participantField(data.participants),registeredPlayers:participantField(data.registeredPlayers),registrations:participantField(data.registrations)};
 };
 const championshipDisplayName = record => `${record.game} #${String(record.number).replace(/^#+/, '')}`;
-const heroMatchDate = data => matchToDate(data.startedAt || data.startAt || data.scheduledAt || data.matchDate || data.date);
+const heroMatchDate = data => {
+  const status = publicMatchStatus(data);
+  const active = /ongoing|live|in-progress|active|playing|en cours|direct/.test(status);
+  return matchToDate(active ? (data.startedAt || data.startAt || data.scheduledAt || data.matchDate || data.date) : (data.scheduledAt || data.startAt || data.matchDate || data.date || data.startedAt));
+};
 const heroMatchIsActive = data => /ongoing|live|in-progress|active|playing|en cours|direct/.test(publicMatchStatus(data));
+const heroMatchAttendanceDeadline = (data) => {
+  const explicit = matchToDate(data.attendanceDeadlineAt);
+  if (explicit) return explicit;
+  const waitingSince = matchToDate(data.waitingForOpponentSince);
+  if (waitingSince) return new Date(waitingSince.getTime() + 5 * 60 * 1000);
+  const scheduled = matchToDate(data.startAt || data.scheduledAt || data.date);
+  return scheduled ? new Date(scheduled.getTime() + 5 * 60 * 1000) : null;
+};
 const heroMatchIsFinished = data => /complete|completed|finished|ended|termine|terminé|cancelled|replay/.test(publicMatchStatus(data)) || Boolean(data.winnerId || data.winner || data.draw || data.completedAt || data.endedAt || data.finishedAt);
 const heroMatchParticipantIds = data => Array.isArray(data.participantIds) ? data.participantIds.filter(id => typeof id === 'string') : [];
 const heroPlayer = (match, uid, fallback) => {
@@ -1144,8 +1231,9 @@ const heroDuration = milliseconds => {
   const days = Math.floor(total / 86400);
   const hours = Math.floor(total % 86400 / 3600);
   const minutes = Math.floor(total % 3600 / 60);
-  if (days) return `${days}j ${String(hours).padStart(2,'0')}h ${String(minutes).padStart(2,'0')}m`;
-  return `${String(hours).padStart(2,'0')}h ${String(minutes).padStart(2,'0')}m`;
+  const seconds = total % 60;
+  if (days) return `${days}j ${String(hours).padStart(2,'0')}h ${String(minutes).padStart(2,'0')}m ${String(seconds).padStart(2,'0')}s`;
+  return `${String(hours).padStart(2,'0')}h ${String(minutes).padStart(2,'0')}m ${String(seconds).padStart(2,'0')}s`;
 };
 const heroMatchSlide = (match, position, total) => {
   const ids = heroMatchParticipantIds(match);
@@ -1153,16 +1241,33 @@ const heroMatchSlide = (match, position, total) => {
   const opponentId = ids.find(id => id !== selfId);
   const self = heroPlayer(match,selfId,'Vous');
   const opponent = heroPlayer(match,opponentId,'Adversaire à confirmer');
-  const start = heroMatchDate(match);
-  const active = heroMatchIsActive(match);
+  const championshipId = match.championshipId || match.tournamentId || match.competitionId || '';
+  const linkedChampionship = homepageChampionshipRecords.find(record => record.id === championshipId);
+  const scheduledStart = linkedChampionship?.date || matchToDate(match.scheduledAt || match.startAt || match.matchDate || match.date || match.startedAt);
+  const active = heroMatchIsActive(match) && (!scheduledStart || scheduledStart.getTime() <= Date.now());
+  const start = active ? heroMatchDate(match) : (linkedChampionship?.date || heroMatchDate(match));
+  const attendanceDeadline = heroMatchAttendanceDeadline(match);
+  const selfPresent = Boolean(selfId && match.presence?.[selfId]);
+  const opponentPresent = Boolean(opponentId && match.presence?.[opponentId]);
+  const attendanceExpired = Boolean(attendanceDeadline && attendanceDeadline.getTime() <= Date.now());
+  const turnDeadline = matchToDate(match.turnDeadlineAt);
+  const yourTurn = Boolean(active && selfId && match.currentTurnUid === selfId && turnDeadline && turnDeadline.getTime() > Date.now());
+  const waitingForOpponent = !active && !attendanceExpired && attendanceDeadline && scheduledStart && scheduledStart.getTime() <= Date.now();
   const gameName = /domino/i.test(String(match.game || match.type || '')) ? 'DOMINO' : 'Mopyon';
   const number = match.number || match.matchNumber || match.championshipNumber || '';
-  const championshipId = match.championshipId || match.tournamentId || match.competitionId || '';
   const secondaryHref = championshipId ? progressHref(championshipId) : './calendar.html';
   const isSeries = match.kind === 'series';
-  const primaryHref = `./play.html?join=${encodeURIComponent(match.id)}`;
-  const primaryLabel = 'ANTRE NAN MATCH LA';
-  return `<article class="hero-slide hero-match-slide" data-social-kind="match" data-social-id="${publicEscape(mainMatchSocialId(match))}" role="group" aria-roledescription="diapositive" aria-label="${position} sur ${total} — ${active ? 'Votre match en cours' : 'Votre prochain match'}"><div class="hero-grid"><div class="hero-copy"><div class="eyebrow">${active ? 'VOTRE MATCH EN COURS' : 'VOTRE PROCHAIN MATCH'}</div><h1 class="hero-title">${publicEscape(gameName)}</h1>${number ? `<span class="hero-id">#${publicEscape(number)}</span>` : ''}<div class="hero-date">${I('CalendarDays')}<span>${publicEscape(start ? start.toLocaleString('fr-FR',{weekday:'long',day:'numeric',month:'long',hour:'2-digit',minute:'2-digit'}) : 'Horaire à confirmer')}</span></div><div class="hero-match-status ${active ? 'is-live' : ''}"><span>${active ? 'MATCH EN COURS' : 'MATCH PLANIFIÉ'}</span><strong ${start && !active ? `data-hero-target="${start.getTime()}" data-hero-label="Début dans"` : ''}>${active ? 'Le plateau est ouvert' : start ? `Début dans ${heroDuration(start.getTime()-Date.now())}` : 'Horaire à confirmer'}</strong></div><div class="hero-actions"><a class="primary-button" href="${primaryHref}">${primaryLabel} ${I(isSeries ? 'ArrowUpRight' : 'LogIn')}</a><a class="subtle-link" href="${secondaryHref}">VOIR LE CHAMPIONNAT ${I('ArrowRight')}</a></div></div><div class="hero-matchup" aria-label="${publicEscape(self.name)} contre ${publicEscape(opponent.name)}"><div class="hero-player">${playerAvatarMarkup(self,self.name,'hero-player-avatar')}<span>VOUS</span>${mainAvatarLink(self,self.name,`<strong>${publicEscape(self.name)}</strong>`)}</div><div class="hero-versus"><span>VS</span><i></i></div><div class="hero-player">${playerAvatarMarkup(opponent,opponent.name,'hero-player-avatar')}<span>ADVERSAIRE</span>${mainAvatarLink(opponent,opponent.name,`<strong>${publicEscape(opponent.name)}</strong>`)}</div></div></div></article>`;
+  const canEnter = Boolean(scheduledStart && scheduledStart.getTime() <= Date.now() && !attendanceExpired);
+  const primaryHref = canEnter ? `./play.html?join=${encodeURIComponent(match.id)}` : (championshipId ? progressHref(championshipId) : '#');
+  const primaryLabel = canEnter ? 'ANTRE NAN MATCH LA' : attendanceExpired ? 'DELAI ECOULE' : 'MATCH DISPONIB NAN ORE A';
+  const statusMarkup = active && yourTurn
+    ? `<span>VOTRE TOUR · 30 SECONDES</span><strong data-hero-target="${turnDeadline.getTime()}" data-hero-countdown="turn" data-hero-label="Temps restant"></strong>`
+    : active
+      ? `<span>MATCH EN COURS</span><strong>Le plateau est ouvert</strong>`
+      : waitingForOpponent
+        ? `<span>PRÉSENCE DE L’ADVERSAIRE</span><strong data-hero-target="${attendanceDeadline.getTime()}" data-hero-countdown="attendance" data-hero-label="Forfait possible dans"></strong>`
+        : `<span>MATCH PLANIFIÉ</span><strong ${start ? `data-hero-target="${start.getTime()}" data-hero-label="Début dans"` : ''}>${start ? `Début dans ${heroDuration(start.getTime()-Date.now())}` : 'Horaire à confirmer'}</strong>`;
+  return `<article class="hero-slide hero-match-slide" data-social-kind="match" data-social-id="${publicEscape(mainMatchSocialId(match))}" role="group" aria-roledescription="diapositive" aria-label="${position} sur ${total} — ${active ? 'Votre match en cours' : 'Votre prochain match'}"><div class="hero-grid"><div class="hero-copy"><div class="eyebrow">${active ? 'VOTRE MATCH EN COURS' : 'VOTRE PROCHAIN MATCH'}</div><h1 class="hero-title">${publicEscape(gameName)}</h1>${number ? `<span class="hero-id">#${publicEscape(number)}</span>` : ''}<div class="hero-date">${I('CalendarDays')}<span>${publicEscape(start ? start.toLocaleString('fr-FR',{weekday:'long',day:'numeric',month:'long',hour:'2-digit',minute:'2-digit'}) : 'Horaire à confirmer')}</span></div><div class="hero-match-status ${active ? 'is-live' : waitingForOpponent ? 'is-attendance' : ''}">${statusMarkup}</div><div class="hero-actions"><a class="primary-button${canEnter ? '' : ' is-waiting'}" href="${primaryHref}"${canEnter ? '' : ' aria-disabled="true"'}>${primaryLabel} ${I(isSeries ? 'ArrowUpRight' : 'LogIn')}</a><a class="subtle-link" href="${secondaryHref}">VOIR LE CHAMPIONNAT ${I('ArrowRight')}</a></div></div><div class="hero-matchup" aria-label="${publicEscape(self.name)} contre ${publicEscape(opponent.name)}"><div class="hero-player">${playerAvatarMarkup(self,self.name,'hero-player-avatar')}<span>VOUS</span>${mainAvatarLink(self,self.name,`<strong>${publicEscape(self.name)}</strong>`)}</div><div class="hero-versus"><span>VS</span><i></i></div><div class="hero-player">${playerAvatarMarkup(opponent,opponent.name,'hero-player-avatar')}<span>ADVERSAIRE</span>${mainAvatarLink(opponent,opponent.name,`<strong>${publicEscape(opponent.name)}</strong>`)}</div><div class="hero-match-context"><span>${active ? 'MATCH OFFICIEL EN DIRECT' : 'MATCH OFFICIEL PLANIFIÉ'}</span><b>${isSeries ? 'MEILLEUR DE 3 MANCHES' : 'RENCONTRE OFFICIELLE'}</b></div></div></div></article>`;
 };
 const homepageCouponForChampionship = (record, orderedChampionships) => {
   if(!currentAuthUser||record.status!=='registration-open')return null;
@@ -1178,7 +1283,7 @@ const homepageCouponForChampionship = (record, orderedChampionships) => {
 const heroChampionshipSlide = (record, position, total, coupon = null) => {
   const isOpen = record.status === 'registration-open';
   const inProgress = championshipIsInProgress(record);
-  const action = championshipAction(inProgress ? 'ongoing' : record.status,record.id);
+  const action = championshipActionForCurrentUser(record, inProgress ? 'ongoing' : record.status);
   const image = record.game === 'DOMINO' ? './src/images/imagedomino.png' : './src/images/imagehero.png';
   const imageAlt = record.game === 'DOMINO' ? 'Dominos du championnat' : 'Plateau de Mopyon avec pierres noires et blanches';
   const kicker = isOpen ? 'INSCRIPTIONS OUVERTES' : inProgress ? 'CHAMPIONNAT EN COURS' : 'ÉVÉNEMENT PLANIFIÉ';
@@ -1198,7 +1303,9 @@ const updateHeroTimes = () => {
     const target = Number(element.dataset.heroTarget);
     if (!Number.isFinite(target)) return;
     const prefix = element.dataset.heroLabel || '';
-    element.textContent = target > Date.now() ? `${prefix}${prefix ? ' ' : ''}${heroDuration(target-Date.now())}` : 'DÉBUT IMMINENT';
+    const expired = target <= Date.now();
+    element.textContent = !expired ? `${prefix}${prefix ? ' ' : ''}${heroDuration(target-Date.now())}` : element.dataset.heroCountdown === 'attendance' || element.dataset.heroCountdown === 'turn' ? 'DELAI ECOULE' : 'DEBUT IMMINENT';
+    if ((element.dataset.heroCountdown === 'attendance' || element.dataset.heroCountdown === 'turn') && expired) { const button = element.closest('.hero-slide')?.querySelector('.hero-actions .primary-button'); if (button) { button.textContent = 'DELAI ECOULE'; button.href = '#'; button.classList.add('is-waiting'); button.setAttribute('aria-disabled','true'); } }
   });
 };
 const renderHomepageHeroCarousel = () => {
@@ -1207,6 +1314,15 @@ const renderHomepageHeroCarousel = () => {
   const nav = carousel?.querySelector('[data-hero-nav]');
   const dots = carousel?.querySelector('[data-hero-dots]');
   if (!carousel || !track || !nav || !dots) return;
+  const heroSection = carousel.closest('.hero');
+  if (heroSection && window.matchMedia?.('(max-width: 767px)').matches) {
+    // Réserve volontairement l’espace du hero pour la confrontation et son contexte.
+    heroSection.style.height = '95svh';
+    heroSection.style.minHeight = '95svh';
+    heroSection.style.maxHeight = '95svh';
+    carousel.style.height = '100%';
+    track.style.height = '100%';
+  }
   const now = Date.now();
   const personalSource = new Map([...homepageMatchRecords,...homepagePersonalMatches].map(match => [match.id,match]));
   const personalMatches = currentAuthUser ? [...personalSource.values()]
@@ -1243,7 +1359,7 @@ const renderHomepageHeroCarousel = () => {
   let scrollFrame = 0;
   track.addEventListener('scroll',() => { cancelAnimationFrame(scrollFrame); scrollFrame=requestAnimationFrame(() => setActive(Math.round(track.scrollLeft/Math.max(1,track.clientWidth)))); },{passive:true});
   updateHeroTimes();
-  homepageHeroTimer = setInterval(updateHeroTimes,30000);
+  homepageHeroTimer = setInterval(updateHeroTimes,1000);
   renderIcons();
 };
 const renderChampionshipProgress = record => {
@@ -1279,7 +1395,7 @@ const renderChampionshipProgress = record => {
     panel.querySelector('.progress-register')?.setAttribute('hidden', '');
   } else {
     const isOpen = record.status === 'registration-open';
-    const registerCta = isOpen ? {label:'S’INSCRIRE AU CHAMPIONNAT',href:registrationHref(record.id)} : championshipAction(record.status, record.id);
+    const registerCta = isOpen ? championshipActionForCurrentUser(record) : championshipAction(record.status, record.id);
     if (name) name.textContent = championshipDisplayName(record);
     if (status) { status.textContent = championshipStatus(record.status); status.className = `status ${championshipTone(record.status)}`; }
     if (date) date.textContent = `${record.dateLabel} · ${record.time}`;
@@ -1466,7 +1582,16 @@ const loadHomepagePersonalMatches = async user => {
     if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
     const snapshot = await firebase.firestore().collection('matches').where('participantIds','array-contains',user.uid).limit(50).get();
     if (requestId !== homepagePersonalMatchesRequest || currentAuthUser?.uid !== user.uid) return;
-    homepagePersonalMatches = snapshot.docs.map(doc => ({id:doc.id,...doc.data()}));
+    const baseMatches = snapshot.docs.map(doc => ({id:doc.id,...doc.data()}));
+    const seriesWithGames = baseMatches.filter(match => match.kind === 'series' && (match.currentGameId || match.activeGameId)).slice(0,50);
+    const childSnapshots = await Promise.all(seriesWithGames.map(match => firebase.firestore().collection('matches').doc(String(match.currentGameId || match.activeGameId)).get().catch(() => null)));
+    const childBySeries = new Map();
+    childSnapshots.forEach(snapshot => { if (snapshot?.exists) { const child = snapshot.data() || {}; if (child.seriesId) childBySeries.set(String(child.seriesId), child); } });
+    homepagePersonalMatches = baseMatches.map(match => {
+      const child = childBySeries.get(match.id);
+      if (!child) return match;
+      return {...match,status:child.status || match.status,presence:child.presence || match.presence,waitingForOpponentSince:child.waitingForOpponentSince || match.waitingForOpponentSince,attendanceDeadlineAt:child.attendanceDeadlineAt || match.attendanceDeadlineAt,currentTurnUid:child.currentTurnUid || match.currentTurnUid,turnDeadlineAt:child.turnDeadlineAt || match.turnDeadlineAt};
+    });
     renderHomepageHeroCarousel();
   } catch (error) {
     if (requestId !== homepagePersonalMatchesRequest) return;
@@ -1480,8 +1605,8 @@ const loadPublicMatches = async () => {
   if (!grid || !window.firebase || typeof firebase.firestore !== 'function') return;
   try {
     const db = firebase.firestore();
-    const queries = ['preview', 'scheduled', 'ongoing', 'live', 'in-progress', 'active', 'completed', 'finished'].map(status => db.collection('matches').where('status', '==', status).limit(60).get());
-    queries.push(db.collection('matches').where('visibility', '==', 'public').limit(60).get());
+    // Firestore security rules can prove a visibility query, while a batch of status OR queries may be rejected before data is read. Filter statuses locally after this public read.
+    const queries = [db.collection('matches').where('visibility', '==', 'public').limit(120).get()];
     const [snapshots, leaderboardSnapshot] = await Promise.all([
       Promise.allSettled(queries),
       db.collection('leaderboard').limit(200).get().catch(() => null)
@@ -1575,7 +1700,7 @@ const renderChampionshipActivity = records => {
     detail: record.status === 'completed' ? 'Participation' : 'Entrée',
     value: moneyLabel(record.entryFee),
     amount: record.status === 'completed' ? moneyLabel(record.prize) : `${record.maxPlayers} joueurs max`,
-    action: championshipAction(record.status, record.id)
+    action: championshipActionForCurrentUser(record)
   })).join('') : `<div class="data-empty"><span class="data-empty-icon">${I('Activity')}</span><strong>Aucune activité publiée</strong><p>Les activités JWETPRO apparaîtront ici dès qu’elles seront disponibles.</p></div>`;
   renderIcons();
 };
@@ -1602,10 +1727,10 @@ const renderDatabaseChampionships = (records, selectedId = null) => {
   const day = record => record.date ? record.date.toLocaleDateString('fr-FR',{day:'2-digit',month:'short'}).replace('.','').toUpperCase() : '—';
   const tone = record => championshipTone(record.status);
   const isOpen = tone(featured) === 'open';
-  const featuredCta = championshipAction(featured.status, featured.id);
+  const featuredCta = championshipActionForCurrentUser(featured);
   const featuredAction = featuredCta.label;
   const featuredHref = featuredCta.href;
-  calendar.innerHTML = `<div class="calendar-heading"><h2 class="section-title"><span class="calendar-heading-icon">${I('Trophy')}</span>CALENDRIER DES CHAMPIONNATS</h2><a class="arrow-link" href="./calendar.html">GADE TOUT KALANDRIYE A ${I('ChevronRight')}</a></div><p class="calendar-note">2 000 HTG au champion. Le deuxième reçoit une inscription gratuite et les autres participants un coupon de réduction de 25 HTG pour le prochain championnat Domino ou Mopyon.</p><div class="calendar-layout"><article class="calendar-feature"><div class="calendar-feature-label">${I('Star')} ${selectedId ? 'CHAMPIONNAT SÉLECTIONNÉ' : 'PROCHAIN CHAMPIONNAT'}</div><div class="calendar-feature-main"><div class="calendar-feature-date"><b>${day(featured).split(' ')[0]}</b><span>${day(featured).split(' ')[1] || ''}</span></div><div class="calendar-feature-copy"><div class="calendar-game-icon"><img src="${icon(featured)}" alt="Icône ${featured.game}"></div><div><h3>${championshipDisplayName(featured)}</h3><p>${featured.dateLabel} · ${featured.time}</p><span class="status ${tone(featured)}">${championshipStatus(featured.status)}</span></div></div></div><div class="calendar-feature-footer"><div><span>${I('Coins')} ENTRÉE</span><b>${moneyLabel(featured.entryFee)}</b></div><div><span>${I('Trophy')} GAIN</span><b>${moneyLabel(featured.prize)}</b></div><a class="calendar-feature-cta${isOpen ? ' is-register' : ''}" href="${featuredHref}">${featuredAction} ${I('ChevronRight')}</a></div></article><div class="calendar-timeline">${upcoming.map((record,index)=>`<article class="calendar-timeline-item" data-calendar-id="${record.id}" tabindex="0" role="button" aria-label="Afficher ${championshipDisplayName(record)}"><span class="calendar-timeline-dot ${index?'':'active'}"></span><div class="calendar-timeline-date"><b>${day(record).split(' ')[0]}</b><span>${day(record).split(' ')[1] || ''}</span></div><div class="calendar-timeline-icon"><img src="${icon(record)}" alt="Icône ${record.game}"></div><div class="calendar-timeline-copy"><h3>${championshipDisplayName(record)}</h3><p>${record.dateLabel} · ${record.time}</p></div><span class="status ${tone(record)}">${championshipStatus(record.status)}</span>${I('ChevronRight')}</article>`).join('')}</div></div>`;
+  calendar.innerHTML = `<div class="calendar-heading"><h2 class="section-title"><span class="calendar-heading-icon">${I('Trophy')}</span>CALENDRIER DES CHAMPIONNATS</h2><a class="arrow-link" href="./calendar.html">GADE TOUT KALANDRIYE A ${I('ChevronRight')}</a></div><p class="calendar-note">2 000 HTG au champion. Le deuxième reçoit une inscription gratuite et les autres participants un coupon de réduction de 25 HTG pour le prochain championnat Domino ou Mopyon.</p><div class="calendar-layout"><article class="calendar-feature"><div class="calendar-feature-head"><div class="calendar-feature-label">${I('Star')} ${selectedId ? 'CHAMPIONNAT SÉLECTIONNÉ' : 'PROCHAIN CHAMPIONNAT'}</div><div class="calendar-feature-social-slot" data-social-actions-slot aria-label="Actions sociales du championnat"></div></div><div class="calendar-feature-main"><div class="calendar-feature-date"><b>${day(featured).split(' ')[0]}</b><span>${day(featured).split(' ')[1] || ''}</span></div><div class="calendar-feature-copy"><div class="calendar-game-icon"><img src="${icon(featured)}" alt="Icône ${featured.game}"></div><div><h3>${championshipDisplayName(featured)}</h3><p>${featured.dateLabel} · ${featured.time}</p><span class="status ${tone(featured)}">${championshipStatus(featured.status)}</span></div></div></div><div class="calendar-feature-footer"><div><span>${I('Coins')} ENTRÉE</span><b>${moneyLabel(featured.entryFee)}</b></div><div><span>${I('Trophy')} GAIN</span><b>${moneyLabel(featured.prize)}</b></div><a class="calendar-feature-cta${isOpen ? ' is-register' : ''}" href="${featuredHref}">${featuredAction} ${I('ChevronRight')}</a></div></article><div class="calendar-timeline">${upcoming.map((record,index)=>`<article class="calendar-timeline-item" data-calendar-id="${record.id}" tabindex="0" role="button" aria-label="Afficher ${championshipDisplayName(record)}"><span class="calendar-timeline-dot ${index?'':'active'}"></span><div class="calendar-timeline-date"><b>${day(record).split(' ')[0]}</b><span>${day(record).split(' ')[1] || ''}</span></div><div class="calendar-timeline-icon"><img src="${icon(record)}" alt="Icône ${record.game}"></div><div class="calendar-timeline-copy"><h3>${championshipDisplayName(record)}</h3><p>${record.dateLabel} · ${record.time}</p></div><span class="status ${tone(record)}">${championshipStatus(record.status)}</span>${I('ChevronRight')}</article>`).join('')}</div></div>`;
   calendar.querySelectorAll('[data-calendar-id]').forEach(item => {
     const select = () => renderDatabaseChampionships(records, item.dataset.calendarId);
     item.addEventListener('click', select);
@@ -1626,7 +1751,7 @@ const updateGameCards = allRecords => {
     if (featured) {
       if (meta) meta.textContent = `GAINS JUSQU’À ${moneyLabel(featured.prize)}`;
       if (submeta) submeta.textContent = `${featured.participantCount || 0} / ${featured.maxPlayers} JOUEURS INSCRITS`;
-      const action = championshipAction(featured.status, featured.id);
+      const action = championshipActionForCurrentUser(featured);
       cta.href = action.href;
       cta.innerHTML = `${action.label} ${I('ArrowUpRight')}`;
       cta.classList.toggle('is-closed', action.label !== 'S’INSCRIRE');
@@ -1650,6 +1775,7 @@ const loadDatabaseChampionships = async () => {
       const allRecords = snapshot.docs.map(championshipRecord).filter(record => record.date instanceof Date);
       renderChampionshipActivity(allRecords);
       updateGameCards(allRecords);
+      if (currentAuthUser) loadRegisteredChampionshipIds(currentAuthUser, allRecords);
       const activeAndUpcoming = allRecords.filter(record => !['cancelled','completed'].includes(record.status) && record.date.getTime() + CHAMPIONSHIP_DURATION_MS > Date.now() && record.entryFee > 0 && record.prize > 0 && record.maxPlayers > 0).sort((a,b) => a.date.getTime() - b.date.getTime());
       renderDatabaseChampionships(activeAndUpcoming);
     };

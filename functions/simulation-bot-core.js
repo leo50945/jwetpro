@@ -9,6 +9,7 @@ const {
   handPoints:dominoHandPoints,
   boardEnds:dominoBoardEnds
 }=require('./domino-match-core');
+const {starterUidForGame} = require('./match-start-rules');
 
 const ENGINE_VERSION='simulation-bots-v1';
 const PROFILES=Object.freeze(['offensive','positional','counter','balanced']);
@@ -117,8 +118,8 @@ function chooseStrongDominoAction(state,uid,{profile='balanced',random=Math.rand
   return{type:'pass'};
 }
 
-function simulateDominoGame({participantIds,participantNames={},seed,profiles={}}){
-  const random=createSeededRandom(seed);let state=createDominoGameState(participantIds,random),elapsedMs=0,guard=0;const events=[];
+function simulateDominoGame({participantIds,participantNames={},seed,profiles={},startingPlayerId,gameNumber=1,seriesId=''}){
+  const random=createSeededRandom(seed);let state=createDominoGameState(participantIds,random,startingPlayerId||starterUidForGame(participantIds,gameNumber,seriesId)),elapsedMs=0,guard=0;const events=[];
   while(!state.winnerId&&!state.draw&&guard<160){guard+=1;const uid=state.currentTurnUid,action=chooseStrongDominoAction(state,uid,{profile:profiles[uid]||'balanced',random}),result=applyDominoAction(state,uid,action);elapsedMs+=Math.round((action.type==='draw'?650:1100)+random()*(action.type==='draw'?850:1900));events.push({...result.event,automated:true,elapsedMs,decisionProfile:profiles[uid]||'balanced'});state=result.state;}
   if(!state.winnerId&&!state.draw)throw new Error('domino-action-limit');
   const fingerprint=events.filter(event=>event.type==='play').slice(0,24).map(event=>`${event.playerId}:${event.tileId||''}:${event.side||''}`),signature=hashText(fingerprint.join('|')).slice(0,24);

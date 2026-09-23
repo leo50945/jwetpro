@@ -35,6 +35,9 @@ function normalizeCommunityProgram(input) {
     if (conversationIds.has(id)) throw new Error(`La discussion « ${id} » est présente plusieurs fois.`);
     conversationIds.add(id);
     const title = clean(conversation?.title || `Discussion ${conversationIndex + 1}`, 120);
+    const contexts = Array.isArray(conversation?.contexts)
+      ? [...new Set(conversation.contexts.map(value => clean(value, 40).toLowerCase()).filter(Boolean))].slice(0, 8)
+      : [];
     const messages = Array.isArray(conversation?.messages) ? conversation.messages : [];
     if (!messages.length || messages.length > 40) throw new Error(`La discussion « ${id} » doit contenir entre 1 et 40 messages.`);
     const localIds = new Set();
@@ -62,6 +65,7 @@ function normalizeCommunityProgram(input) {
     return {
       id,
       title,
+      contexts,
       startOffsetSeconds,
       messages: normalizedMessages
     };
@@ -70,9 +74,14 @@ function normalizeCommunityProgram(input) {
   return {conversations: normalized, totalMessages};
 }
 
-function buildCommunityTimeline({actualDay, sourceDay, revision, conversations, usedConversationKeys = [], maxConversations = 3}) {
+function buildCommunityTimeline({actualDay, sourceDay, revision, conversations, usedConversationKeys = [], contextHint = '', maxConversations = 3}) {
   const used = new Set(usedConversationKeys);
-  const available = conversations
+  const normalizedContext = clean(contextHint, 40).toLowerCase();
+  const contextual = normalizedContext
+    ? conversations.filter(conversation => Array.isArray(conversation.contexts) && conversation.contexts.includes(normalizedContext))
+    : [];
+  const source = contextual.length ? contextual : conversations;
+  const available = source
     .map(conversation => ({...conversation, key: `${sourceDay}|${revision}|${conversation.id}`}))
     .filter(conversation => !used.has(conversation.key))
     .sort((a, b) => hash(`${actualDay}|${a.key}`).localeCompare(hash(`${actualDay}|${b.key}`)));

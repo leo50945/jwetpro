@@ -99,10 +99,10 @@ module.exports = ({admin, db}) => {
     return conversations.length ? {sourceDay,revision,conversations} : null;
   };
 
-  const prepareProgramTimeline = async (actualDay, usedConversationKeys) => {
+  const prepareProgramTimeline = async (actualDay, usedConversationKeys, contextHint = '') => {
     const program = await loadProgramForDay(actualDay);
     if (!program) return {programFound:false,selectedKeys:[],timeline:[]};
-    return {programFound:true,sourceDay:program.sourceDay,revision:program.revision,...buildCommunityTimeline({actualDay,...program,usedConversationKeys})};
+    return {programFound:true,sourceDay:program.sourceDay,revision:program.revision,...buildCommunityTimeline({actualDay,...program,usedConversationKeys,contextHint})};
   };
 
   return {

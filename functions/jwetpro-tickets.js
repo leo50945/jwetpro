@@ -1,10 +1,11 @@
 const crypto = require('crypto');
 const { onCall, onRequest, HttpsError } = require('firebase-functions/v2/https');
-const { onDocumentWritten } = require('firebase-functions/v2/firestore');
+const { onDocumentWritten, onDocumentDeleted } = require('firebase-functions/v2/firestore');
 
 const REGION = 'us-central1';
 const RESERVATION_MS = 20 * 60 * 1000;
 const SMARTCUT_SYNC_URL = 'https://us-central1-smartcutservices-9ce54.cloudfunctions.net/syncJwetproTicket';
+const SMARTCUT_CATALOG_SYNC_URL = 'https://us-central1-smartcutservices-9ce54.cloudfunctions.net/syncJwetproTicketCatalog';
 const SMARTCUT_CHECKOUT_URL = 'https://us-central1-smartcutservices-9ce54.cloudfunctions.net/createJwetproTicketPayment';
 const SMARTCUT_CREDIT_USAGE_URL = 'https://us-central1-smartcutservices-9ce54.cloudfunctions.net/syncJwetproCreditUsage';
 
@@ -53,11 +54,65 @@ module.exports = ({ admin, db, integrationSecret }) => {
     transaction.set(couponRef,{status:registrationOpen?'available':'expired',reservedForIntentId:admin.firestore.FieldValue.delete(),reservedAt:admin.firestore.FieldValue.delete(),...(registrationOpen?{}:{expiredAt:admin.firestore.FieldValue.serverTimestamp()}),updatedAt:admin.firestore.FieldValue.serverTimestamp()},{merge:true});
     return true;
   });
+  const couponGameKey = value => String(value || '').toLowerCase().includes('domino') ? 'domino' : 'mopyon';
+  const championshipTime = (data = {}, field) => Number(asDate(data[field])?.getTime?.() || 0);
+  const championshipIsOver = (data = {}, now = Date.now()) => {
+    const end = championshipTime(data, 'endAt');
+    const status = String(data.status || '').toLowerCase();
+    return (end > 0 && end <= now) || ['completed', 'finished', 'closed', 'ended', 'termine', 'terminé'].includes(status);
+  };
+  const synchronizeCouponEligibility = async playerUid => {
+    const [couponSnapshot, registrationSnapshot, championshipSnapshot] = await Promise.all([
+      db.collection('jwetproCoupons').where('playerUid', '==', playerUid).get(),
+      db.collection('championshipTicketRegistrations').where('playerUid', '==', playerUid).where('status', 'in', ['paid', 'credited']).get(),
+      db.collection('championships').get()
+    ]);
+    if (!couponSnapshot.size) return { removed: 0, updated: 0 };
+    const registered = new Set(registrationSnapshot.docs.map(item => String(item.data()?.championshipId || '')));
+    const championships = championshipSnapshot.docs.map(item => ({ id: item.id, data: item.data() || {} }));
+    const now = Date.now();
+    const batch = db.batch();
+    let removed = 0;
+    let updated = 0;
+    couponSnapshot.docs.forEach(couponDocument => {
+      const coupon = couponDocument.data() || {};
+      const createdAt = Number(coupon.createdAt?.toMillis?.() || coupon.updatedAt?.toMillis?.() || 0);
+      const missedGames = { ...(coupon.missedGames || {}) };
+      ['mopyon', 'domino'].forEach(game => {
+        if (missedGames[game] === true) return;
+        const nextChampionship = championships
+          .filter(item => item.id !== coupon.sourceChampionshipId && couponGameKey(item.data.game) === game)
+          .filter(item => championshipTime(item.data, 'startAt') > createdAt || championshipTime(item.data, 'endAt') > createdAt)
+          .sort((left, right) => (championshipTime(left.data, 'startAt') || championshipTime(left.data, 'endAt')) - (championshipTime(right.data, 'startAt') || championshipTime(right.data, 'endAt')))[0];
+        if (nextChampionship && championshipIsOver(nextChampionship.data, now) && !registered.has(nextChampionship.id)) missedGames[game] = true;
+      });
+      if (missedGames.mopyon === true && missedGames.domino === true) {
+        batch.delete(couponDocument.ref);
+        removed += 1;
+        return;
+      }
+      if (JSON.stringify(missedGames) !== JSON.stringify(coupon.missedGames || {})) {
+        batch.set(couponDocument.ref, { missedGames, updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+        updated += 1;
+      }
+    });
+    if (removed || updated) await batch.commit();
+    return { removed, updated };
+  };
   const postSigned = async (url, body, eventId) => {
     const response = await fetch(url, { method: 'POST', headers: signedHeaders(body, eventId), body: JSON.stringify(body) });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload.error || payload.message || `HTTP ${response.status}`);
     return payload;
+  };
+  const syncFullChampionshipCatalogToSmartCut = async (eventId) => {
+    const snapshot = await db.collection('championships').limit(500).get();
+    const integrationEnabled = (await settings()).enabled;
+    const tickets = snapshot.docs
+      .map((document) => ({ id: document.id, data: document.data() || {} }))
+      .filter(({ data }) => integrationEnabled || data.simulation === true)
+      .map(({ id, data }) => ticketPayload(id, data));
+    return postSigned(SMARTCUT_CATALOG_SYNC_URL, { tickets }, eventId);
   };
   const ticketPayload = (id, data = {}) => ({
     championshipId: id,
@@ -120,20 +175,27 @@ module.exports = ({ admin, db, integrationSecret }) => {
   };
 
   const syncChampionshipTicketToSmartCut = onDocumentWritten({ document: 'championships/{championshipId}', region: REGION, secrets: [integrationSecret], retry: false }, async (event) => {
+    // Deletions are handled by the dedicated trigger below so each lifecycle
+    // event has one deterministic notification path.
+    if (!event.data?.after?.exists) return;
     const beforeStatus = String(event.data?.before?.data()?.status || '');
-    const data = event.data?.after?.exists ? event.data.after.data() : { status: 'cancelled', name: event.data?.before?.data()?.name || 'Championnat supprime' };
+    const data = event.data.after.data();
     if (String(data.status) === 'cancelled' && beforeStatus !== 'cancelled') await createCancellationCredits(event.params.championshipId);
-    if (!(await settings()).enabled && data.simulation !== true) return;
-    const payload = ticketPayload(event.params.championshipId, data);
     try {
-      await postSigned(SMARTCUT_SYNC_URL, payload, `ticket-sync-${event.params.championshipId}-${Date.now()}`);
+      await syncFullChampionshipCatalogToSmartCut(`ticket-catalog-sync-${event.params.championshipId}-${Date.now()}`);
     } catch (error) {
       console.error('Smart Cut ticket sync failed', { championshipId: event.params.championshipId, message: error.message });
       await db.collection('ticketIntegrationAlerts').add({ type: 'sync_failed', championshipId: event.params.championshipId, message: error.message, createdAt: admin.firestore.FieldValue.serverTimestamp() });
     }
   });
 
-  const syncChampionshipTicketNow = onCall({ region: REGION, cors: true, secrets: [integrationSecret] }, async (request) => {
+  const syncDeletedChampionshipTicketToSmartCut = onDocumentDeleted({ document: 'championships/{championshipId}', region: REGION, secrets: [integrationSecret], retry: false }, async (event) => {
+    const previous = event.data?.data() || {};
+    await createCancellationCredits(event.params.championshipId);
+    await syncFullChampionshipCatalogToSmartCut(`ticket-catalog-delete-${event.params.championshipId}-${event.id}`);
+  });
+
+  const syncChampionshipTicketNow = onCall({ region: REGION, cors: true, cpu: 0.5, maxInstances: 1, timeoutSeconds: 30, secrets: [integrationSecret] }, async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Connexion requise.');
     const championshipId = text(request.data?.championshipId, 150);
     const localTest = request.data?.localTest === true;
@@ -153,7 +215,7 @@ module.exports = ({ admin, db, integrationSecret }) => {
     return { ok: true, championshipId, status: payload.status };
   });
 
-  const createChampionshipRegistrationCheckout = onCall({ region: REGION, cors: true, secrets: [integrationSecret] }, async (request) => {
+  const createChampionshipRegistrationCheckout = onCall({ region: REGION, cors: true, cpu: 0.5, maxInstances: 1, secrets: [integrationSecret] }, async (request) => {
     if (!request.auth || request.auth.token?.firebase?.sign_in_provider === 'anonymous') throw new HttpsError('unauthenticated', 'Connectez-vous a JwetPro pour vous inscrire.');
     const championshipId = text(request.data?.championshipId, 150);
     if (!championshipId) throw new HttpsError('invalid-argument', 'Championnat invalide.');
@@ -167,11 +229,15 @@ module.exports = ({ admin, db, integrationSecret }) => {
     const isLocalSimulationTest = isLocalTestReturn &&
       championshipPreview.exists &&
       championshipPreview.data()?.simulation === true;
+    const isSimulationChampionship = championshipPreview.exists && championshipPreview.data()?.simulation === true;
     const integrationSettings = await settings();
-    if (!integrationSettings.enabled && !isLocalSimulationTest) {
+    // Simulation championships still use real Smart Cut/MonCash payments in
+    // production. Real championships remain protected by the integration flag.
+    if (!integrationSettings.enabled && !isLocalSimulationTest && !isSimulationChampionship) {
       throw new HttpsError('unavailable', 'Les inscriptions payantes sont en preparation.');
     }
     const uid = request.auth.uid;
+    await synchronizeCouponEligibility(uid);
     const intentId = `${championshipId}__${uid}`;
     const reservationRef = db.collection('championshipTicketReservations').doc(intentId);
     const registrationRef = db.collection('championshipTicketRegistrations').doc(intentId);
@@ -216,9 +282,10 @@ module.exports = ({ admin, db, integrationSecret }) => {
       const profile = profileSnapshot.data() || {};
       const amount = Math.max(0, Number(championship.entryFee) || 0);
       const coupons = await transaction.get(db.collection('jwetproCoupons').where('playerUid','==',uid).where('status','in',['pending','available','reserved']));
-      const couponDocument=[...coupons.docs].sort((left,right)=>Number(left.data()?.createdAt?.toMillis?.()||0)-Number(right.data()?.createdAt?.toMillis?.()||0)).find(item=>{
+      const couponDocument=[...coupons.docs].sort((left,right)=>Number(right.data()?.createdAt?.toMillis?.()||right.data()?.updatedAt?.toMillis?.()||0)-Number(left.data()?.createdAt?.toMillis?.()||left.data()?.updatedAt?.toMillis?.()||0)).find(item=>{
         const coupon=item.data()||{};
-        return (!coupon.targetChampionshipId||coupon.targetChampionshipId===championshipId)&&(coupon.status!=='reserved'||coupon.reservedForIntentId===intentId);
+        const game=couponGameKey(championship.game);
+        return coupon.missedGames?.[game] !== true && (!coupon.targetChampionshipId||coupon.targetChampionshipId===championshipId)&&(coupon.status!=='reserved'||coupon.reservedForIntentId===intentId);
       });
       const coupon=couponDocument?.data()||null;
       const discountAmount=coupon?Math.min(amount,coupon.type==='free_entry'?amount:Math.max(0,Number(coupon.value)||0)):0;
@@ -304,12 +371,30 @@ module.exports = ({ admin, db, integrationSecret }) => {
     return { enabled };
   });
 
-  const releaseExpiredCouponReservations = onCall({region:REGION,cors:true},async request=>{
+  const releaseExpiredCouponReservations = onCall({region:REGION,cors:true,cpu:0.5,maxInstances:1},async request=>{
     if(!request.auth||request.auth.token?.firebase?.sign_in_provider==='anonymous') throw new HttpsError('unauthenticated','Connexion requise.');
     const coupons=await db.collection('jwetproCoupons').where('playerUid','==',request.auth.uid).where('status','==','reserved').get();
     let released=0;
     for(const coupon of coupons.docs) if(await releaseCouponReservation(coupon.id,request.auth.uid)) released+=1;
-    return {released};
+    // A player can only keep one active coupon.  Older coupons (including
+    // expired/used ones) are removed so the profile and checkout never show a
+    // stale or duplicated benefit.
+    const allCoupons=await db.collection('jwetproCoupons').where('playerUid','==',request.auth.uid).get();
+    const activeStatuses=new Set(['pending','available','reserved']);
+    const sortedCoupons=allCoupons.docs.slice().sort((left,right)=>{
+      const leftTime=Number(left.data()?.createdAt?.toMillis?.()||left.data()?.updatedAt?.toMillis?.()||0);
+      const rightTime=Number(right.data()?.createdAt?.toMillis?.()||right.data()?.updatedAt?.toMillis?.()||0);
+      return rightTime-leftTime;
+    });
+    const keeper=sortedCoupons.find(snapshot=>activeStatuses.has(String(snapshot.data()?.status||'')))||null;
+    const duplicates=sortedCoupons.filter(snapshot=>!keeper||snapshot.id!==keeper.id);
+    if(duplicates.length){
+      const batch=db.batch();
+      duplicates.forEach(snapshot=>batch.delete(snapshot.ref));
+      await batch.commit();
+    }
+    const eligibility=await synchronizeCouponEligibility(request.auth.uid);
+    return {released,removed:duplicates.length+(eligibility.removed||0),updated:eligibility.updated||0,activeCouponId:keeper?.id||null};
   });
 
   const confirmChampionshipTicketPayment = onRequest({ region: REGION, secrets: [integrationSecret] }, async (request, response) => {
@@ -358,5 +443,5 @@ module.exports = ({ admin, db, integrationSecret }) => {
     return response.status(200).json({ ok: true, ...result });
   });
 
-  return { syncChampionshipTicketToSmartCut, syncChampionshipTicketNow, refreshTicketCountsFromReservation, refreshTicketCountsFromRegistration, createChampionshipRegistrationCheckout, getChampionshipRegistrationStatus, releaseExpiredCouponReservations, manageSmartCutTicketIntegration, confirmChampionshipTicketPayment };
+  return { syncChampionshipTicketToSmartCut, syncDeletedChampionshipTicketToSmartCut, syncChampionshipTicketNow, refreshTicketCountsFromReservation, refreshTicketCountsFromRegistration, createChampionshipRegistrationCheckout, getChampionshipRegistrationStatus, releaseExpiredCouponReservations, manageSmartCutTicketIntegration, confirmChampionshipTicketPayment };
 };
