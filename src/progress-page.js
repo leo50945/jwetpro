@@ -110,7 +110,7 @@
   };
   const enrichSeriesMatch = (series, allMatches) => {
     if (!series || series.kind !== 'series') return series;
-    const child = allMatches.filter(match => String(match.seriesId || '') === String(series.id) && isAttendanceForfeit(match)).sort((a,b) => Number(a.gameNumber || 0) - Number(b.gameNumber || 0))[0];
+    const child = allMatches.filter(match => String(match.seriesId || '') === String(series.id) && isAttendanceForfeit(match) && Number(match.gameNumber || 1) <= 1).sort((a,b) => Number(a.gameNumber || 0) - Number(b.gameNumber || 0))[0];
     const inferred = inferredAttendanceForfeit(series);
     const source = child || (isAttendanceForfeit(series) ? series : inferred ? {...series, ...inferred, forfeitedUid: inferred.forfeitedIds[0] || null} : null);
     if (!source) return series;

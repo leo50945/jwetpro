@@ -388,4 +388,5 @@ esolveOfficialTurnTimeouts : un tour Mopyon expiré est clôturé par forfait m�
 - Un double forfait persiste les deux identifiants éliminés et clôt correctement la série enfant/parent.
 - L’orchestrateur de championnat fait avancer par bye le vainqueur de la confrontation adjacente lorsqu’une paire de vrais joueurs est doublement absente.
 - Les transactions `joinMopyonMatch` et `joinDominoMatch` refusent désormais toute arrivée après l’échéance officielle et ne peuvent plus recréer une manche avec un délai réinitialisé.
+- Le délai d’entrée de la première manche clôt le match par forfait ; une absence après une manche déjà jouée ne compte qu’une manche et laisse le meilleur-de-trois continuer si nécessaire.
 

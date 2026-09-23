@@ -902,9 +902,12 @@ const advanceMopyonSeriesHandler = async request => {
     };
     if (!alreadyRecorded && game.winnerId === seriesParticipants[0]) score.p1 += 1;
     if (!alreadyRecorded && game.winnerId === seriesParticipants[1]) score.p2 += 1;
-    // An attendance timeout forfeits the whole match, not only the current manche.
-    if (game.forfeitReason === 'attendance-timeout' && game.winnerId === seriesParticipants[0]) score.p1 = Math.max(2, score.p1);
-    if (game.forfeitReason === 'attendance-timeout' && game.winnerId === seriesParticipants[1]) score.p2 = Math.max(2, score.p2);
+    // Missing the opening manche forfeits the whole confrontation. After a
+    // player has already entered the series, a five-minute miss only loses
+    // that manche; the best-of-three score decides whether play continues.
+    const openingAttendanceForfeit = (game.forfeitReason === 'attendance-timeout' || game.completionReason === 'attendance-timeout') && Number(game.gameNumber || 1) <= 1;
+    if (openingAttendanceForfeit && game.winnerId === seriesParticipants[0]) score.p1 = Math.max(2, score.p1);
+    if (openingAttendanceForfeit && game.winnerId === seriesParticipants[1]) score.p2 = Math.max(2, score.p2);
     const gameIds = alreadyRecorded ? recordedGameIds : [...recordedGameIds, gameId];
     const winnerUid = score.p1 >= 2 ? seriesParticipants[0] : score.p2 >= 2 ? seriesParticipants[1] : '';
     const seriesAlreadyComplete = Boolean(series.winnerUid || series.winnerId) || String(series.status || '').toLowerCase() === 'completed';
@@ -913,7 +916,7 @@ const advanceMopyonSeriesHandler = async request => {
       const officialWinnerUid = String(series.winnerUid || series.winnerId || winnerUid);
       const winnerName = participantDisplayName(series, officialWinnerUid);
       if (!seriesAlreadyComplete || !alreadyRecorded) {
-        const attendanceForfeit = game.forfeitReason === 'attendance-timeout' || game.completionReason === 'attendance-timeout';
+        const attendanceForfeit = openingAttendanceForfeit;
         const forfeitedUid = attendanceForfeit ? String(game.forfeitedUid || seriesParticipants.find(uid => uid !== officialWinnerUid) || '') : '';
         transaction.set(seriesReference, {
           gameIds,

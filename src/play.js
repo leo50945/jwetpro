@@ -673,8 +673,9 @@
     const ids = participantIds(seriesData);
     if (!alreadyRecorded && game.data.winnerId === ids[0]) score.p1 += 1;
     if (!alreadyRecorded && game.data.winnerId === ids[1]) score.p2 += 1;
-    if ((game.data.forfeitReason === 'attendance-timeout') && game.data.winnerId === ids[0]) score.p1 = Math.max(2,score.p1);
-    if ((game.data.forfeitReason === 'attendance-timeout') && game.data.winnerId === ids[1]) score.p2 = Math.max(2,score.p2);
+    const openingAttendanceForfeit = (game.data.forfeitReason === 'attendance-timeout' || game.data.completionReason === 'attendance-timeout') && Number(game.data.gameNumber || 1) <= 1;
+    if (openingAttendanceForfeit && game.data.winnerId === ids[0]) score.p1 = Math.max(2,score.p1);
+    if (openingAttendanceForfeit && game.data.winnerId === ids[1]) score.p2 = Math.max(2,score.p2);
     return score;
   };
   const projectedSeriesScoreLabel = (seriesData,game) => {
@@ -785,7 +786,7 @@
       : playerLost ? `Vous avez perdu ${mancheOnly?'cette manche':'le match'}`
       : winnerName ? `${winnerName} remporte ${mancheOnly ? 'la manche' : 'le match'}` : (mancheOnly ? 'Manche terminée' : 'Match terminé');
     matchEndSubtitle.textContent = forfeit
-      ? ((officialLastGame?.data?.forfeitReason === 'turn-timeout') ? 'Le délai de 30 secondes est écoulé : vous perdez cette manche. Le match continue jusqu’à deux manches gagnées.' : 'L’adversaire a perdu par forfait de temps après cinq minutes d’absence.')
+      ? ((officialLastGame?.data?.forfeitReason === 'turn-timeout') ? 'Le délai de 30 secondes est écoulé : vous perdez cette manche. Le match continue jusqu’à deux manches gagnées.' : playerLost ? 'Vous n’avez pas rejoint cette manche dans les cinq minutes prévues.' : 'L’adversaire n’a pas rejoint cette manche dans les cinq minutes prévues.')
       : mancheOnly
         ? `${scoreLabel ? `Score de la rencontre : ${scoreLabel}. ` : ''}Le match continue jusqu’à deux manches gagnées.`
         : scoreLabel ? `Score final de la rencontre : ${scoreLabel}.` : 'Cette rencontre officielle est maintenant terminée.';
@@ -806,7 +807,7 @@
     matchEndNext.hidden = !canAdvance;
     matchEndNext.disabled = false;
     if(mancheOnly && canAdvance) startRoundAdvanceTimer(officialSeriesData?.advanceDeadlineAt?.toMillis?.() || (Number(officialSeriesData?.advanceDeadlineAt?.seconds) * 1000) || (Date.now() + 5 * 60 * 1000)); else stopRoundAdvanceTimer();
-    matchEndNext.innerHTML = `${icon('arrow-right')}${forfeit ? 'Finaliser le match' : 'Passer à la manche suivante'}`;
+    matchEndNext.innerHTML = `${icon('arrow-right')}${mancheOnly ? 'Passer à la manche suivante' : 'Finaliser le match'}`;
     const closeButton=$('#match-end-close');
     if(closeButton) closeButton.textContent=mancheOnly?'Fermer':'Terminer';
     const shareButton = $('#match-end-share');
@@ -830,7 +831,7 @@
       const winnerName = data.draw ? null : participantName(data,data.winnerId) || 'Le vainqueur';
       const participantCanAdvance = !spectatorMode && participantIds(data).includes(currentUser?.uid);
       const projectedScore = projectedSeriesScore(info.seriesData,match);
-      const matchEndsWithThisManche = Boolean(projectedScore && (projectedScore.p1 >= 2 || projectedScore.p2 >= 2)) || data.forfeitReason === 'attendance-timeout';
+      const matchEndsWithThisManche = Boolean(projectedScore && (projectedScore.p1 >= 2 || projectedScore.p2 >= 2));
       showMatchEndModal({winnerName,winnerId:data.winnerId,draw:Boolean(data.draw),replayId:matchEndsWithThisManche ? info.seriesId : match.id,scoreLabel:projectedScore ? `${projectedScore.p1} - ${projectedScore.p2}` : null,forfeit:(data.forfeitReason === 'attendance-timeout' || data.forfeitReason === 'turn-timeout'),mancheOnly:!matchEndsWithThisManche,canAdvance:participantCanAdvance && !matchEndsWithThisManche});
       // Persist the manche result immediately. The next board is prepared server-side but remains
       // closed until the player explicitly chooses “Passer à la manche suivante” in this modal.
