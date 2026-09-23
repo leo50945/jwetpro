@@ -586,6 +586,20 @@ exports.joinMopyonMatch = onCall({region: 'us-central1', cors: true, cpu: 0.5, m
     if (data.winnerId || data.winnerUid || data.draw || String(data.status || '').toLowerCase() === 'completed') throw new HttpsError('failed-precondition', 'This confrontation is already over.');
 
     const existingGameId = String(data.currentGameId || data.activeGameId || data.gameId || '');
+    // Do not create a fresh child manche after the official five-minute window.
+    // The scheduler normally resolves this first; this transaction closes the
+    // race where a late click arrives before the next scheduler tick.
+    if (!existingGameId && Date.now() >= scheduledStartMillis + OPPONENT_GRACE_PERIOD_MS) {
+      const botIds = participants.filter(uid => isBotParticipant(data, uid));
+      if (botIds.length === 1) {
+        const winnerId = botIds[0], forfeitedUid = participants.find(uid => uid !== winnerId);
+        transaction.set(requestedReference, {...timeoutForfeitUpdates(winnerId, forfeitedUid), winnerUid: winnerId, winnerName: participantDisplayName(data, winnerId), forfeitedName: participantDisplayName(data, forfeitedUid)}, {merge: true});
+      } else if (botIds.length !== 2) {
+        transaction.set(requestedReference, doubleAttendanceUpdates('', participants), {merge: true});
+      }
+      return matchId;
+    }
+
     if (existingGameId) {
       if (!/^[A-Za-z0-9_-]{1,150}$/.test(existingGameId)) throw new HttpsError('data-loss', 'The published game id is invalid.');
       return existingGameId;
@@ -599,7 +613,7 @@ exports.joinMopyonMatch = onCall({region: 'us-central1', cors: true, cpu: 0.5, m
     const gameSnapshot = await transaction.get(gameReference);
     if (!gameSnapshot.exists) {
       const initialGame = childGameFields(data, matchId, participants, gameId, 1, request.auth.uid);
-      transaction.create(gameReference, {...initialGame, startAt: gameStartAt});
+      transaction.create(gameReference, {...initialGame, startAt: gameStartAt, attendanceDeadlineAt: admin.firestore.Timestamp.fromMillis(timestampMillis(gameStartAt) + OPPONENT_GRACE_PERIOD_MS)});
     }
     transaction.set(requestedReference, {
       currentGameId: gameId,
@@ -663,6 +677,20 @@ exports.joinMopyonMatch = onCall({region: 'us-central1', cors: true, cpu: 0.5, m
       presence,
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     };
+
+    const alreadyPresent = Number.isFinite(timestampMillis(presence[request.auth.uid]));
+    if (!alreadyPresent && Number.isFinite(derivedDeadlineMillis) && now >= derivedDeadlineMillis) {
+      if (opponentIsBot) {
+        transaction.set(reference, timeoutForfeitUpdates(opponentId, request.auth.uid), {merge: true});
+        return {matchId, status: 'completed', winnerId: opponentId, forfeit: true, reason: 'attendance-timeout'};
+      }
+      if (Number.isFinite(opponentPresenceMillis)) {
+        transaction.set(reference, timeoutForfeitUpdates(opponentId, request.auth.uid), {merge: true});
+        return {matchId, status: 'completed', winnerId: opponentId, forfeit: true, reason: 'attendance-timeout'};
+      }
+      transaction.set(reference, doubleAttendanceUpdates('', participants), {merge: true});
+      return {matchId, status: 'completed', winnerId: null, forfeit: true, reason: 'double-attendance-timeout'};
+    }
 
     if (opponentIsBot) {
       updates.status = 'ongoing';
@@ -1068,6 +1096,12 @@ exports.joinDominoMatch = onCall({region:'us-central1',cors:true},async request=
     if(Date.now()<scheduledStartMillis) throw new HttpsError('failed-precondition','The match is not open yet.');
     if(series.winnerId||series.winnerUid||String(series.status||'').toLowerCase()==='completed') throw new HttpsError('failed-precondition','This confrontation is already over.');
     const existing=String(series.currentGameId||series.activeGameId||'');
+    if(!existing&&Date.now()>=scheduledStartMillis+OPPONENT_GRACE_PERIOD_MS){
+      const botIds=participants.filter(uid=>isBotParticipant(series,uid));
+      if(botIds.length===1){const winnerId=botIds[0],forfeitedUid=participants.find(uid=>uid!==winnerId);transaction.set(requestedReference,{...timeoutForfeitUpdates(winnerId,forfeitedUid),winnerUid:winnerId,winnerName:participantDisplayName(series,winnerId),forfeitedName:participantDisplayName(series,forfeitedUid)},{merge:true});}
+      else if(botIds.length!==2) transaction.set(requestedReference,doubleAttendanceUpdates('',participants),{merge:true});
+      return requestedId;
+    }
     if(existing){
       const gameNumber=Math.max(1,(Array.isArray(series.gameIds)?series.gameIds.length:0)+1);
       const startAt=series.startAt||series.scheduledAt||series.date||admin.firestore.Timestamp.now();
@@ -1107,9 +1141,14 @@ exports.joinDominoMatch = onCall({region:'us-central1',cors:true},async request=
     const waitingSinceMillis=timestampMillis(data.waitingForOpponentSince);
     const deadlineMillis=timestampMillis(data.attendanceDeadlineAt);
     const derivedDeadline=Number.isFinite(deadlineMillis)?deadlineMillis:Number.isFinite(waitingSinceMillis)?waitingSinceMillis+OPPONENT_GRACE_PERIOD_MS:Number.NaN;
-    if(!opponentIsBot&&Number.isFinite(opponentPresenceMillis)&&Number.isFinite(derivedDeadline)&&now>=derivedDeadline){
-      transaction.set(gameReference,timeoutForfeitUpdates(opponentId,request.auth.uid),{merge:true});
-      return {matchId:preparedId,seriesId:data.seriesId||'',status:'completed',winnerId:opponentId,forfeit:true};
+    const alreadyPresent=Number.isFinite(timestampMillis(presence[request.auth.uid]));
+    if(!alreadyPresent&&Number.isFinite(derivedDeadline)&&now>=derivedDeadline){
+      if(opponentIsBot||Number.isFinite(opponentPresenceMillis)){
+        transaction.set(gameReference,timeoutForfeitUpdates(opponentId,request.auth.uid),{merge:true});
+        return {matchId:preparedId,seriesId:data.seriesId||'',status:'completed',winnerId:opponentId,forfeit:true};
+      }
+      transaction.set(gameReference,doubleAttendanceUpdates('',participants),{merge:true});
+      return {matchId:preparedId,seriesId:data.seriesId||'',status:'completed',winnerId:null,forfeit:true,reason:'double-attendance-timeout'};
     }
     presence[request.auth.uid]=joinedAt;
     const updates={presence,updatedAt:admin.firestore.FieldValue.serverTimestamp(),hands:admin.firestore.FieldValue.delete(),drawPile:admin.firestore.FieldValue.delete(),passStreak:admin.firestore.FieldValue.delete()};

@@ -387,4 +387,5 @@ esolveOfficialTurnTimeouts : un tour Mopyon expiré est clôturé par forfait m�
 - Les manches simulé-versus-simulé restent hors de toute logique d’absence et sont laissées à l’orchestrateur de simulation.
 - Un double forfait persiste les deux identifiants éliminés et clôt correctement la série enfant/parent.
 - L’orchestrateur de championnat fait avancer par bye le vainqueur de la confrontation adjacente lorsqu’une paire de vrais joueurs est doublement absente.
+- Les transactions `joinMopyonMatch` et `joinDominoMatch` refusent désormais toute arrivée après l’échéance officielle et ne peuvent plus recréer une manche avec un délai réinitialisé.
 
