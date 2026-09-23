@@ -1302,8 +1302,9 @@ const advanceDominoSeriesForParticipant=async (gameIdValue,participantUid)=>{
     const score={p1:Math.max(0,Number(series.seriesScore?.p1)||0),p2:Math.max(0,Number(series.seriesScore?.p2)||0)};
     if(!alreadyRecorded&&game.winnerId===seriesParticipants[0]) score.p1+=1;
     if(!alreadyRecorded&&game.winnerId===seriesParticipants[1]) score.p2+=1;
-    if(game.forfeitReason==='attendance-timeout'&&game.winnerId===seriesParticipants[0]) score.p1=Math.max(2,score.p1);
-    if(game.forfeitReason==='attendance-timeout'&&game.winnerId===seriesParticipants[1]) score.p2=Math.max(2,score.p2);
+    const openingAttendanceForfeit=(game.forfeitReason==='attendance-timeout'||game.completionReason==='attendance-timeout')&&Number(game.gameNumber||1)<=1;
+    if(openingAttendanceForfeit&&game.winnerId===seriesParticipants[0]) score.p1=Math.max(2,score.p1);
+    if(openingAttendanceForfeit&&game.winnerId===seriesParticipants[1]) score.p2=Math.max(2,score.p2);
     const gameIds=alreadyRecorded?recorded:[...recorded,gameId];
     const winnerUid=score.p1>=2?seriesParticipants[0]:score.p2>=2?seriesParticipants[1]:'';
     const alreadyComplete=Boolean(series.winnerUid||series.winnerId)||String(series.status||'').toLowerCase()==='completed';
@@ -1316,7 +1317,7 @@ const advanceDominoSeriesForParticipant=async (gameIdValue,participantUid)=>{
       const couponDefinition=eliminationCoupon(series);
       const roundKey=dominoRoundKey(series);
       const stagePoints=dominoVictoryPoints(series);
-      const loserCompletionPoints=loserUid?5+(game.forfeitReason==='attendance-timeout'&&game.forfeitedUid===loserUid?0:5):0;
+      const loserCompletionPoints=loserUid?5+(openingAttendanceForfeit&&game.forfeitedUid===loserUid?0:5):0;
       const winnerCompletionPoints=roundKey==='final'?10:0;
       const rewardReference=db.collection('playerRewardEvents').doc(`domino_series_${seriesId}`);
       const winnerProfileReference=winnerIsReal?db.collection('users').doc(officialWinner):null;
