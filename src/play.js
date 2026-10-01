@@ -243,6 +243,9 @@
     if (data.kind === 'series') return false;
     if (!isLive(normalizeStatus(data.status || data.state))) return false;
     if (data.winnerId || data.winner || data.draw === true || data.completedAt || data.endedAt || data.finishedAt) return false;
+    const participants=participantIds(data);
+    const simulatedBotsOnly=data.simulation===true&&participants.length===2&&participants.every(uid=>isBotParticipant(data,uid,''));
+    if(simulatedBotsOnly)return true;
     const start = toDate(data.startedAt || data.startAt || data.scheduledAt || data.matchDate || data.date);
     if (!start) return true;
     const elapsed = Date.now() - start.getTime();
