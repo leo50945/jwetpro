@@ -253,12 +253,12 @@ module.exports = ({admin, db}) => {
             actorDisplayName:displayName(actor.data),
             title:reverseSnapshot?.exists ? 'Vous vous suivez maintenant' : 'Nouvel abonné',
             body:`${displayName(actor.data)} suit maintenant votre profil.`, read:false,
+            pushEventId:`follow_${Date.now()}_${actor.uid}`,
             shareMilestone:followerMilestone(followerCount), followerCount, createdAt:timestamp(), updatedAt:timestamp()
           });
         }
         return {followed, mutual, followerCount, followingCount};
       }
-            pushEventId:`follow_${Date.now()}_${actor.uid}`,
       return {followed, mutual:Boolean(edgeSnapshot.data()?.mutual), followerCount:Math.max(0, Number(currentTarget.followerCount) || 0), followingCount:Math.max(0, Number(actorStats.followingCount) || 0)};
     });
     return {targetSocialId, ...result};
