@@ -5,3 +5,5 @@ Palette : navy `#031626`/`#061C2E` pour la confiance, or `#D7A13A` pour victoire
 Les actions « S'inscrire » utilisent toutes le CTA or principal et son animation d'attention. L'animation est suspendue au survol ou au focus et désactivée avec `prefers-reduced-motion`.
 
 Inter sert l’UI, Cormorant Garamond les noms premium. Rayons 10–12px, ombres discrètes, espacements généreux. Les boutons ont un libellé et une icône Lucide ; les statuts associent couleur et texte. Les contrôles mobiles restent lisibles et navigables au clavier.
+
+Les parcours de configuration bloquants restent séquentiels : un titre, une consigne courte et une action principale par écran. Une progression compacte indique l’étape; les détails n’apparaissent qu’au moment où ils sont utiles.

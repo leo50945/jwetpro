@@ -90,7 +90,7 @@ if (!document.querySelector('link[rel="manifest"]')) {
 if (!document.querySelector('link[data-jwetpro-pwa-style]')) {
   const pwaStyle = document.createElement('link');
   pwaStyle.rel = 'stylesheet';
-  pwaStyle.href = './shared-pwa.css?v=20261001-pwa-v2';
+  pwaStyle.href = './shared-pwa.css?v=20261001-pwa-v3';
   pwaStyle.dataset.jwetproPwaStyle = 'true';
   document.head.append(pwaStyle);
 }
@@ -104,7 +104,7 @@ if (!document.querySelector('script[data-jwetpro-pwa]')) {
     document.head.append(pwaConfigScript);
   }
   const pwaScript = document.createElement('script');
-  pwaScript.src = './shared-pwa.js?v=20261001-pwa-v2';
+  pwaScript.src = './shared-pwa.js?v=20261001-pwa-v3';
   pwaScript.defer = true;
   pwaScript.async = false;
   pwaScript.dataset.jwetproPwa = 'true';

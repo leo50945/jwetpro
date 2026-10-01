@@ -10,17 +10,8 @@
   const canUsePush = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
   const currentUser = () => window.firebase?.auth?.().currentUser || null;
   const needAuth = () => !currentUser() || currentUser()?.isAnonymous;
-  const installHint = () => {
-    if (isInstalled()) return 'Application détectée.';
-    if (state.installPrompt) return 'Appuie sur Installer. La fenêtre du navigateur va s’ouvrir, puis confirme l’installation.';
-    return 'Si aucun bouton d’installation ne s’ouvre, utilise le menu du navigateur : Ajouter à l’écran d’accueil ou Installer l’application.';
-  };
-  const notifyHint = () => {
-    if (canNotify()) return 'Notifications activées.';
-    if (needAuth()) return 'Connecte-toi d’abord : les alertes doivent être liées à ton compte joueur.';
-    if (!VAPID_KEY) return 'Configuration Web Push en attente côté JWETPRO. Les alertes hors application seront activées dès que la clé de production est ajoutée.';
-    return 'Autorise les notifications pour recevoir les championnats ouverts, rappels de match, coupons, messages et résultats.';
-  };
+  const isIos = () => /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const gateStep = () => !isInstalled() ? 1 : needAuth() ? 2 : 3;
   const waitForAuthReady = () => new Promise(resolve => {
     if (!window.firebase?.auth || !firebase.apps?.length) return resolve();
     let done = false;
@@ -102,64 +93,61 @@
     return registerSubscription();
   };
 
-  const paintGate = overlay => {
+  const paintGate = (overlay, error = '') => {
     if (!overlay) return;
-    const installed = isInstalled();
-    const notified = canNotify() && localStorage.getItem('jwetpro-pwa-ready') === 'true';
-    const authenticated = !needAuth();
-    const installStep = overlay.querySelector('[data-pwa-step="install"]');
-    const notifyStep = overlay.querySelector('[data-pwa-step="notify"]');
-    const authStep = overlay.querySelector('[data-pwa-step="auth"]');
-    installStep?.classList.toggle('is-done', installed);
-    notifyStep?.classList.toggle('is-done', notified);
-    authStep?.classList.toggle('is-done', authenticated);
-    const installText = overlay.querySelector('[data-pwa-install-text]');
-    const notifyText = overlay.querySelector('[data-pwa-notify-text]');
-    const authText = overlay.querySelector('[data-pwa-auth-text]');
-    if (installText) installText.textContent = installHint();
-    if (notifyText) notifyText.textContent = notifyHint();
-    if (authText) authText.textContent = authenticated ? 'Compte joueur détecté.' : 'Connecte-toi pour que les alertes soient liées à tes matchs, coupons et messages privés.';
-    const installButton = overlay.querySelector('[data-pwa-action="install"]');
-    const notifyButton = overlay.querySelector('[data-pwa-action="notify"]');
-    const loginButton = overlay.querySelector('[data-pwa-action="login"]');
-    if (installButton) installButton.textContent = installed ? 'Application installée' : 'Installer l’application';
-    if (notifyButton) notifyButton.textContent = notified ? 'Notifications activées' : 'Activer les notifications';
-    if (loginButton) loginButton.textContent = authenticated ? 'Compte connecté' : 'Se connecter';
+    const step = gateStep();
+    const iosHelp = isIos() && !state.installPrompt;
+    const content = step === 1
+      ? {title:'Installe JWETPRO', copy:iosHelp ? 'Safari : Partager, puis « Sur l’écran d’accueil ».' : state.installPrompt ? 'Installation rapide, sans téléchargement.' : 'Menu du navigateur → Installer JWETPRO.', action:state.installPrompt ? 'Installer JWETPRO' : 'Vérifier l’installation', actionName:state.installPrompt ? 'install' : 'check'}
+      : step === 2
+        ? {title:'Connecte-toi', copy:'Utilise ton compte joueur pour continuer.', action:'Se connecter', actionName:'login'}
+        : {title:'Active les notifications', copy:'Reçois les alertes de match et de championnat.', action:canNotify() && localStorage.getItem('jwetpro-pwa-ready') === 'true' ? 'Continuer' : 'Activer les notifications', actionName:canNotify() && localStorage.getItem('jwetpro-pwa-ready') === 'true' ? 'check' : 'notify'};
+    overlay.dataset.step = String(step);
+    const progress = overlay.querySelector('[data-pwa-progress]');
+    progress?.setAttribute('aria-label', `Étape ${step} sur 3`);
+    progress?.setAttribute('aria-valuenow', String(step));
+    overlay.querySelectorAll('[data-pwa-progress-step]').forEach((item, index) => {
+      item.classList.toggle('is-current', index + 1 === step);
+      item.classList.toggle('is-done', index + 1 < step);
+    });
+    overlay.querySelector('[data-pwa-kicker]').textContent = `ÉTAPE ${step} SUR 3`;
+    overlay.querySelector('[data-pwa-title]').textContent = content.title;
+    overlay.querySelector('[data-pwa-copy]').textContent = content.copy;
+    const actionButton = overlay.querySelector('[data-pwa-action="primary"]');
+    actionButton.textContent = content.action;
+    actionButton.dataset.action = content.actionName;
+    const errorBox = overlay.querySelector('[data-pwa-error]');
+    errorBox.hidden = !error;
+    errorBox.textContent = error;
   };
 
-  const renderGate = options => {
+  const renderGate = () => {
     const old = document.querySelector('[data-pwa-gate]');
     if (old) old.remove();
     document.body.classList.add('pwa-gate-open');
-    const installed = isInstalled();
-    const notified = canNotify();
-    const authenticated = !needAuth();
-    const reason = options?.reason || 'continuer';
     const overlay = document.createElement('div');
     overlay.className = 'pwa-gate-backdrop';
     overlay.dataset.pwaGate = '';
     overlay.setAttribute('role','dialog');
     overlay.setAttribute('aria-modal','true');
-    overlay.innerHTML = `<section class="pwa-gate-card" aria-labelledby="pwa-gate-title">
-      <div class="pwa-gate-hero"><div class="pwa-gate-mark">JP</div><div><p class="pwa-gate-kicker">Application JWETPRO</p><h2 id="pwa-gate-title">Installe l'application pour ${reason}</h2><p>Les matchs, replays et entraînements fonctionnent mieux dans l'application. Elle garde ton accès prêt, t'envoie les alertes importantes et évite de rater les cinq minutes pour rejoindre un championnat.</p></div></div>
+    overlay.innerHTML = `<section class="pwa-gate-card" aria-labelledby="pwa-gate-title" aria-describedby="pwa-gate-copy">
+      <div class="pwa-gate-top"><span>JWETPRO</span><div class="pwa-gate-progress" data-pwa-progress role="progressbar" aria-valuemin="1" aria-valuemax="3" aria-valuenow="1" aria-label="Étape 1 sur 3"><i data-pwa-progress-step></i><i data-pwa-progress-step></i><i data-pwa-progress-step></i></div></div>
       <div class="pwa-gate-body">
-        <ol class="pwa-gate-steps">
-          <li class="pwa-gate-step ${installed?'is-done':''}" data-pwa-step="install"><b>1</b><div><strong>Installer JWETPRO</strong><span data-pwa-install-text>${installHint()}</span></div></li>
-          <li class="pwa-gate-step ${authenticated?'is-done':''}" data-pwa-step="auth"><b>2</b><div><strong>Rester connecté au compte joueur</strong><span data-pwa-auth-text>${authenticated?'Compte joueur détecté.':'Connecte-toi pour que les alertes soient liées à tes matchs, coupons et messages privés.'}</span></div></li>
-          <li class="pwa-gate-step ${notified?'is-done':''}" data-pwa-step="notify"><b>3</b><div><strong>Activer les notifications</strong><span data-pwa-notify-text>${notifyHint()}</span></div></li>
-        </ol>
-        <div class="pwa-gate-actions">
-          <button class="pwa-gate-primary" type="button" data-pwa-action="install">${installed?'Application installée':'Installer l’application'}</button>
-          <button class="pwa-gate-secondary" type="button" data-pwa-action="login">${authenticated?'Compte connecté':'Se connecter'}</button>
-          <button class="pwa-gate-primary" type="button" data-pwa-action="notify">${notified?'Notifications activées':'Activer les notifications'}</button>
-          <button class="pwa-gate-secondary" type="button" data-pwa-action="check">J’ai terminé</button>
-        </div>
-        <div class="pwa-gate-note">Sur iPhone : touche Partager, puis Ajouter à l’écran d’accueil. Sur Android ou ordinateur : utilise le bouton Installer ou l’icône d’installation dans la barre d’adresse.</div>
-        <div class="pwa-gate-error" data-pwa-error hidden></div>
+        <p class="pwa-gate-kicker" data-pwa-kicker></p>
+        <h2 id="pwa-gate-title" data-pwa-title aria-live="polite"></h2>
+        <p class="pwa-gate-copy" id="pwa-gate-copy" data-pwa-copy></p>
+        <div class="pwa-gate-error" data-pwa-error role="status" aria-live="polite" hidden></div>
+        <button class="pwa-gate-primary" type="button" data-pwa-action="primary" data-action=""></button>
       </div>
     </section>`;
     document.body.append(overlay);
     paintGate(overlay);
+    overlay.querySelector('button')?.focus({preventScroll:true});
+    overlay.addEventListener('keydown', event => {
+      if (event.key !== 'Tab') return;
+      event.preventDefault();
+      overlay.querySelector('button')?.focus();
+    });
     return overlay;
   };
 
@@ -170,13 +158,13 @@
 
   const humanError = error => {
     const code = String(error?.message || error || '');
-    if (code === 'missing-vapid-key') return 'La clé Web Push JWETPRO n’est pas encore configurée. Ajoute la clé VAPID publique dans window.JWETPRO_PUSH_VAPID_KEY pour activer les notifications hors application.';
-    if (code === 'auth-required') return 'Connecte-toi à ton compte joueur, puis réessaie. Les notifications doivent être attachées à ton compte.';
-    if (code === 'notification-denied') return 'Les notifications sont bloquées dans le navigateur. Ouvre les paramètres du site, autorise les notifications, puis reviens ici.';
-    if (code === 'push-unsupported') return 'Ce navigateur ne supporte pas les notifications web de JWETPRO. Ouvre JWETPRO dans Chrome, Edge, Safari récent ou installe l’application.';
-    if (code === 'not-installed') return 'Installe d’abord JWETPRO avec le bouton Installer ou le menu du navigateur, puis reviens appuyer sur « J’ai terminé ».';
-    if (code === 'incomplete-notifications') return 'Il reste l’étape notifications : connecte-toi si nécessaire, puis active les notifications JWETPRO.';
-    return 'Impossible de terminer cette étape pour le moment. Vérifie ta connexion puis réessaie.';
+    if (code === 'missing-vapid-key') return 'Notifications momentanément indisponibles.';
+    if (code === 'auth-required') return 'Connecte-toi à ton compte joueur.';
+    if (code === 'notification-denied') return 'Autorise les notifications dans les réglages du navigateur.';
+    if (code === 'push-unsupported') return 'Notifications non prises en charge par ce navigateur.';
+    if (code === 'not-installed') return 'Installe JWETPRO, puis ouvre l’application.';
+    if (code === 'incomplete-notifications') return 'Active les notifications pour continuer.';
+    return 'Une erreur est survenue. Réessaie.';
   };
 
   const ready = () => isInstalled() && canNotify() && !needAuth() && localStorage.getItem('jwetpro-pwa-ready') === 'true';
@@ -185,22 +173,23 @@
     await waitForAuthReady();
     return new Promise(resolve => {
     if (ready()) return resolve(true);
-    const overlay = renderGate(options);
-    const errorBox = overlay.querySelector('[data-pwa-error]');
-    const showError = error => { errorBox.hidden = false; errorBox.textContent = humanError(error); };
+    const overlay = renderGate();
     window.addEventListener('jwetpro-pwa-install-ready', () => paintGate(overlay), {once:true});
     window.addEventListener('jwetpro-pwa-installed', () => paintGate(overlay), {once:true});
     overlay.addEventListener('click', async event => {
-      const action = event.target.closest('[data-pwa-action]')?.dataset.pwaAction;
+      const action = event.target.closest('[data-pwa-action="primary"]')?.dataset.action;
       if (!action) return;
-      errorBox.hidden = true;
       try {
         if (action === 'install') { await installApp(); paintGate(overlay); }
-        if (action === 'notify') { await requestNotifications(); paintGate(overlay); }
         if (action === 'login') {
           try { localStorage.setItem('jwetpro-pwa-return-url', location.href); } catch {}
           location.href = './index.html#login';
           return;
+        }
+        if (action === 'notify') {
+          await requestNotifications();
+          if (ready()) { closeGate(overlay); resolve(true); return; }
+          paintGate(overlay);
         }
         if (action === 'check') {
           if (ready()) { closeGate(overlay); resolve(true); return; }
@@ -209,7 +198,7 @@
           throw new Error(isInstalled() ? 'incomplete-notifications' : 'not-installed');
         }
       } catch (error) {
-        showError(error);
+        paintGate(overlay, humanError(error));
       }
     });
     });
