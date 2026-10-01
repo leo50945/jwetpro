@@ -249,7 +249,7 @@ module.exports=({admin,db,isAdmin})=>{
     });
   }
 
-  const processSimulationBotJob=onDocumentWritten({document:'simulationBotJobs/{seriesId}',region:REGION,timeoutSeconds:540,memory:'1GiB',maxInstances:6,concurrency:1,retry:true},async event=>{
+  const processSimulationBotJob=onDocumentWritten({document:'simulationBotJobs/{seriesId}',region:REGION,timeoutSeconds:540,memory:'1GiB',cpu:0.5,maxInstances:6,concurrency:1,retry:true},async event=>{
     const after=event.data?.after;if(!after?.exists||after.data()?.status!=='queued')return;
     const beforeGeneration=Number(event.data?.before?.data()?.queueGeneration)||0,afterGeneration=Number(after.data()?.queueGeneration)||0;
     if(event.data?.before?.exists&&event.data.before.data()?.status==='queued'&&beforeGeneration===afterGeneration)return;
