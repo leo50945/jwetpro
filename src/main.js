@@ -989,6 +989,23 @@ if (window.firebase) {
     homepageCouponsUnsubscribe = null;
     homepageCoupons = [];
     currentAuthUser = user && !user.isAnonymous ? user : null;
+    if (currentAuthUser) {
+      try {
+        const pendingReturn = localStorage.getItem('jwetpro-pwa-return-url');
+        if (pendingReturn) {
+          const target = new URL(pendingReturn, window.location.origin);
+          const isPlayPage = target.origin === window.location.origin && /\/play\.html$/.test(target.pathname);
+          if (isPlayPage && target.pathname !== window.location.pathname) {
+            localStorage.removeItem('jwetpro-pwa-return-url');
+            window.location.replace(`${target.pathname}${target.search}${target.hash}`);
+            return;
+          }
+          if (!isPlayPage) localStorage.removeItem('jwetpro-pwa-return-url');
+        }
+      } catch {
+        try { localStorage.removeItem('jwetpro-pwa-return-url'); } catch {}
+      }
+    }
     homepageRegisteredChampionshipIds.clear();
     homepageCurrentProfile = null;
     if (!headerAccount) return;

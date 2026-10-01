@@ -1,5 +1,11 @@
 # Decisions
 
+## 2026-10-01 — PWA et notifications obligatoires avant les expériences de jeu
+
+Les expériences qui consomment un match ou un plateau — entraînement, match officiel, spectateur live et replay — passent par `play.html` et exigent maintenant une préparation PWA avant d’ouvrir le jeu. La barrière demande trois conditions : application installée, notifications navigateur autorisées et compte joueur non anonyme. Le choix produit est volontairement strict afin que le joueur reçoive les alertes critiques de participation et de récompense même après fermeture de l’interface.
+
+Les notifications Web Push sont dérivées des notifications internes `users/{uid}/notifications/{notificationId}` plutôt que de dupliquer chaque parcours client. L’abonnement passe par l’API Web Push native et la dépendance serveur `web-push`; les abonnements sont écrits uniquement par callable authentifié dans `users/{uid}/pushTokens`, et les règles Firestore refusent toute lecture/écriture directe sur ces abonnements.
+
 ## 2026-09-08 — Couche sociale unifiée
 
 Les championnats et les séries officielles utilisent une identité sociale canonique partagée par toutes leurs cartes. Le partage reste public; aimer, suivre, bloquer, signaler et écrire en privé exigent un vrai compte actif. Le J’aime alimente à la fois un compteur public agrégé et le favori privé du joueur.

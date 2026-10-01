@@ -1,0 +1,25 @@
+.pwa-gate-open{overflow:hidden}
+.pwa-gate-backdrop{position:fixed;inset:0;z-index:5000;display:grid;place-items:center;padding:22px;background:rgba(2,12,24,.78);backdrop-filter:blur(14px)}
+.pwa-gate-card{width:min(100%,620px);overflow:hidden;border:1px solid #24445c;border-radius:16px;background:#061b2d;color:#f7fbff;box-shadow:0 28px 80px #0009}
+.pwa-gate-hero{display:grid;grid-template-columns:auto 1fr;gap:16px;padding:24px 26px 20px;background:radial-gradient(circle at 84% 0,#d9a13433,transparent 36%),linear-gradient(135deg,#08243a,#061827)}
+.pwa-gate-mark{display:grid;place-items:center;width:52px;height:52px;border-radius:14px;background:#d9a134;color:#071728;font-weight:900;font-size:18px;box-shadow:0 12px 28px #d9a1343d}
+.pwa-gate-kicker{margin:0 0 7px;color:#e2ad3d;font-size:10px;font-weight:900;letter-spacing:.14em;text-transform:uppercase}
+.pwa-gate-card h2{margin:0;color:#fff;font-size:24px;line-height:1.12}
+.pwa-gate-card p{margin:9px 0 0;color:#b9ccda;font-size:13px;line-height:1.65}
+.pwa-gate-body{padding:20px 26px 24px}
+.pwa-gate-steps{display:grid;gap:10px;margin:0 0 18px;padding:0;list-style:none}
+.pwa-gate-step{display:grid;grid-template-columns:32px 1fr;gap:12px;padding:13px;border:1px solid #24445c;border-radius:10px;background:#0a2539}
+.pwa-gate-step b{display:grid;place-items:center;width:32px;height:32px;border-radius:50%;background:#102f46;color:#a9c7dc;font-size:12px}
+.pwa-gate-step.is-done{border-color:#2d9a57;background:#092d26}
+.pwa-gate-step.is-done b{background:#2d9a57;color:#fff}
+.pwa-gate-step strong{display:block;color:#fff;font-size:13px}
+.pwa-gate-step span{display:block;margin-top:4px;color:#aac0d0;font-size:11px;line-height:1.45}
+.pwa-gate-actions{display:flex;flex-wrap:wrap;gap:10px}
+.pwa-gate-actions button{min-height:44px;border:0;border-radius:8px;padding:0 15px;font-size:11px;font-weight:900;letter-spacing:.03em;cursor:pointer}
+.pwa-gate-primary{background:#d9a134;color:#061727;box-shadow:0 4px 0 #8d611c}
+.pwa-gate-secondary{border:1px solid #38566b!important;background:#0c2b43;color:#e7f1f7}
+.pwa-gate-primary:hover,.pwa-gate-primary:focus-visible{background:#efb844;outline:3px solid #d9a13444;outline-offset:2px}
+.pwa-gate-secondary:hover,.pwa-gate-secondary:focus-visible{border-color:#d9a134!important;color:#f3c96d;outline:3px solid #d9a13433;outline-offset:2px}
+.pwa-gate-note{margin-top:14px;padding:11px 12px;border-radius:8px;background:#0b2a42;color:#b8cfde;font-size:11px;line-height:1.55}
+.pwa-gate-error{margin-top:12px;color:#ffb4b4;font-size:11px;line-height:1.5}
+@media(max-width:560px){.pwa-gate-backdrop{align-items:end;padding:0}.pwa-gate-card{border-radius:18px 18px 0 0}.pwa-gate-hero{grid-template-columns:1fr;padding:22px 20px 18px}.pwa-gate-body{padding:17px 18px 22px}.pwa-gate-card h2{font-size:21px}.pwa-gate-actions{display:grid}.pwa-gate-actions button{width:100%}}

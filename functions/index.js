@@ -1,7 +1,7 @@
 const {onCall, onRequest, HttpsError} = require('firebase-functions/v2/https');
 const {onDocumentCreated, onDocumentWritten} = require('firebase-functions/v2/firestore');
 const {onSchedule} = require('firebase-functions/v2/scheduler');
-const {defineSecret} = require('firebase-functions/params');
+const {defineSecret, defineString} = require('firebase-functions/params');
 const crypto = require('crypto');
 const admin = require('firebase-admin');
 const {createAssistantService, callGroqChat, BUILT_IN_KNOWLEDGE, cleanText, detectLanguage, technicalWaitAnswer, countRecentTechnicalWaits} = require('./assistant-core');
@@ -14,12 +14,15 @@ admin.initializeApp();
 const groqApiKey = defineSecret('GROQ_API_KEY');
 const smartCutTicketSecret = defineSecret('SMARTCUT_TICKET_INTEGRATION_SECRET');
 const rapfiServiceToken = defineSecret('RAPFI_SERVICE_TOKEN');
+const webPushPrivateKey = defineSecret('WEB_PUSH_PRIVATE_KEY');
+const webPushPublicKey = defineString('WEB_PUSH_PUBLIC_KEY', {default:'BK6d8t0IABKvbPC9JZMZZ9m_pq9URG-bd2PuKwfLSCERsViyy2v5Mu7ZQnH_hdad1V5Ls7Ml0c9iKGnJdZD7YIs'});
 const RAPFI_SERVICE_URL = 'https://jwetpro-rapfi-307157893690.us-central1.run.app/move';
 const db = admin.firestore();
 const assistantService = createAssistantService({admin, db});
 Object.assign(exports, require('./jwetpro-tickets')({ admin, db, integrationSecret: smartCutTicketSecret }));
 Object.assign(exports, require('./jwetpro-sharing')({admin,db}));
 Object.assign(exports, require('./social-system')({admin,db}));
+Object.assign(exports, require('./jwetpro-push')({admin,db,webPushPrivateKey,webPushPublicKey}));
 const communityPrograms = require('./community-programs')({admin,db});
 Object.assign(exports, communityPrograms.functions);
 

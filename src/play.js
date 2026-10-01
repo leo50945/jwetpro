@@ -96,9 +96,52 @@
   let officialDominoBotPending = false;
   let mopyonTurnTimer = null;
   let mopyonTimeoutPending = false;
+  let pwaGateChecked = false;
 
   const playLanguage = () => localStorage.getItem('jwetpro-language') === 'ht' ? 'ht' : 'fr';
   const playCopy = (fr, ht) => playLanguage() === 'ht' ? ht : fr;
+  const protectedExperienceReason = () => {
+    if (replayMatchId) return 'regarder ce replay';
+    if (liveMatchId) return 'regarder ce match en direct';
+    if (joinMatchId) return 'jouer ce match officiel';
+    return 'jouer à l’entraînement';
+  };
+  const waitForPwaGate = () => new Promise(resolve => {
+    if (window.JwetproPwaGate) return resolve(window.JwetproPwaGate);
+    let attempts = 0;
+    const timer = window.setInterval(() => {
+      attempts += 1;
+      if (window.JwetproPwaGate || attempts >= 80) {
+        window.clearInterval(timer);
+        resolve(window.JwetproPwaGate || null);
+      }
+    }, 100);
+  });
+  const blockMissingPwaGate = () => {
+    document.body.classList.add('pwa-gate-open');
+    const old = document.querySelector('[data-pwa-fallback-gate]');
+    if (old) old.remove();
+    const overlay = document.createElement('div');
+    overlay.className = 'pwa-gate-backdrop';
+    overlay.dataset.pwaFallbackGate = '';
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
+    overlay.innerHTML = `<section class="pwa-gate-card" aria-labelledby="pwa-fallback-title"><div class="pwa-gate-hero"><div class="pwa-gate-mark">JP</div><div><p class="pwa-gate-kicker">Application JWETPRO</p><h2 id="pwa-fallback-title">${playCopy('Préparation obligatoire', 'Preparasyon obligatwa')}</h2><p>${playCopy('JWETPRO doit charger le module d’installation et de notifications avant d’ouvrir cette expérience. Recharge la page pour continuer dans l’application.', 'JWETPRO dwe chaje modil enstalasyon ak notifikasyon an avan eksperyans sa a ouvri. Rechaje paj la pou kontinye nan aplikasyon an.')}</p></div></div><div class="pwa-gate-body"><div class="pwa-gate-note">${playCopy('Si le problème continue, vérifie ta connexion puis réessaie. Les matchs, lives et replays restent protégés tant que l’installation PWA n’est pas prête.', 'Si pwoblèm nan kontinye, verifye koneksyon ou epi eseye ankò. Match, live ak replay yo rete pwoteje jiskaske PWA a pare.')}</div><div class="pwa-gate-actions"><button class="pwa-gate-primary" type="button" data-pwa-reload>${playCopy('Recharger JWETPRO', 'Rechaje JWETPRO')}</button><a class="pwa-gate-secondary" href="./index.html">${playCopy('Retour à l’accueil', 'Retounen akèy')}</a></div></div></section>`;
+    document.body.append(overlay);
+    overlay.querySelector('[data-pwa-reload]')?.addEventListener('click', () => location.reload());
+    window.renderIcons?.();
+  };
+  const requirePwaGate = async () => {
+    if (pwaGateChecked) return true;
+    const gate = await waitForPwaGate();
+    if (!gate?.require) {
+      blockMissingPwaGate();
+      return new Promise(() => {});
+    }
+    await gate.require({reason:protectedExperienceReason(), context:'play'});
+    pwaGateChecked = true;
+    return true;
+  };
   const fullscreenTarget = game => game === 'domino' ? $('#domino-frame-shell') : $('#mopyon-board-frame');
   const enterGameFullscreen = async game => {
     const target = fullscreenTarget(game);
@@ -126,6 +169,7 @@
     }
   };
   const showFullscreenTip = game => {
+    if (document.body.classList.contains('pwa-gate-open') || document.querySelector('[data-pwa-gate]')) return;
     const key = `jwetpro-play-fullscreen-tip-${game}`;
     if (localStorage.getItem(key) === 'hidden') return;
     const domino = game === 'domino';
@@ -1788,7 +1832,8 @@
     }
   };
 
-  const initFirebase = () => {
+  const initFirebase = async () => {
+    await requirePwaGate();
     if (replayMatchId) {
       if (!window.firebase?.firestore) return showReplayError('Service indisponible','Le service de replay JWETPRO ne peut pas etre charge pour le moment.');
       db=firebase.firestore();

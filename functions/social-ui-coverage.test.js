@@ -70,3 +70,32 @@ test('notification badge counts unread documents independently from the recent l
   assert.match(notifications, /where\('read','==',false\)\.limit\(100\)\.onSnapshot\(renderUnread/);
   assert.match(notifications, /for\(let batch=0;batch<10;batch\+=1\)/);
 });
+
+test('play experiences are gated by installable PWA and web push setup', () => {
+  const shell = source('shared-shell.js');
+  const play = source('src/play.js');
+  const gate = source('shared-pwa.js');
+  const manifest = JSON.parse(source('site.webmanifest'));
+  const serviceWorker = source('firebase-messaging-sw.js');
+  assert.match(shell, /shared-pwa\.js/);
+  assert.match(shell, /shared-pwa\.css/);
+  assert.match(play, /requirePwaGate/);
+  assert.match(play, /blockMissingPwaGate/);
+  assert.doesNotMatch(play, /if \(!gate\?\.require\) return true/);
+  assert.match(gate, /data-pwa-gate/);
+  assert.match(gate, /registerWebPushSubscription/);
+  assert.match(gate, /jwetpro-pwa-installed/);
+  assert.equal(manifest.display, 'standalone');
+  assert.ok(manifest.icons.some(icon => icon.sizes === '192x192' && icon.type === 'image/png'));
+  assert.ok(manifest.icons.some(icon => icon.sizes === '512x512' && icon.type === 'image/png'));
+  assert.match(serviceWorker, /addEventListener\('push'/);
+});
+
+test('web push covers personal championship and match reminders', () => {
+  const push = source('functions/jwetpro-push.js');
+  assert.match(push, /championship-start-5m/);
+  assert.match(push, /sendChampionshipStartReminders/);
+  assert.match(push, /championshipTicketRegistrations/);
+  assert.match(push, /sendMatchStartReminders/);
+  assert.match(push, /waiting-opponent','upcoming','published','ready','assigned/);
+});

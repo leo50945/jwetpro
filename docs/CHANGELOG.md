@@ -1,5 +1,7 @@
 # Changelog
 
+- 2026-10-01 : ajout de la barrière PWA premium avant `play.html` pour l’entraînement, les matchs officiels, le live et les replays. Le site enregistre les abonnements Web Push natifs côté serveur et prépare les notifications hors application pour les championnats, rappels de match, abonnements, messages privés, J’aime de match, vainqueurs et coupons.
+
 - 2026-09-19 : le module « Messages privés » dispose maintenant d’une vraie colonne desktop avec sa liste de conversations, en plus de son affichage mobile.
 - 2026-09-19 : les règles globales qui masquaient « SALONS », « Groupe » et « Messages privés » sont maintenant neutralisées sur la page communauté desktop.
 - 2026-09-19 : l’animation communautaire s’arrête dès qu’un visiteur ouvre ou utilise la zone de saisie, avant même l’envoi du message, afin d’éviter qu’un message simulé apparaisse pendant qu’il écrit.

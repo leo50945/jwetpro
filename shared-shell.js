@@ -75,10 +75,40 @@ if (!document.querySelector('script[data-jwetpro-social]')) {
 }
 if (!document.querySelector('script[data-jwetpro-notifications]')) {
   const notificationsScript = document.createElement('script');
-  notificationsScript.src = './shared-notifications.js?v=20260913-social-v4';
+  notificationsScript.src = './shared-notifications.js?v=20261001-pwa-v2';
   notificationsScript.defer = true;
   notificationsScript.dataset.jwetproNotifications = 'true';
   document.head.append(notificationsScript);
+}
+
+if (!document.querySelector('link[rel="manifest"]')) {
+  const manifestLink = document.createElement('link');
+  manifestLink.rel = 'manifest';
+  manifestLink.href = './site.webmanifest?v=20261001-pwa';
+  document.head.append(manifestLink);
+}
+if (!document.querySelector('link[data-jwetpro-pwa-style]')) {
+  const pwaStyle = document.createElement('link');
+  pwaStyle.rel = 'stylesheet';
+  pwaStyle.href = './shared-pwa.css?v=20261001-pwa-v2';
+  pwaStyle.dataset.jwetproPwaStyle = 'true';
+  document.head.append(pwaStyle);
+}
+if (!document.querySelector('script[data-jwetpro-pwa]')) {
+  if (!document.querySelector('script[data-jwetpro-pwa-config]')) {
+    const pwaConfigScript = document.createElement('script');
+    pwaConfigScript.src = './shared-pwa-config.js?v=20261001-pwa-v2';
+    pwaConfigScript.defer = true;
+    pwaConfigScript.async = false;
+    pwaConfigScript.dataset.jwetproPwaConfig = 'true';
+    document.head.append(pwaConfigScript);
+  }
+  const pwaScript = document.createElement('script');
+  pwaScript.src = './shared-pwa.js?v=20261001-pwa-v2';
+  pwaScript.defer = true;
+  pwaScript.async = false;
+  pwaScript.dataset.jwetproPwa = 'true';
+  document.head.append(pwaScript);
 }
 
 const sharedFirebaseConfig = {
@@ -89,6 +119,7 @@ const sharedFirebaseConfig = {
   messagingSenderId: '307157893690',
   appId: '1:307157893690:web:4e5a033d13d54ce86feb03'
 };
+window.JWETPRO_FIREBASE_CONFIG = sharedFirebaseConfig;
 
 const renderSharedAccount = async user => {
   window.JwetproCurrentUserId = user && !user.isAnonymous ? user.uid : '';

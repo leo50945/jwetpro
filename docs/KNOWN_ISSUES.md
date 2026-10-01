@@ -1,5 +1,6 @@
 ﻿# Problèmes connus
 
+- La paire VAPID est configurée dans `shared-pwa-config.js` et Secret Manager du projet Firebase. Il reste à déployer les Functions et règles, publier le frontend, puis faire la recette sur Chrome/Edge/Safari installés. Voir `PWA_PUSH_DEPLOYMENT.md`.
 - Les classements et la page de récapitulatif ne peuvent pas reconstruire un historique absent. Les anciens championnats sans liste de participants, sans identifiant de championnat sur les matchs, sans phase explicite ou sans historique de coups affichent un état « non publié » jusqu'à migration de ces données.
 - L'onglet `Mes matchs` dépend de documents `matches` autoritaires contenant `participantIds`, `game` et `startAt`. Le dashboard ne planifie pas encore automatiquement ces confrontations à partir des inscriptions, car aucune collection autoritaire d'inscriptions ou de paiements n'est définie.
 - Les fonctions `joinMopyonMatch`, `submitMopyonMove` et `advanceMopyonSeries` sont déployées. Leur logique pure est testée localement, mais un scénario concurrent complet entre deux navigateurs joueurs doit encore être validé sur le projet Firebase.

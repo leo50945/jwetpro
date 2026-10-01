@@ -129,6 +129,31 @@ module.exports = ({admin, db}) => {
       transaction.set(statsRef, {kind:entity.kind, entityId:entity.entityId, likeCount:next, updatedAt:timestamp()}, {merge:true});
       return next;
     });
+    if (liked && entity.kind === 'match') {
+      try {
+        const match = await db.collection('matches').doc(entity.entityId).get();
+        const participantIds = Array.isArray(match.data()?.participantIds) ? match.data().participantIds.filter(Boolean) : [];
+        const actorName = displayName(actor.data);
+        await Promise.all(participantIds.filter(uid => uid && uid !== actor.uid).map(async uid => {
+          const profile = await db.collection('users').doc(uid).get();
+          if (!profile.exists || profile.data()?.notificationPreferences?.social === false) return;
+          await db.collection('users').doc(uid).collection('notifications').doc(`like_match_${stableId(entity.entityId)}_${actor.uid}`).set({
+            type:'match-like',
+            actorSocialId:actor.socialId,
+            actorDisplayName:actorName,
+            matchId:entity.entityId,
+            title:'Nouveau J’aime sur ton match',
+            body:`${actorName} aime un match que tu as joué.`,
+            read:false,
+            pushEventId:`match_like_${Date.now()}_${actor.uid}`,
+            createdAt:timestamp(),
+            updatedAt:timestamp()
+          }, {merge:true});
+        }));
+      } catch (error) {
+        console.warn('Match like notification failed:', error);
+      }
+    }
     return {kind:entity.kind, entityId:entity.entityId, liked, likeCount};
   });
 
@@ -233,6 +258,7 @@ module.exports = ({admin, db}) => {
         }
         return {followed, mutual, followerCount, followingCount};
       }
+            pushEventId:`follow_${Date.now()}_${actor.uid}`,
       return {followed, mutual:Boolean(edgeSnapshot.data()?.mutual), followerCount:Math.max(0, Number(currentTarget.followerCount) || 0), followingCount:Math.max(0, Number(actorStats.followingCount) || 0)};
     });
     return {targetSocialId, ...result};
@@ -405,7 +431,7 @@ module.exports = ({admin, db}) => {
       if (targetProfileSnapshot.data()?.notificationPreferences?.social !== false) {
         transaction.set(db.collection('users').doc(targetUid).collection('notifications').doc(`message_${id}`), {
           type:'direct-message', actorSocialId:actor.socialId, actorDisplayName:displayName(actor.data), conversationId:id, title:'Nouveau message privé',
-          body:`${displayName(actor.data)} vous a envoyé un message.`, read:false, createdAt:timestamp(), updatedAt:timestamp()
+          body:`${displayName(actor.data)} vous a envoyé un message.`, read:false, pushEventId:`message_${messageRef.id}`, createdAt:timestamp(), updatedAt:timestamp()
         }, {merge:true});
       }
     });

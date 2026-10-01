@@ -1,14 +1,49 @@
 {
   "name": "JWETPRO",
   "short_name": "JWETPRO",
+  "id": "/",
   "description": "Championnats de jeux de table en Haïti.",
   "lang": "fr-HT",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
+  "orientation": "portrait",
   "background_color": "#061c2e",
   "theme_color": "#061c2e",
+  "categories": ["games", "sports", "entertainment"],
+  "shortcuts": [
+    {
+      "name": "Jouer",
+      "short_name": "Jouer",
+      "url": "/play.html",
+      "icons": [{"src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml"}]
+    },
+    {
+      "name": "Matchs en direct",
+      "short_name": "Direct",
+      "url": "/live.html",
+      "icons": [{"src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml"}]
+    },
+    {
+      "name": "Résultats",
+      "short_name": "Résultats",
+      "url": "/activity.html",
+      "icons": [{"src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml"}]
+    }
+  ],
   "icons": [
+    {
+      "src": "/src/icons/pwa-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/src/icons/pwa-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
     {
       "src": "/favicon.svg",
       "sizes": "any",
