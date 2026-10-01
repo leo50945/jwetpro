@@ -2,7 +2,6 @@ const {onCall, HttpsError} = require('firebase-functions/v2/https');
 const {onDocumentCreated, onDocumentWritten} = require('firebase-functions/v2/firestore');
 const {onSchedule} = require('firebase-functions/v2/scheduler');
 const crypto = require('crypto');
-const webPush = require('web-push');
 
 const REGION = 'us-central1';
 const MAX_BROADCAST_USERS = 500;
@@ -179,6 +178,7 @@ module.exports = ({admin, db, webPushPrivateKey, webPushPublicKey}) => {
     const tokens = await db.collection('users').doc(uid).collection('pushTokens').get();
     const active = tokens.docs.map(doc => ({id:doc.id, ref:doc.ref, ...doc.data()})).filter(item => item.disabled !== true && validSubscription(item.subscription));
     if (!active.length) return;
+    const webPush = require('web-push');
     webPush.setVapidDetails('https://jwetpro.com', webPushPublicKey.value(), webPushPrivateKey.value());
     const message = JSON.stringify({
       title:String(data.title || 'JWETPRO').slice(0, 120),
