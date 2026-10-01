@@ -169,9 +169,24 @@ const LIVE_MATCH_DURATION_MS = 90 * 60 * 1000;
 const LIVE_MATCH_STATUSES = new Set(['live','direct','en direct','en cours','ongoing','in-progress','active']);
 const matchStartDate = data => dt(data.startedAt || data.startAt || data.scheduledAt || data.matchDate || data.date);
 const matchActivityDate = data => dt(data.endedAt || data.completedAt || data.finishedAt || data.startedAt || data.updatedAt || data.createdAt || data.startAt);
+const simulationBotParticipant = (data, uid) => {
+  if (!uid) return false;
+  if ([data.botParticipantIds,data.simulatedParticipantIds].some(ids => Array.isArray(ids) && ids.includes(uid))) return true;
+  if ([data.botParticipantId,data.simulatedParticipantId].includes(uid)) return true;
+  if (['bot','simulated','simulation'].includes(String(data.participantTypes?.[uid] || '').toLowerCase())) return true;
+  const records = [...[data.participants,data.players].filter(Array.isArray).flat(),data.player1,data.player2].filter(record => record && typeof record === 'object');
+  const player = records.find(record => [record.uid,record.id,record.userId,record.playerId].includes(uid));
+  if (player?.real === false) return true;
+  if (player?.real === true) return false;
+  if (player && (player.isBot === true || player.bot === true || player.simulated === true || player.isSimulation === true || ['bot','simulated','simulation'].includes(String(player.type || player.role || '').toLowerCase()))) return true;
+  return /^(?:bot|sim(?:ulated|ulation)?)[_-]/i.test(uid);
+};
+const simulationBotsOnly = data => data.simulation === true && Array.isArray(data.participantIds) && data.participantIds.length === 2 && data.participantIds.every(uid => simulationBotParticipant(data,uid));
 const live = data => {
   if (!LIVE_MATCH_STATUSES.has(status(data).trim())) return false;
   if (data.winnerId || data.winner || data.draw === true || data.completedAt || data.endedAt || data.finishedAt) return false;
+  if (data.simulationJobStatus === 'failed') return false;
+  if (simulationBotsOnly(data)) return true;
   const start = matchStartDate(data);
   if (!start) return true;
   const elapsed = Date.now() - start.getTime();
